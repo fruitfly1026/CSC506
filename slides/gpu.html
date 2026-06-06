@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSC/ECE 506 · GPU Programming &amp; Architecture</title>
+
+<!-- reveal.js core (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<!-- code highlighting + math -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+<!-- fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<!-- course theme -->
+<link rel="stylesheet" href="assets/theme.css?v=4">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============================ TITLE ============================ -->
+<section class="title-slide" data-background-color="#ffffff">
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <h1>GPU Programming &amp; Architecture</h1>
+  <div class="sub">Throughput-oriented computing — fundamentals &amp; CUDA examples</div>
+  <div class="meta">
+    A four-lecture unit · Based on Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em> + NVIDIA CUDA<br>
+    <span class="muted">Use ← → to navigate · <strong>S</strong> for speaker notes · <strong>F</strong> fullscreen · <strong>ESC</strong> overview</span>
+  </div>
+  <aside class="notes">
+    Welcome to the GPU unit. We introduce GPUs early — before classic multicore coherence — because
+    Program 2 (CUDA SpMV) builds directly on these ideas. Four modules: (1) architecture &amp; design
+    philosophy, (2) the CUDA programming model, (3) execution model &amp; memory hierarchy,
+    (4) performance &amp; sparse computation.
+  </aside>
+</section>
+
+<!-- Roadmap -->
+<section data-background-color="#ffffff">
+  <h2>Unit Roadmap</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Module 1 · Architecture</span><strong>Design Philosophy</strong><br>
+      <span class="small">Throughput vs. latency · where transistors go · SIMD→SIMT · the SM array · H100 scale.</span></div>
+    <div class="callout"><span class="lbl">Module 2 · CUDA</span><strong>Programming Model</strong><br>
+      <span class="small">Host/device · program lifecycle · kernels · grid/block/thread · indexing.</span></div>
+    <div class="callout"><span class="lbl">Module 3 · Execution</span><strong>&amp; Memory</strong><br>
+      <span class="small">Warps &amp; divergence · occupancy · memory hierarchy · coalescing.</span></div>
+  </div>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Module 4 · Performance</span><strong>&amp; Sparse Computation</strong><br>
+      <span class="small">Tiling · bank conflicts · reduction · why sparse is hard → Program 2 (CUDA SpMV).</span></div>
+    <div class="callout takeaway"><span class="lbl">The thread that ties it together</span>
+      A GPU bets on <strong>massive parallelism</strong>: thousands of simple cores that hide slow memory by always keeping other work ready.</div>
+  </div>
+</section>
+
+<!-- Where this unit fits -->
+<section data-background-color="#ffffff">
+  <h2>Where This Unit Fits</h2>
+  <p class="small">You have seen parallel-programming basics. Before classic multicore coherence, we take a detour
+    into the most widely used throughput processor today: the GPU.</p>
+  <div class="pipe" style="margin:.6em 0">
+    <div class="row">
+      <div class="blk" style="background:#dcfce7;border-color:#22c55e">Parallel programming basics<br><span class="tiny muted">done</span></div>
+      <div class="cell" style="border:none;font-weight:800;color:var(--muted)">›</div>
+      <div class="blk core">GPU programming &amp; architecture<br><span class="tiny" style="color:var(--accent)">you are here</span></div>
+      <div class="cell" style="border:none;font-weight:800;color:var(--muted)">›</div>
+      <div class="blk" style="background:#fff;border-color:var(--line)">Multicore memory hierarchy<br><span class="tiny muted">next</span></div>
+      <div class="cell" style="border:none;font-weight:800;color:var(--muted)">›</div>
+      <div class="blk" style="background:#fff;border-color:var(--line)">Cache coherence &amp; consistency<br><span class="tiny muted">later</span></div>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">Why now?</span>GPUs are introduced early because <strong>Program 2 (CUDA SpMV)</strong> builds directly on this unit.</div>
+</section>
+
+<!-- ==================================================================
+     MODULE 1 — GPU ARCHITECTURE & DESIGN PHILOSOPHY
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 1</div>
+  <div class="mod-title">GPU Architecture &amp; Design Philosophy</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Explain <strong>latency-oriented</strong> vs. <strong>throughput-oriented</strong> design</li>
+      <li>Describe how GPUs <strong>hide</strong> memory latency instead of reducing it</li>
+      <li>Locate GPUs in Flynn's taxonomy: from <strong>SIMD to SIMT</strong></li>
+      <li>Sketch the hardware organization of a modern GPU (SMs, cores, schedulers)</li>
+      <li>Build intuition for GPU scale with a concrete example — the <strong>NVIDIA H100</strong></li>
+    </ul>
+  </div>
+</section>
+
+<!-- Latency vs throughput -->
+<section data-background-color="#ffffff">
+  <h2>Latency-Oriented vs. Throughput-Oriented</h2>
+  <div class="cols">
+    <div class="callout"><span class="lbl">CPU — Latency oriented</span>
+      <ul class="small" style="margin:.2em 0 .3em .9em">
+        <li>Few powerful cores</li>
+        <li>Large caches, deep OoO pipelines</li>
+        <li>Branch prediction, speculation</li>
+        <li>Goal: make <strong>ONE</strong> thread finish fast</li>
+      </ul>
+      <span class="tiny muted">Minimize latency of a single task.</span></div>
+    <div class="callout"><span class="lbl">GPU — Throughput oriented</span>
+      <ul class="small" style="margin:.2em 0 .3em .9em">
+        <li>Thousands of simple cores</li>
+        <li>Small caches, little control logic</li>
+        <li>Many threads in flight at once</li>
+        <li>Goal: maximize <strong>TOTAL</strong> work / second</li>
+      </ul>
+      <span class="tiny muted">Maximize aggregate throughput.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Same budget, opposite strategy</span>
+    With the same transistor budget, the <strong>CPU spends on control</strong>; the <strong>GPU spends on arithmetic</strong>.</div>
+</section>
+
+<!-- Where the transistors go -->
+<section data-background-color="#ffffff">
+  <h2>Where the Transistors Go</h2>
+  <p class="small">A cartoon of chip area. CPUs spend area on control &amp; cache; GPUs spend it on ALUs (gold).</p>
+  <div class="cols">
+    <div class="center">
+      <svg viewBox="0 0 260 180" class="chart" style="max-width:320px">
+        <rect x="6" y="6" width="248" height="168" rx="12" fill="#f8fafc" stroke="var(--line)"/>
+        <text x="130" y="24" text-anchor="middle" class="note">CPU</text>
+        <!-- few big control/cache blocks + a few ALUs -->
+        <rect x="22" y="36" width="100" height="58" rx="6" fill="#ede9fe" stroke="#8b5cf6"/><text x="72" y="69" text-anchor="middle" class="lbl">Control</text>
+        <rect x="138" y="36" width="100" height="58" rx="6" fill="#dcfce7" stroke="#22c55e"/><text x="188" y="69" text-anchor="middle" class="lbl">Cache</text>
+        <g fill="#fbbf24" stroke="#d97706">
+          <rect x="22" y="106" width="46" height="56" rx="5"/><rect x="74" y="106" width="46" height="56" rx="5"/>
+          <rect x="138" y="106" width="46" height="56" rx="5"/><rect x="190" y="106" width="48" height="56" rx="5"/>
+        </g>
+        <text x="130" y="138" text-anchor="middle" class="lbl" style="fill:#7c2d12">a few big ALUs</text>
+      </svg>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 260 180" class="chart" style="max-width:320px">
+        <rect x="6" y="6" width="248" height="168" rx="12" fill="#f8fafc" stroke="var(--line)"/>
+        <text x="130" y="24" text-anchor="middle" class="note">GPU</text>
+        <rect x="14" y="34" width="232" height="14" rx="4" fill="#ede9fe" stroke="#8b5cf6"/>
+        <text x="130" y="45" text-anchor="middle" class="tiny" style="fill:#5b21b6">small cache + control</text>
+        <!-- grid of many ALUs -->
+        <g fill="#fbbf24" stroke="#d97706" stroke-width="0.6">
+          <!-- generated grid -->
+          <rect x="16" y="56" width="16" height="13" rx="2"/><rect x="34" y="56" width="16" height="13" rx="2"/><rect x="52" y="56" width="16" height="13" rx="2"/><rect x="70" y="56" width="16" height="13" rx="2"/><rect x="88" y="56" width="16" height="13" rx="2"/><rect x="106" y="56" width="16" height="13" rx="2"/><rect x="124" y="56" width="16" height="13" rx="2"/><rect x="142" y="56" width="16" height="13" rx="2"/><rect x="160" y="56" width="16" height="13" rx="2"/><rect x="178" y="56" width="16" height="13" rx="2"/><rect x="196" y="56" width="16" height="13" rx="2"/><rect x="214" y="56" width="16" height="13" rx="2"/>
+          <rect x="16" y="72" width="16" height="13" rx="2"/><rect x="34" y="72" width="16" height="13" rx="2"/><rect x="52" y="72" width="16" height="13" rx="2"/><rect x="70" y="72" width="16" height="13" rx="2"/><rect x="88" y="72" width="16" height="13" rx="2"/><rect x="106" y="72" width="16" height="13" rx="2"/><rect x="124" y="72" width="16" height="13" rx="2"/><rect x="142" y="72" width="16" height="13" rx="2"/><rect x="160" y="72" width="16" height="13" rx="2"/><rect x="178" y="72" width="16" height="13" rx="2"/><rect x="196" y="72" width="16" height="13" rx="2"/><rect x="214" y="72" width="16" height="13" rx="2"/>
+          <rect x="16" y="88" width="16" height="13" rx="2"/><rect x="34" y="88" width="16" height="13" rx="2"/><rect x="52" y="88" width="16" height="13" rx="2"/><rect x="70" y="88" width="16" height="13" rx="2"/><rect x="88" y="88" width="16" height="13" rx="2"/><rect x="106" y="88" width="16" height="13" rx="2"/><rect x="124" y="88" width="16" height="13" rx="2"/><rect x="142" y="88" width="16" height="13" rx="2"/><rect x="160" y="88" width="16" height="13" rx="2"/><rect x="178" y="88" width="16" height="13" rx="2"/><rect x="196" y="88" width="16" height="13" rx="2"/><rect x="214" y="88" width="16" height="13" rx="2"/>
+          <rect x="16" y="104" width="16" height="13" rx="2"/><rect x="34" y="104" width="16" height="13" rx="2"/><rect x="52" y="104" width="16" height="13" rx="2"/><rect x="70" y="104" width="16" height="13" rx="2"/><rect x="88" y="104" width="16" height="13" rx="2"/><rect x="106" y="104" width="16" height="13" rx="2"/><rect x="124" y="104" width="16" height="13" rx="2"/><rect x="142" y="104" width="16" height="13" rx="2"/><rect x="160" y="104" width="16" height="13" rx="2"/><rect x="178" y="104" width="16" height="13" rx="2"/><rect x="196" y="104" width="16" height="13" rx="2"/><rect x="214" y="104" width="16" height="13" rx="2"/>
+          <rect x="16" y="120" width="16" height="13" rx="2"/><rect x="34" y="120" width="16" height="13" rx="2"/><rect x="52" y="120" width="16" height="13" rx="2"/><rect x="70" y="120" width="16" height="13" rx="2"/><rect x="88" y="120" width="16" height="13" rx="2"/><rect x="106" y="120" width="16" height="13" rx="2"/><rect x="124" y="120" width="16" height="13" rx="2"/><rect x="142" y="120" width="16" height="13" rx="2"/><rect x="160" y="120" width="16" height="13" rx="2"/><rect x="178" y="120" width="16" height="13" rx="2"/><rect x="196" y="120" width="16" height="13" rx="2"/><rect x="214" y="120" width="16" height="13" rx="2"/>
+          <rect x="16" y="136" width="16" height="13" rx="2"/><rect x="34" y="136" width="16" height="13" rx="2"/><rect x="52" y="136" width="16" height="13" rx="2"/><rect x="70" y="136" width="16" height="13" rx="2"/><rect x="88" y="136" width="16" height="13" rx="2"/><rect x="106" y="136" width="16" height="13" rx="2"/><rect x="124" y="136" width="16" height="13" rx="2"/><rect x="142" y="136" width="16" height="13" rx="2"/><rect x="160" y="136" width="16" height="13" rx="2"/><rect x="178" y="136" width="16" height="13" rx="2"/><rect x="196" y="136" width="16" height="13" rx="2"/><rect x="214" y="136" width="16" height="13" rx="2"/>
+        </g>
+        <text x="130" y="166" text-anchor="middle" class="tiny" style="fill:#7c2d12">grid of many ALUs</text>
+      </svg>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">Read the area</span>Gold = arithmetic units (ALUs). The GPU is almost <strong>all arithmetic</strong>.</div>
+</section>
+
+<!-- Hiding latency -->
+<section data-background-color="#ffffff">
+  <h2>Hiding Latency Instead of Reducing It</h2>
+  <p class="small">A CPU uses caches to make memory <em>faster</em>. A GPU accepts slow memory — but keeps the hardware
+    busy by switching to other ready threads (warps) while some wait.</p>
+  <div class="center">
+    <svg viewBox="0 0 560 220" class="chart" style="max-width:760px">
+      <text x="500" y="14" text-anchor="end" class="lbl">time →</text>
+      <!-- four warp rows -->
+      <!-- Warp A -->
+      <text x="6" y="42" class="lbl">Warp A</text>
+      <rect x="60" y="28" width="90" height="22" rx="3" fill="#bfdbfe" stroke="#3b82f6"/><text x="105" y="43" text-anchor="middle" class="tiny">compute</text>
+      <rect x="150" y="28" width="380" height="22" rx="3" fill="#fee2e2" stroke="#f87171" stroke-dasharray="4 3"/><text x="340" y="43" text-anchor="middle" class="tiny" style="fill:#b91c1c">memory stall → hidden</text>
+      <!-- Warp B -->
+      <text x="6" y="80" class="lbl">Warp B</text>
+      <rect x="60" y="66" width="90" height="22" rx="3" fill="#f1f5f9" stroke="var(--line)"/><text x="105" y="81" text-anchor="middle" class="tiny" style="fill:var(--muted)">ready</text>
+      <rect x="150" y="66" width="90" height="22" rx="3" fill="#bfdbfe" stroke="#3b82f6"/><text x="195" y="81" text-anchor="middle" class="tiny">compute</text>
+      <rect x="240" y="66" width="290" height="22" rx="3" fill="#fee2e2" stroke="#f87171" stroke-dasharray="4 3"/><text x="385" y="81" text-anchor="middle" class="tiny" style="fill:#b91c1c">memory stall → hidden</text>
+      <!-- Warp C -->
+      <text x="6" y="118" class="lbl">Warp C</text>
+      <rect x="60" y="104" width="180" height="22" rx="3" fill="#f1f5f9" stroke="var(--line)"/><text x="150" y="119" text-anchor="middle" class="tiny" style="fill:var(--muted)">ready / waiting</text>
+      <rect x="240" y="104" width="90" height="22" rx="3" fill="#bfdbfe" stroke="#3b82f6"/><text x="285" y="119" text-anchor="middle" class="tiny">compute</text>
+      <rect x="330" y="104" width="200" height="22" rx="3" fill="#fee2e2" stroke="#f87171" stroke-dasharray="4 3"/><text x="430" y="119" text-anchor="middle" class="tiny" style="fill:#b91c1c">memory stall → hidden</text>
+      <!-- Warp D -->
+      <text x="6" y="156" class="lbl">Warp D</text>
+      <rect x="60" y="142" width="270" height="22" rx="3" fill="#f1f5f9" stroke="var(--line)"/><text x="195" y="157" text-anchor="middle" class="tiny" style="fill:var(--muted)">ready / waiting</text>
+      <rect x="330" y="142" width="90" height="22" rx="3" fill="#bfdbfe" stroke="#3b82f6"/><text x="375" y="157" text-anchor="middle" class="tiny">compute</text>
+      <line x1="60" y1="178" x2="530" y2="178" class="axis"/>
+    </svg>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The trick</span>While one warp stalls on memory, the scheduler runs another. Enough warps → the SM <strong>never idles</strong>.</div>
+</section>
+
+<!-- SIMD to SIMT -->
+<section data-background-color="#ffffff">
+  <h2>Where GPUs Sit: SIMD → SIMT</h2>
+  <p class="small">Earlier we placed GPUs under SIMD. More precisely, GPUs use <strong>SIMT</strong> — a programming-friendly variant.</p>
+  <div class="flynn">
+    <div class="cell">
+      <h4 style="color:var(--accent)">SIMD (classic)</h4>
+      <ul class="small">
+        <li>One instruction drives a fixed-width vector</li>
+        <li>Compiler / programmer manages vector lanes</li>
+        <li>Example: SSE / AVX on CPUs</li>
+      </ul>
+    </div>
+    <div class="cell on">
+      <h4>SIMT (GPU)</h4>
+      <ul class="small">
+        <li>Write many independent <strong>scalar threads</strong></li>
+        <li>HW groups <strong>32 threads</strong> into a warp, runs lockstep</li>
+        <li>Lane management is <strong>implicit</strong></li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Key idea</span>You think in <strong>threads</strong>; the hardware executes in <strong>warps</strong>.</div>
+</section>
+
+<!-- GPU hardware organization -->
+<section data-background-color="#ffffff">
+  <h2>GPU Hardware Organization</h2>
+  <p class="small">A GPU is an array of <strong>Streaming Multiprocessors (SMs)</strong>. Each SM holds many simple cores.</p>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 280 200" class="chart" style="max-width:360px">
+        <rect x="6" y="6" width="180" height="188" rx="12" fill="#f8fafc" stroke="var(--line)"/>
+        <text x="96" y="24" text-anchor="middle" class="note">GPU</text>
+        <g fill="#dbeafe" stroke="#3b82f6">
+          <rect x="20" y="34" width="34" height="30" rx="4"/><rect x="62" y="34" width="34" height="30" rx="4"/><rect x="104" y="34" width="34" height="30" rx="4"/><rect x="146" y="34" width="32" height="30" rx="4"/>
+          <rect x="20" y="72" width="34" height="30" rx="4"/><rect x="62" y="72" width="34" height="30" rx="4"/><rect x="104" y="72" width="34" height="30" rx="4"/><rect x="146" y="72" width="32" height="30" rx="4"/>
+          <rect x="20" y="110" width="34" height="30" rx="4"/><rect x="62" y="110" width="34" height="30" rx="4"/><rect x="104" y="110" width="34" height="30" rx="4"/><rect x="146" y="110" width="32" height="30" rx="4"/>
+          <rect x="20" y="148" width="34" height="30" rx="4"/><rect x="62" y="148" width="34" height="30" rx="4"/><rect x="104" y="148" width="34" height="30" rx="4"/><rect x="146" y="148" width="32" height="30" rx="4"/>
+        </g>
+        <text x="37" y="53" text-anchor="middle" class="tiny" style="fill:#1d4ed8">SM</text>
+        <text x="79" y="53" text-anchor="middle" class="tiny" style="fill:#1d4ed8">SM</text>
+        <text x="121" y="53" text-anchor="middle" class="tiny" style="fill:#1d4ed8">SM</text>
+        <text x="162" y="53" text-anchor="middle" class="tiny" style="fill:#1d4ed8">SM</text>
+        <text x="227" y="105" text-anchor="middle" class="note" style="fill:var(--wolf-red)">→</text>
+      </svg>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">One SM</span>Dozens of simple cores, its own schedulers, register file, and shared memory.</div>
+      <div class="callout takeaway"><span class="lbl">Two levels of parallelism</span>Many <strong>SMs</strong> across the chip · many <strong>cores</strong> within each SM.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Inside an SM -->
+<section data-background-color="#ffffff">
+  <h2>Inside a Streaming Multiprocessor</h2>
+  <p class="small">An SM spends its area on arithmetic, not control. Zoom into one SM:</p>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 260 200" class="chart" style="max-width:330px">
+        <rect x="6" y="6" width="248" height="188" rx="12" fill="#f8fafc" stroke="#3b82f6"/>
+        <text x="130" y="24" text-anchor="middle" class="note" style="fill:#1d4ed8">One SM</text>
+        <rect x="16" y="34" width="228" height="16" rx="4" fill="#ede9fe" stroke="#8b5cf6"/><text x="130" y="46" text-anchor="middle" class="tiny" style="fill:#5b21b6">Warp Schedulers</text>
+        <rect x="16" y="56" width="228" height="16" rx="4" fill="#fef3c7" stroke="#f59e0b"/><text x="130" y="68" text-anchor="middle" class="tiny" style="fill:#92400e">Register File (huge)</text>
+        <!-- cores grid -->
+        <g fill="#fbbf24" stroke="#d97706" stroke-width="0.6">
+          <rect x="16" y="80" width="26" height="14" rx="2"/><rect x="44" y="80" width="26" height="14" rx="2"/><rect x="72" y="80" width="26" height="14" rx="2"/><rect x="100" y="80" width="26" height="14" rx="2"/><rect x="128" y="80" width="26" height="14" rx="2"/><rect x="156" y="80" width="26" height="14" rx="2"/><rect x="184" y="80" width="26" height="14" rx="2"/><rect x="212" y="80" width="26" height="14" rx="2"/>
+          <rect x="16" y="98" width="26" height="14" rx="2"/><rect x="44" y="98" width="26" height="14" rx="2"/><rect x="72" y="98" width="26" height="14" rx="2"/><rect x="100" y="98" width="26" height="14" rx="2"/><rect x="128" y="98" width="26" height="14" rx="2"/><rect x="156" y="98" width="26" height="14" rx="2"/><rect x="184" y="98" width="26" height="14" rx="2"/><rect x="212" y="98" width="26" height="14" rx="2"/>
+          <rect x="16" y="116" width="26" height="14" rx="2"/><rect x="44" y="116" width="26" height="14" rx="2"/><rect x="72" y="116" width="26" height="14" rx="2"/><rect x="100" y="116" width="26" height="14" rx="2"/><rect x="128" y="116" width="26" height="14" rx="2"/><rect x="156" y="116" width="26" height="14" rx="2"/><rect x="184" y="116" width="26" height="14" rx="2"/><rect x="212" y="116" width="26" height="14" rx="2"/>
+          <rect x="16" y="134" width="26" height="14" rx="2"/><rect x="44" y="134" width="26" height="14" rx="2"/><rect x="72" y="134" width="26" height="14" rx="2"/><rect x="100" y="134" width="26" height="14" rx="2"/><rect x="128" y="134" width="26" height="14" rx="2"/><rect x="156" y="134" width="26" height="14" rx="2"/><rect x="184" y="134" width="26" height="14" rx="2"/><rect x="212" y="134" width="26" height="14" rx="2"/>
+        </g>
+        <text x="130" y="160" text-anchor="middle" class="tiny" style="fill:#7c2d12">CUDA Cores (ALUs)</text>
+        <rect x="16" y="170" width="228" height="16" rx="4" fill="#dcfce7" stroke="#22c55e"/><text x="130" y="182" text-anchor="middle" class="tiny" style="fill:#15803d">Shared Memory / L1</text>
+      </svg>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">CUDA Cores (ALUs)</span>Do the FP/INT arithmetic — many per SM.</div>
+      <div class="callout"><span class="lbl">Warp Schedulers</span>Pick a ready warp each cycle; switch on stalls.</div>
+      <div class="callout"><span class="lbl">Register File</span>Huge — holds state for many resident warps.</div>
+      <div class="callout"><span class="lbl">Shared Memory / L1</span>On-chip, programmer-managed scratchpad.</div>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">vs. a CPU core</span>The SM trades branch predictors &amp; deep caches for raw <strong>ALU count</strong>.</div>
+</section>
+
+<!-- H100 concrete example -->
+<section data-background-color="#ffffff">
+  <h2>A Concrete Example: NVIDIA H100 (Hopper)</h2>
+  <p class="small">Real numbers to anchor the scale. (Full GH100 die; shipping H100 enables a subset.)</p>
+  <div class="cols c3" style="gap:.7em">
+    <div class="callout center"><span class="pill blue" style="font-size:1.3em">132</span><br><span class="small">SMs enabled <span class="muted">(144 on full die)</span></span></div>
+    <div class="callout center"><span class="pill blue" style="font-size:1.3em">128</span><br><span class="small">FP32 cores per SM</span></div>
+    <div class="callout center"><span class="pill" style="font-size:1.3em">~16,896</span><br><span class="small">CUDA cores total</span></div>
+  </div>
+  <div class="cols c3" style="gap:.7em;margin-top:.5em">
+    <div class="callout center"><span class="pill teal" style="font-size:1.3em">64</span><br><span class="small">warps resident per SM</span></div>
+    <div class="callout center"><span class="pill teal" style="font-size:1.3em">80 GB</span><br><span class="small">HBM3 @ ~3.35 TB/s</span></div>
+    <div class="callout center"><span class="pill teal" style="font-size:1.3em">228 KB</span><br><span class="small">shared mem per SM</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Put together</span>~17,000 cores running tens of thousands of threads — a high-end CPU has tens of cores.
+    The GPU's bet (many simple workers) only pays off when your problem has <strong>massive parallelism</strong>.</div>
+</section>
+
+<!-- CPU vs GPU table -->
+<section data-background-color="#ffffff">
+  <h2>CPU vs. GPU at a Glance</h2>
+  <table>
+    <tr><th></th><th>CPU</th><th>GPU</th></tr>
+    <tr><td><strong>Design goal</strong></td><td>Low latency / thread</td><td class="hi">High aggregate throughput</td></tr>
+    <tr><td><strong>Cores</strong></td><td>Few, complex</td><td class="hi">Thousands, simple</td></tr>
+    <tr><td><strong>Caches</strong></td><td>Large, automatic</td><td>Small; shared mem is manual</td></tr>
+    <tr><td><strong>Hiding latency</strong></td><td>Big caches, OoO</td><td>Many threads, fast switch</td></tr>
+    <tr><td><strong>Best for</strong></td><td>Serial, branchy code</td><td class="hi">Regular, data-parallel work</td></tr>
+  </table>
+  <div class="callout"><span class="lbl">Complementary, not rivals</span>Real systems pair them: the CPU orchestrates and runs branchy code; the GPU crunches the data-parallel kernels.</div>
+</section>
+
+<!-- Module 1 review -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 1 — Review</h2>
+  <div class="qa"><p class="q">1. Why can a GPU use small caches yet still achieve high throughput?</p>
+    <div class="fragment"><div class="a">It hides memory latency with parallelism: while some warps wait on memory, the scheduler runs others, so the ALUs stay busy without needing big caches.</div></div></div>
+  <div class="qa"><p class="q">2. What does it mean to "hide" memory latency rather than reduce it?</p>
+    <div class="fragment"><div class="a">The memory is still slow (latency is not reduced); the GPU overlaps that wait with useful compute from other ready warps, so the stall is invisible to throughput.</div></div></div>
+  <div class="qa"><p class="q">3. How does SIMT differ from classic SIMD from the programmer's view?</p>
+    <div class="fragment"><div class="a">In SIMD you manage fixed-width vector lanes explicitly. In SIMT you write independent scalar threads, and the hardware implicitly groups 32 into a warp and runs them in lockstep.</div></div></div>
+  <div class="qa"><p class="q">4. Name three components inside an SM. &nbsp; 5. Why does the GPU's design only pay off for massively parallel problems?</p>
+    <div class="fragment"><div class="a">SM components: CUDA cores (ALUs), warp schedulers, register file, shared memory/L1. The design needs many independent threads to keep ~17,000 cores busy and to hide latency — serial/branchy work leaves them idle.</div></div></div>
+</section>
+
+<!-- ==================================================================
+     MODULE 2 — THE CUDA PROGRAMMING MODEL
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 2</div>
+  <div class="mod-title">The CUDA Programming Model</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Describe the <strong>host (CPU) / device (GPU)</strong> execution model</li>
+      <li>Write and <strong>launch</strong> a simple CUDA kernel</li>
+      <li>Organize threads into a <strong>grid of blocks</strong> and index them correctly</li>
+      <li>Map the thread hierarchy onto the SM hardware from Module 1</li>
+      <li>Trace the <strong>lifecycle</strong> of a CUDA program from allocation to result</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Host and device -->
+<section data-background-color="#ffffff">
+  <h2>Host and Device</h2>
+  <p class="small">A CUDA program runs on two processors. The CPU (host) orchestrates; the GPU (device) computes.</p>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Host (CPU)</span>
+      <ul class="small" style="margin:.2em 0 0 .9em">
+        <li>Runs the <code class="inline">main()</code> program</li>
+        <li>Allocates memory on the device</li>
+        <li>Copies data to / from the device</li>
+        <li>Launches kernels</li>
+      </ul></div>
+    <div class="callout"><span class="lbl">Device (GPU)</span>
+      <ul class="small" style="margin:.2em 0 0 .9em">
+        <li>Runs kernels in parallel</li>
+        <li>Thousands of threads at once</li>
+        <li>Has its own memory (HBM)</li>
+        <li>Returns results to the host</li>
+      </ul></div>
+  </div>
+  <div class="center" style="margin:.3em 0">
+    <span class="pill gray">Host</span> &nbsp;<span style="color:var(--accent);font-weight:800">— data → </span>&nbsp; <span class="pill blue">Device</span> &nbsp;<span style="color:var(--wolf-red);font-weight:800">← results —</span>
+  </div>
+  <div class="callout warn"><span class="lbl">Precious link</span>The PCIe / NVLink connection between host and device is slow — <strong>minimize copies across it</strong>.</div>
+</section>
+
+<!-- Lifecycle -->
+<section data-background-color="#ffffff">
+  <h2>Lifecycle of a CUDA Program</h2>
+  <div class="pipe" style="margin:.8em 0">
+    <div class="row" style="align-items:stretch">
+      <div class="blk core" style="flex:1"><strong>1 · Allocate</strong><br><span class="tiny">cudaMalloc on device</span></div>
+      <div class="cell" style="border:none;font-weight:800;color:var(--muted)">›</div>
+      <div class="blk mem" style="flex:1"><strong>2 · Copy in</strong><br><span class="tiny">host → device (H2D)</span></div>
+      <div class="cell" style="border:none;font-weight:800;color:var(--muted)">›</div>
+      <div class="blk" style="flex:1;background:#fee2e2;border-color:var(--wolf-red)"><strong>3 · Launch</strong><br><span class="tiny">kernel&lt;&lt;&lt;grid,block&gt;&gt;&gt;</span></div>
+      <div class="cell" style="border:none;font-weight:800;color:var(--muted)">›</div>
+      <div class="blk mem" style="flex:1"><strong>4 · Copy out</strong><br><span class="tiny">device → host (D2H)</span></div>
+      <div class="cell" style="border:none;font-weight:800;color:var(--muted)">›</div>
+      <div class="blk core" style="flex:1"><strong>5 · Free</strong><br><span class="tiny">cudaFree</span></div>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">Read the flow</span>Steps <strong>2</strong> and <strong>4</strong> cross the slow host↔device link. Step <strong>3</strong> is where the parallelism happens.</div>
+  <aside class="notes">This skeleton is identical for almost every CUDA program, including Program 2. The interesting engineering is in step 3 — and in minimizing 2 and 4.</aside>
+</section>
+
+<!-- Vector add kernel -->
+<section data-background-color="#ffffff">
+  <h2>Your First Kernel: Vector Add</h2>
+  <p class="small">A <strong>kernel</strong> is a function that runs on the GPU. Each thread handles one element.</p>
+  <div class="cols">
+    <div>
+      <div class="code-label">CUDA C — device kernel</div>
+      <pre><code class="language-c" data-trim>
+__global__ void vecAdd(float* A, float* B,
+                       float* C, int n)
+{
+    int i = blockIdx.x * blockDim.x
+          + threadIdx.x;
+    if (i < n)
+        C[i] = A[i] + B[i];
+}
+</code></pre>
+    </div>
+    <div>
+      <ul class="small">
+        <li><code class="inline">__global__</code> = runs on the GPU, <strong>called from the CPU</strong></li>
+        <li>Every thread runs this <strong>same</strong> code</li>
+        <li><code class="inline">i</code> identifies <strong>which element</strong> this thread handles</li>
+        <li>The <code class="inline">if (i &lt; n)</code> <strong>guards</strong> against extra threads</li>
+      </ul>
+      <div class="callout"><span class="lbl">SPMD</span>One program, many data: thousands of threads execute <code class="inline">vecAdd</code>, each on its own <code class="inline">i</code>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Kernel launch -->
+<section data-background-color="#ffffff">
+  <h2>Launching the Kernel</h2>
+  <p class="small">The host launches the kernel with an <strong>execution configuration</strong>: <code class="inline">&lt;&lt;&lt; blocks, threadsPerBlock &gt;&gt;&gt;</code>.</p>
+  <div class="code-label">CUDA C — host side</div>
+  <pre><code class="language-c" data-trim>
+int threadsPerBlock = 256;
+int blocks = (n + threadsPerBlock - 1) / threadsPerBlock;   // ceil(n / 256)
+
+vecAdd<<<blocks, threadsPerBlock>>>(d_A, d_B, d_C, n);       // launch on GPU
+
+cudaDeviceSynchronize();   // wait for the GPU to finish
+</code></pre>
+  <div class="callout"><span class="lbl">Why the ceiling?</span>We launch enough threads to cover all <code class="inline">n</code> elements — usually a few more, which is exactly why we need the <code class="inline">if (i &lt; n)</code> guard inside the kernel.</div>
+</section>
+
+<!-- Thread hierarchy -->
+<section data-background-color="#ffffff">
+  <h2>The Thread Hierarchy</h2>
+  <p class="small">CUDA threads are organized in three nested levels: <strong>grid → block → thread</strong>.</p>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 320 180" class="chart" style="max-width:400px">
+        <rect x="6" y="6" width="308" height="168" rx="12" fill="#f8fafc" stroke="var(--line)"/>
+        <text x="160" y="24" text-anchor="middle" class="note">Grid</text>
+        <!-- three blocks -->
+        <g>
+          <rect x="18" y="34" width="92" height="128" rx="8" fill="#dbeafe" stroke="#3b82f6"/><text x="64" y="50" text-anchor="middle" class="tiny" style="fill:#1d4ed8">Block 0</text>
+          <rect x="114" y="34" width="92" height="128" rx="8" fill="#dbeafe" stroke="#3b82f6"/><text x="160" y="50" text-anchor="middle" class="tiny" style="fill:#1d4ed8">Block 1</text>
+          <rect x="210" y="34" width="92" height="128" rx="8" fill="#dbeafe" stroke="#3b82f6"/><text x="256" y="50" text-anchor="middle" class="tiny" style="fill:#1d4ed8">Block 2</text>
+        </g>
+        <!-- threads (gold) inside each block -->
+        <g fill="#fbbf24" stroke="#d97706" stroke-width="0.6">
+          <rect x="26" y="58" width="16" height="14"/><rect x="46" y="58" width="16" height="14"/><rect x="66" y="58" width="16" height="14"/><rect x="86" y="58" width="16" height="14"/>
+          <rect x="26" y="78" width="16" height="14"/><rect x="46" y="78" width="16" height="14"/><rect x="66" y="78" width="16" height="14"/><rect x="86" y="78" width="16" height="14"/>
+          <rect x="122" y="58" width="16" height="14"/><rect x="142" y="58" width="16" height="14"/><rect x="162" y="58" width="16" height="14"/><rect x="182" y="58" width="16" height="14"/>
+          <rect x="122" y="78" width="16" height="14"/><rect x="142" y="78" width="16" height="14"/><rect x="162" y="78" width="16" height="14"/><rect x="182" y="78" width="16" height="14"/>
+          <rect x="218" y="58" width="16" height="14"/><rect x="238" y="58" width="16" height="14"/><rect x="258" y="58" width="16" height="14"/><rect x="278" y="58" width="16" height="14"/>
+          <rect x="218" y="78" width="16" height="14"/><rect x="238" y="78" width="16" height="14"/><rect x="258" y="78" width="16" height="14"/><rect x="278" y="78" width="16" height="14"/>
+        </g>
+        <text x="160" y="155" text-anchor="middle" class="tiny" style="fill:#7c2d12">gold = threads</text>
+      </svg>
+    </div>
+    <div>
+      <ul class="small">
+        <li><strong>Grid</strong> = all threads of one kernel launch</li>
+        <li><strong>Block</strong> = group sharing fast shared memory</li>
+        <li><strong>Thread</strong> = one execution of the kernel code</li>
+        <li>Blocks run <strong>independently</strong>, in any order</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- Global index -->
+<section data-background-color="#ffffff">
+  <h2>Computing a Global Index</h2>
+  <p class="small">Each thread computes a unique global index from its block and thread coordinates.</p>
+  <div class="code-label">the canonical 1-D index</div>
+  <pre><code class="language-c" data-trim>
+int i = blockIdx.x * blockDim.x + threadIdx.x;
+</code></pre>
+  <div class="cols c3" style="gap:.6em;margin:.3em 0">
+    <div class="callout center"><span class="lbl">blockIdx.x</span>which block</div>
+    <div class="callout center"><span class="lbl">blockDim.x</span>threads / block</div>
+    <div class="callout center"><span class="lbl">threadIdx.x</span>within block</div>
+  </div>
+  <div class="cols">
+    <ul class="small">
+      <li>Block 0 → indices <strong>0..255</strong></li>
+      <li>Block 1 → indices <strong>256..511</strong></li>
+      <li>Block 2 → indices <strong>512..767</strong></li>
+      <li>… and so on across the grid</li>
+    </ul>
+    <div class="callout takeaway"><span class="lbl">Flattening</span>This maps the 2-level hierarchy onto a <strong>1-D array</strong> of data.</div>
+  </div>
+</section>
+
+<!-- SW maps to HW -->
+<section data-background-color="#ffffff">
+  <h2>Software Maps to Hardware</h2>
+  <p class="small">The programming abstractions from this module map directly onto Module 1's hardware.</p>
+  <table>
+    <tr><th>Software (CUDA)</th><th>Hardware (GPU)</th></tr>
+    <tr><td><strong>Thread</strong></td><td>runs on a CUDA core</td></tr>
+    <tr><td><strong>Block</strong></td><td>scheduled onto one SM</td></tr>
+    <tr><td class="hi"><strong>Warp (32 threads)</strong></td><td class="hi">unit of lockstep execution</td></tr>
+    <tr><td><strong>Grid</strong></td><td>spread across all SMs</td></tr>
+  </table>
+  <div class="callout"><span class="lbl">You don't control placement</span>The hardware decides exactly <strong>when and where</strong> each block runs — that's what makes a kernel scale across GPUs of different sizes.</div>
+</section>
+
+<!-- Module 2 review -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 2 — Review</h2>
+  <div class="qa"><p class="q">1. What are the responsibilities of the host vs. the device?</p>
+    <div class="fragment"><div class="a">Host (CPU): runs main, allocates device memory, copies data H2D/D2H, launches kernels. Device (GPU): runs kernels in parallel over thousands of threads on its own HBM memory.</div></div></div>
+  <div class="qa"><p class="q">2. What does the <code class="inline">__global__</code> qualifier mean?</p>
+    <div class="fragment"><div class="a">It marks a kernel: a function that runs on the GPU but is called (launched) from the CPU host.</div></div></div>
+  <div class="qa"><p class="q">3. Write the global-index expression and say why it's correct. &nbsp; 4. Why do we need <code class="inline">if (i &lt; n)</code>?</p>
+    <div class="fragment"><div class="a"><code class="inline">i = blockIdx.x*blockDim.x + threadIdx.x</code>: blockIdx skips whole blocks of blockDim threads, threadIdx offsets within the block, giving a unique 0-based index. We launch ceil(n/256) blocks → a few extra threads, so the guard prevents out-of-bounds writes.</div></div></div>
+  <div class="qa"><p class="q">5. How do thread / block / grid map onto core / SM / whole-GPU?</p>
+    <div class="fragment"><div class="a">Thread → CUDA core; block → one SM (32-thread warps run in lockstep); grid → the whole GPU, spread across all SMs.</div></div></div>
+</section>
+
+<!-- ==================================================================
+     MODULE 3 — EXECUTION MODEL & MEMORY HIERARCHY
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 3</div>
+  <div class="mod-title">Execution Model &amp; Memory Hierarchy</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Explain how a <strong>warp</strong> executes 32 threads in lockstep (SIMT)</li>
+      <li>Describe <strong>branch divergence</strong> and why it costs performance</li>
+      <li>Explain how warp scheduling hides latency (<strong>occupancy</strong>)</li>
+      <li>Lay out the GPU <strong>memory hierarchy</strong>: registers, shared, L2, global</li>
+      <li>Explain <strong>memory coalescing</strong> and why access pattern matters</li>
+    </ul>
+  </div>
+</section>
+
+<!-- The warp -->
+<section data-background-color="#ffffff">
+  <h2>The Warp: 32 Threads in Lockstep</h2>
+  <p class="small">The hardware groups threads into <strong>warps of 32</strong>. All 32 execute the SAME instruction each cycle,
+    on different data — this is the heart of SIMT.</p>
+  <div class="center">
+    <svg viewBox="0 0 560 150" class="chart" style="max-width:760px">
+      <rect x="170" y="10" width="220" height="26" rx="6" fill="#ede9fe" stroke="#8b5cf6"/>
+      <text x="280" y="27" text-anchor="middle" class="lbl" style="fill:#5b21b6">Instruction:  C[i] = A[i] + B[i]</text>
+      <!-- fan out to 32 lanes -->
+      <g class="axis"><line x1="280" y1="36" x2="40" y2="64"/><line x1="280" y1="36" x2="180" y2="64"/><line x1="280" y1="36" x2="380" y2="64"/><line x1="280" y1="36" x2="520" y2="64"/></g>
+      <g fill="#fbbf24" stroke="#d97706" stroke-width="0.7">
+        <rect x="30" y="66" width="14" height="34" rx="2"/><rect x="47" y="66" width="14" height="34" rx="2"/><rect x="64" y="66" width="14" height="34" rx="2"/><rect x="81" y="66" width="14" height="34" rx="2"/><rect x="98" y="66" width="14" height="34" rx="2"/><rect x="115" y="66" width="14" height="34" rx="2"/><rect x="132" y="66" width="14" height="34" rx="2"/><rect x="149" y="66" width="14" height="34" rx="2"/><rect x="166" y="66" width="14" height="34" rx="2"/><rect x="183" y="66" width="14" height="34" rx="2"/><rect x="200" y="66" width="14" height="34" rx="2"/><rect x="217" y="66" width="14" height="34" rx="2"/><rect x="234" y="66" width="14" height="34" rx="2"/><rect x="251" y="66" width="14" height="34" rx="2"/><rect x="268" y="66" width="14" height="34" rx="2"/><rect x="285" y="66" width="14" height="34" rx="2"/><rect x="302" y="66" width="14" height="34" rx="2"/><rect x="319" y="66" width="14" height="34" rx="2"/><rect x="336" y="66" width="14" height="34" rx="2"/><rect x="353" y="66" width="14" height="34" rx="2"/><rect x="370" y="66" width="14" height="34" rx="2"/><rect x="387" y="66" width="14" height="34" rx="2"/><rect x="404" y="66" width="14" height="34" rx="2"/><rect x="421" y="66" width="14" height="34" rx="2"/><rect x="438" y="66" width="14" height="34" rx="2"/><rect x="455" y="66" width="14" height="34" rx="2"/><rect x="472" y="66" width="14" height="34" rx="2"/><rect x="489" y="66" width="14" height="34" rx="2"/><rect x="506" y="66" width="14" height="34" rx="2"/><rect x="523" y="66" width="14" height="34" rx="2"/><rect x="540" y="66" width="14" height="34" rx="2"/><rect x="557" y="66" width="3" height="34" rx="1"/>
+      </g>
+      <text x="30" y="118" class="tiny">lane 0</text>
+      <text x="540" y="118" text-anchor="end" class="tiny">lane 31</text>
+    </svg>
+  </div>
+  <div class="callout takeaway"><span class="lbl">One fetch, 32 lanes</span>A single fetch/decode drives 32 lanes. This is why GPUs get so much <strong>arithmetic per control unit</strong>.</div>
+</section>
+
+<!-- Branch divergence -->
+<section data-background-color="#ffffff">
+  <h2>Branch Divergence</h2>
+  <p class="small">If threads in a warp take different branches, the warp executes <strong>both paths serially</strong>,
+    masking the inactive threads. Performance drops.</p>
+  <div class="cols">
+    <div>
+      <div class="code-label">divergent branch in a warp</div>
+      <pre><code class="language-c" data-trim>
+if (threadIdx.x % 2 == 0)
+    doA();
+else
+    doB();
+</code></pre>
+      <p class="small">The warp executes in <strong>two passes</strong>:</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 130" class="chart" style="max-width:300px">
+        <text x="120" y="16" text-anchor="middle" class="lbl">Pass 1 — doA() · even lanes</text>
+        <g><rect x="10" y="24" width="20" height="20" fill="#bfdbfe" stroke="#3b82f6"/><rect x="34" y="24" width="20" height="20" fill="#e5e7eb" stroke="#cbd5e1"/><rect x="58" y="24" width="20" height="20" fill="#bfdbfe" stroke="#3b82f6"/><rect x="82" y="24" width="20" height="20" fill="#e5e7eb" stroke="#cbd5e1"/><rect x="106" y="24" width="20" height="20" fill="#bfdbfe" stroke="#3b82f6"/><rect x="130" y="24" width="20" height="20" fill="#e5e7eb" stroke="#cbd5e1"/><rect x="154" y="24" width="20" height="20" fill="#bfdbfe" stroke="#3b82f6"/><rect x="178" y="24" width="20" height="20" fill="#e5e7eb" stroke="#cbd5e1"/></g>
+        <text x="120" y="78" text-anchor="middle" class="lbl">Pass 2 — doB() · odd lanes</text>
+        <g><rect x="10" y="86" width="20" height="20" fill="#e5e7eb" stroke="#cbd5e1"/><rect x="34" y="86" width="20" height="20" fill="#fecaca" stroke="#f87171"/><rect x="58" y="86" width="20" height="20" fill="#e5e7eb" stroke="#cbd5e1"/><rect x="82" y="86" width="20" height="20" fill="#fecaca" stroke="#f87171"/><rect x="106" y="86" width="20" height="20" fill="#e5e7eb" stroke="#cbd5e1"/><rect x="130" y="86" width="20" height="20" fill="#fecaca" stroke="#f87171"/><rect x="154" y="86" width="20" height="20" fill="#e5e7eb" stroke="#cbd5e1"/><rect x="178" y="86" width="20" height="20" fill="#fecaca" stroke="#f87171"/></g>
+        <text x="120" y="124" text-anchor="middle" class="tiny muted">gray lanes = idle / masked</text>
+      </svg>
+    </div>
+  </div>
+  <div class="callout warn"><span class="lbl">Lesson</span>Half the lanes sit idle in each pass → up to <strong>2× slowdown</strong> for a 2-way branch. Keep threads within a warp on the <strong>same path</strong> when you can.</div>
+</section>
+
+<!-- Occupancy -->
+<section data-background-color="#ffffff">
+  <h2>Occupancy: Many Warps Hide Latency</h2>
+  <p class="small">Each SM keeps many warps resident. When one stalls on memory, the scheduler instantly switches to a
+    ready warp. More resident warps = better latency hiding = higher occupancy.</p>
+  <div class="center">
+    <svg viewBox="0 0 520 130" class="chart" style="max-width:700px">
+      <rect x="180" y="8" width="160" height="24" rx="6" fill="#ede9fe" stroke="#8b5cf6"/><text x="260" y="24" text-anchor="middle" class="lbl" style="fill:#5b21b6">Warp Scheduler</text>
+      <g>
+        <rect x="20" y="60" width="84" height="40" rx="6" fill="#dcfce7" stroke="#22c55e"/><text x="62" y="78" text-anchor="middle" class="lbl">W0</text><text x="62" y="93" text-anchor="middle" class="tiny" style="fill:#15803d">ready</text>
+        <rect x="116" y="60" width="84" height="40" rx="6" fill="#fee2e2" stroke="#f87171"/><text x="158" y="78" text-anchor="middle" class="lbl">W1</text><text x="158" y="93" text-anchor="middle" class="tiny" style="fill:#b91c1c">stalled</text>
+        <rect x="212" y="60" width="84" height="40" rx="6" fill="#dcfce7" stroke="#22c55e"/><text x="254" y="78" text-anchor="middle" class="lbl">W2</text><text x="254" y="93" text-anchor="middle" class="tiny" style="fill:#15803d">ready</text>
+        <rect x="308" y="60" width="84" height="40" rx="6" fill="#fee2e2" stroke="#f87171"/><text x="350" y="78" text-anchor="middle" class="lbl">W3</text><text x="350" y="93" text-anchor="middle" class="tiny" style="fill:#b91c1c">stalled</text>
+        <rect x="404" y="60" width="84" height="40" rx="6" fill="#dcfce7" stroke="#22c55e"/><text x="446" y="78" text-anchor="middle" class="lbl">W4</text><text x="446" y="93" text-anchor="middle" class="tiny" style="fill:#15803d">ready</text>
+      </g>
+      <g class="axis" stroke-dasharray="3 3"><line x1="260" y1="32" x2="62" y2="60"/><line x1="260" y1="32" x2="254" y2="60"/><line x1="260" y1="32" x2="446" y2="60"/></g>
+      <text x="260" y="120" text-anchor="middle" class="tiny muted">scheduler issues from any ready warp</text>
+    </svg>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Occupancy</span>= resident warps ÷ max warps. Higher occupancy → <strong>more latency to hide behind</strong>.</div>
+</section>
+
+<!-- Memory hierarchy -->
+<section data-background-color="#ffffff">
+  <h2>The GPU Memory Hierarchy</h2>
+  <p class="small">Like a CPU, the GPU has a speed/capacity hierarchy — but one level is <strong>YOUR job to manage</strong>.</p>
+  <div class="center">
+    <svg viewBox="0 0 460 200" class="chart" style="max-width:620px">
+      <!-- inverted pyramid: narrow fast at top, wide slow at bottom -->
+      <polygon points="180,18 280,18 250,52 210,52" fill="#fbbf24" stroke="#d97706"/><text x="230" y="40" text-anchor="middle" class="tiny" style="fill:#7c2d12">Registers</text>
+      <polygon points="150,54 310,54 280,90 180,90" fill="#dcfce7" stroke="#22c55e"/><text x="230" y="76" text-anchor="middle" class="tiny" style="fill:#15803d">Shared Memory / L1</text>
+      <polygon points="120,92 340,92 310,128 150,128" fill="#dbeafe" stroke="#3b82f6"/><text x="230" y="114" text-anchor="middle" class="tiny" style="fill:#1d4ed8">L2 Cache</text>
+      <polygon points="90,130 370,130 340,170 120,170" fill="#fee2e2" stroke="#f87171"/><text x="230" y="154" text-anchor="middle" class="tiny" style="fill:#b91c1c">Global Memory (HBM)</text>
+      <text x="396" y="36" class="tiny">per-thread · fastest · tiny</text>
+      <text x="396" y="74" class="tiny">per-block · fast · managed</text>
+      <text x="396" y="112" class="tiny">all SMs · automatic</text>
+      <text x="396" y="152" class="tiny">whole GPU · ~80 GB · slow</text>
+    </svg>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Inverted pyramid</span>Fast &amp; small at top, slow &amp; large at bottom. <strong>Shared memory</strong> is the key tool you control.</div>
+</section>
+
+<!-- Shared memory vs cache -->
+<section data-background-color="#ffffff">
+  <h2>Shared Memory: A Managed Scratchpad</h2>
+  <p class="small">Unlike a CPU cache (automatic), shared memory is <strong>explicitly managed in your code</strong>.
+    Threads in a block use it to cooperate and reuse data.</p>
+  <div class="cols">
+    <div class="callout"><span class="lbl">CPU Cache</span>
+      <ul class="small" style="margin:.2em 0 0 .9em">
+        <li>Hardware-managed, automatic</li>
+        <li>Transparent to the program</li>
+        <li>You influence it indirectly</li>
+      </ul></div>
+    <div class="callout ok"><span class="lbl">GPU Shared Memory</span>
+      <ul class="small" style="margin:.2em 0 0 .9em">
+        <li>Programmer-declared &amp; filled</li>
+        <li>Explicit load / sync / use</li>
+        <li>Block-private, very fast</li>
+      </ul></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Biggest lever</span>Using shared memory well is often the single biggest GPU optimization.</div>
+</section>
+
+<!-- Coalescing -->
+<section data-background-color="#ffffff">
+  <h2>Memory Coalescing</h2>
+  <p class="small">When the 32 threads of a warp access <strong>consecutive</strong> addresses, the hardware merges them
+    into one transaction. Scattered accesses explode into many.</p>
+  <div class="cols">
+    <div class="center">
+      <svg viewBox="0 0 240 120" class="chart" style="max-width:300px">
+        <text x="120" y="14" text-anchor="middle" class="lbl ok-text" style="fill:#15803d">Coalesced (good)</text>
+        <g fill="#bfdbfe" stroke="#3b82f6"><rect x="20" y="22" width="20" height="20"/><rect x="44" y="22" width="20" height="20"/><rect x="68" y="22" width="20" height="20"/><rect x="92" y="22" width="20" height="20"/><rect x="116" y="22" width="20" height="20"/><rect x="140" y="22" width="20" height="20"/><rect x="164" y="22" width="20" height="20"/><rect x="188" y="22" width="20" height="20"/></g>
+        <g class="axis"><line x1="30" y1="42" x2="30" y2="64"/><line x1="54" y1="42" x2="54" y2="64"/><line x1="78" y1="42" x2="78" y2="64"/><line x1="102" y1="42" x2="102" y2="64"/><line x1="126" y1="42" x2="126" y2="64"/><line x1="150" y1="42" x2="150" y2="64"/><line x1="174" y1="42" x2="174" y2="64"/><line x1="198" y1="42" x2="198" y2="64"/></g>
+        <rect x="20" y="64" width="188" height="20" rx="4" fill="#dcfce7" stroke="#22c55e"/>
+        <text x="114" y="100" text-anchor="middle" class="tiny" style="fill:#15803d">→ 1 memory transaction</text>
+      </svg>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 120" class="chart" style="max-width:300px">
+        <text x="120" y="14" text-anchor="middle" class="lbl" style="fill:#b91c1c">Scattered (bad)</text>
+        <g fill="#fecaca" stroke="#f87171"><rect x="20" y="22" width="20" height="20"/><rect x="44" y="22" width="20" height="20"/><rect x="68" y="22" width="20" height="20"/><rect x="92" y="22" width="20" height="20"/><rect x="116" y="22" width="20" height="20"/><rect x="140" y="22" width="20" height="20"/><rect x="164" y="22" width="20" height="20"/><rect x="188" y="22" width="20" height="20"/></g>
+        <g class="axis" stroke="#b91c1c"><line x1="30" y1="42" x2="30" y2="64"/><line x1="54" y1="42" x2="180" y2="64"/><line x1="78" y1="42" x2="40" y2="64"/><line x1="102" y1="42" x2="200" y2="64"/><line x1="126" y1="42" x2="70" y2="64"/><line x1="150" y1="42" x2="20" y2="64"/><line x1="174" y1="42" x2="150" y2="64"/><line x1="198" y1="42" x2="110" y2="64"/></g>
+        <g fill="#fff" stroke="#f87171"><rect x="20" y="64" width="20" height="20"/><rect x="60" y="64" width="20" height="20"/><rect x="100" y="64" width="20" height="20"/><rect x="140" y="64" width="20" height="20"/><rect x="180" y="64" width="20" height="20"/></g>
+        <text x="114" y="100" text-anchor="middle" class="tiny" style="fill:#b91c1c">→ many transactions</text>
+      </svg>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">Same data, different cost</span>Layout &amp; indexing decide which you get. This is the single most common GPU performance pitfall.</div>
+</section>
+
+<!-- Module 3 review -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 3 — Review</h2>
+  <div class="qa"><p class="q">1. How many threads are in a warp, and how do they execute?</p>
+    <div class="fragment"><div class="a">32 threads. They execute the same instruction each cycle in lockstep (SIMT), on different data.</div></div></div>
+  <div class="qa"><p class="q">2. What is branch divergence and when does it occur?</p>
+    <div class="fragment"><div class="a">When threads in the same warp take different control-flow paths. The warp serializes the paths (running each, masking the others), so a 2-way branch can cost up to 2×.</div></div></div>
+  <div class="qa"><p class="q">3. How does high occupancy help hide memory latency?</p>
+    <div class="fragment"><div class="a">More resident warps give the scheduler more ready work to issue while others stall on memory, so the SM's ALUs stay busy and the long memory latency is overlapped.</div></div></div>
+  <div class="qa"><p class="q">4. List the memory levels fastest→slowest. &nbsp; 5. What is coalescing?</p>
+    <div class="fragment"><div class="a">Registers → shared memory/L1 → L2 → global (HBM). Coalescing = when a warp's 32 threads hit consecutive addresses, the hardware merges them into one transaction; scattered accesses become many, so access pattern (data layout + indexing) matters enormously.</div></div></div>
+</section>
+
+<!-- ==================================================================
+     MODULE 4 — PERFORMANCE & SPARSE COMPUTATION
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 4</div>
+  <div class="mod-title">Performance &amp; Sparse Computation</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Apply coalescing and shared-memory <strong>tiling</strong> to speed up kernels</li>
+      <li>Recognize shared-memory <strong>bank conflicts</strong></li>
+      <li>Understand the parallel <strong>reduction</strong> pattern</li>
+      <li>Explain why irregular / <strong>sparse</strong> access breaks GPU performance</li>
+      <li>Connect these ideas to <strong>Program 2 (CUDA SpMV)</strong></li>
+    </ul>
+  </div>
+</section>
+
+<!-- Performance checklist -->
+<section data-background-color="#ffffff">
+  <h2>A GPU Performance Checklist</h2>
+  <p class="small">Most GPU tuning comes down to a handful of recurring ideas:</p>
+  <div class="cols c3" style="gap:.7em">
+    <div class="callout ok"><span class="lbl">Coalesce global memory</span>make warp accesses contiguous</div>
+    <div class="callout ok"><span class="lbl">Use shared memory</span>stage reused data on-chip</div>
+    <div class="callout ok"><span class="lbl">Keep occupancy high</span>enough warps to hide latency</div>
+  </div>
+  <div class="cols" style="gap:.7em;margin-top:.5em">
+    <div class="callout warn"><span class="lbl">Avoid divergence</span>keep a warp on one path</div>
+    <div class="callout warn"><span class="lbl">Minimize host↔device copies</span>the PCIe link is slow</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">In one line</span>Performance ≈ <strong>coalescing + shared memory + occupancy − divergence − copies</strong>.</div>
+</section>
+
+<!-- Tiling -->
+<section data-background-color="#ffffff">
+  <h2>Tiling: Reuse Data via Shared Memory</h2>
+  <p class="small">Instead of each thread re-reading slow global memory, a block <strong>cooperatively loads a tile</strong>
+    into shared memory once, then reuses it many times.</p>
+  <div class="pipe" style="margin:.8em 0">
+    <div class="row" style="align-items:stretch">
+      <div class="blk" style="flex:1;background:#fee2e2;border-color:#f87171"><strong>Global Memory</strong><br><span class="tiny">slow, large</span></div>
+      <div class="cell" style="border:none;font-weight:800;color:var(--muted)">→</div>
+      <div class="blk cache" style="flex:1"><strong>Shared Memory</strong><br><span class="tiny">load tile once</span></div>
+      <div class="cell" style="border:none;font-weight:800;color:var(--muted)">→</div>
+      <div class="blk" style="flex:1;background:#fef3c7;border-color:#f59e0b"><strong>Threads</strong><br><span class="tiny">reuse many times</span></div>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Arithmetic intensity</span>Fewer global accesses per useful computation = higher arithmetic intensity = faster kernel.</div>
+</section>
+
+<!-- Bank conflicts -->
+<section data-background-color="#ffffff">
+  <h2>Shared-Memory Bank Conflicts</h2>
+  <p class="small">Shared memory is split into <strong>banks</strong>. If threads in a warp hit different banks → full speed.
+    If several hit the SAME bank → accesses serialize.</p>
+  <div class="cols">
+    <div class="center">
+      <svg viewBox="0 0 240 120" class="chart" style="max-width:300px">
+        <text x="120" y="14" text-anchor="middle" class="lbl ok-text" style="fill:#15803d">No conflict</text>
+        <g fill="#dcfce7" stroke="#22c55e"><rect x="16" y="60" width="28" height="22"/><rect x="50" y="60" width="28" height="22"/><rect x="84" y="60" width="28" height="22"/><rect x="118" y="60" width="28" height="22"/><rect x="152" y="60" width="28" height="22"/><rect x="186" y="60" width="28" height="22"/></g>
+        <g class="lbl" style="font-size:10px"><text x="30" y="75" text-anchor="middle">b0</text><text x="64" y="75" text-anchor="middle">b1</text><text x="98" y="75" text-anchor="middle">b2</text><text x="132" y="75" text-anchor="middle">b3</text><text x="166" y="75" text-anchor="middle">b4</text><text x="200" y="75" text-anchor="middle">b5</text></g>
+        <g class="axis"><line x1="30" y1="38" x2="30" y2="60"/><line x1="64" y1="38" x2="64" y2="60"/><line x1="98" y1="38" x2="98" y2="60"/><line x1="132" y1="38" x2="132" y2="60"/><line x1="166" y1="38" x2="166" y2="60"/><line x1="200" y1="38" x2="200" y2="60"/></g>
+        <g fill="#bfdbfe" stroke="#3b82f6"><rect x="22" y="26" width="16" height="12"/><rect x="56" y="26" width="16" height="12"/><rect x="90" y="26" width="16" height="12"/><rect x="124" y="26" width="16" height="12"/><rect x="158" y="26" width="16" height="12"/><rect x="192" y="26" width="16" height="12"/></g>
+        <text x="115" y="100" text-anchor="middle" class="tiny" style="fill:#15803d">1 thread per bank → 1 cycle</text>
+      </svg>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 120" class="chart" style="max-width:300px">
+        <text x="120" y="14" text-anchor="middle" class="lbl" style="fill:#b91c1c">4-way conflict</text>
+        <g fill="#dcfce7" stroke="#22c55e"><rect x="16" y="60" width="28" height="22"/><rect x="50" y="60" width="28" height="22"/><rect x="84" y="60" width="28" height="22"/><rect x="118" y="60" width="28" height="22"/><rect x="152" y="60" width="28" height="22"/><rect x="186" y="60" width="28" height="22"/></g>
+        <g class="lbl" style="font-size:10px"><text x="30" y="75" text-anchor="middle">b0</text><text x="64" y="75" text-anchor="middle">b1</text><text x="98" y="75" text-anchor="middle">b2</text><text x="132" y="75" text-anchor="middle">b3</text><text x="166" y="75" text-anchor="middle">b4</text><text x="200" y="75" text-anchor="middle">b5</text></g>
+        <g class="axis" stroke="#b91c1c"><line x1="30" y1="38" x2="64" y2="60"/><line x1="64" y1="38" x2="64" y2="60"/><line x1="98" y1="38" x2="64" y2="60"/><line x1="132" y1="38" x2="64" y2="60"/></g>
+        <g fill="#fecaca" stroke="#f87171"><rect x="22" y="26" width="16" height="12"/><rect x="56" y="26" width="16" height="12"/><rect x="90" y="26" width="16" height="12"/><rect x="124" y="26" width="16" height="12"/></g>
+        <text x="64" y="98" text-anchor="middle" class="tiny" style="fill:#b91c1c">→ same bank</text>
+        <text x="115" y="112" text-anchor="middle" class="tiny" style="fill:#b91c1c">4 threads, 1 bank → 4 cycles</text>
+      </svg>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">Fix</span>Padding arrays or changing the access stride can remove conflicts.</div>
+</section>
+
+<!-- Reduction -->
+<section data-background-color="#ffffff">
+  <h2>The Reduction Pattern</h2>
+  <p class="small">Summing N values in parallel: pair up and combine in <strong>log₂(N)</strong> steps instead of N steps.</p>
+  <div class="center">
+    <svg viewBox="0 0 420 200" class="chart" style="max-width:560px">
+      <!-- level 0: 8 leaves -->
+      <g fill="#fef3c7" stroke="#f59e0b"><rect x="20" y="14" width="34" height="24" rx="4"/><rect x="70" y="14" width="34" height="24" rx="4"/><rect x="120" y="14" width="34" height="24" rx="4"/><rect x="170" y="14" width="34" height="24" rx="4"/><rect x="220" y="14" width="34" height="24" rx="4"/><rect x="270" y="14" width="34" height="24" rx="4"/><rect x="320" y="14" width="34" height="24" rx="4"/><rect x="370" y="14" width="34" height="24" rx="4"/></g>
+      <g class="lbl"><text x="37" y="31" text-anchor="middle">0</text><text x="87" y="31" text-anchor="middle">1</text><text x="137" y="31" text-anchor="middle">2</text><text x="187" y="31" text-anchor="middle">3</text><text x="237" y="31" text-anchor="middle">4</text><text x="287" y="31" text-anchor="middle">5</text><text x="337" y="31" text-anchor="middle">6</text><text x="387" y="31" text-anchor="middle">7</text></g>
+      <!-- level 1: 4 sums -->
+      <g class="axis"><line x1="37" y1="38" x2="62" y2="70"/><line x1="87" y1="38" x2="62" y2="70"/><line x1="137" y1="38" x2="162" y2="70"/><line x1="187" y1="38" x2="162" y2="70"/><line x1="237" y1="38" x2="262" y2="70"/><line x1="287" y1="38" x2="262" y2="70"/><line x1="337" y1="38" x2="362" y2="70"/><line x1="387" y1="38" x2="362" y2="70"/></g>
+      <g fill="#dbeafe" stroke="#3b82f6"><rect x="46" y="70" width="32" height="22" rx="4"/><rect x="146" y="70" width="32" height="22" rx="4"/><rect x="246" y="70" width="32" height="22" rx="4"/><rect x="346" y="70" width="32" height="22" rx="4"/></g>
+      <g class="lbl"><text x="62" y="86" text-anchor="middle">+</text><text x="162" y="86" text-anchor="middle">+</text><text x="262" y="86" text-anchor="middle">+</text><text x="362" y="86" text-anchor="middle">+</text></g>
+      <!-- level 2: 2 sums -->
+      <g class="axis"><line x1="62" y1="92" x2="112" y2="124"/><line x1="162" y1="92" x2="112" y2="124"/><line x1="262" y1="92" x2="312" y2="124"/><line x1="362" y1="92" x2="312" y2="124"/></g>
+      <g fill="#dbeafe" stroke="#3b82f6"><rect x="96" y="124" width="32" height="22" rx="4"/><rect x="296" y="124" width="32" height="22" rx="4"/></g>
+      <g class="lbl"><text x="112" y="140" text-anchor="middle">+</text><text x="312" y="140" text-anchor="middle">+</text></g>
+      <!-- level 3: 1 sum -->
+      <g class="axis"><line x1="112" y1="146" x2="212" y2="174"/><line x1="312" y1="146" x2="212" y2="174"/></g>
+      <g fill="#fee2e2" stroke="var(--wolf-red)"><rect x="196" y="174" width="32" height="22" rx="4"/></g>
+      <text x="212" y="190" text-anchor="middle" class="lbl" style="fill:var(--wolf-red)">Σ</text>
+    </svg>
+  </div>
+  <div class="callout takeaway"><span class="lbl">8 → 4 → 2 → 1 in 3 steps (log₂ 8)</span>Log-depth reductions are everywhere: sums, max, dot products — including inside SpMV.</div>
+</section>
+
+<!-- When access becomes irregular -->
+<section data-background-color="#ffffff">
+  <h2>When Access Becomes Irregular</h2>
+  <p class="small">Everything so far assumed regular, contiguous access. Many real problems — graphs, sparse matrices,
+    tensors — are <strong>irregular</strong>. This is where GPUs struggle, and where research lives.</p>
+  <div class="cols">
+    <div class="center">
+      <svg viewBox="0 0 160 130" class="chart" style="max-width:200px">
+        <text x="80" y="14" text-anchor="middle" class="lbl">Dense</text>
+        <g fill="#bfdbfe" stroke="#3b82f6">
+          <rect x="20" y="22" width="24" height="24"/><rect x="48" y="22" width="24" height="24"/><rect x="76" y="22" width="24" height="24"/><rect x="104" y="22" width="24" height="24"/>
+          <rect x="20" y="50" width="24" height="24"/><rect x="48" y="50" width="24" height="24"/><rect x="76" y="50" width="24" height="24"/><rect x="104" y="50" width="24" height="24"/>
+          <rect x="20" y="78" width="24" height="24"/><rect x="48" y="78" width="24" height="24"/><rect x="76" y="78" width="24" height="24"/><rect x="104" y="78" width="24" height="24"/>
+          <rect x="20" y="106" width="24" height="20"/><rect x="48" y="106" width="24" height="20"/><rect x="76" y="106" width="24" height="20"/><rect x="104" y="106" width="24" height="20"/>
+        </g>
+      </svg>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 160 130" class="chart" style="max-width:200px">
+        <text x="80" y="14" text-anchor="middle" class="lbl">Sparse</text>
+        <g fill="#f1f5f9" stroke="#e2e8f0">
+          <rect x="20" y="22" width="24" height="24"/><rect x="48" y="22" width="24" height="24"/><rect x="76" y="22" width="24" height="24"/><rect x="104" y="22" width="24" height="24"/>
+          <rect x="20" y="50" width="24" height="24"/><rect x="48" y="50" width="24" height="24"/><rect x="76" y="50" width="24" height="24"/><rect x="104" y="50" width="24" height="24"/>
+          <rect x="20" y="78" width="24" height="24"/><rect x="48" y="78" width="24" height="24"/><rect x="76" y="78" width="24" height="24"/><rect x="104" y="78" width="24" height="24"/>
+          <rect x="20" y="106" width="24" height="20"/><rect x="48" y="106" width="24" height="20"/><rect x="76" y="106" width="24" height="20"/><rect x="104" y="106" width="24" height="20"/>
+        </g>
+        <g fill="#fbbf24" stroke="#d97706"><rect x="48" y="22" width="24" height="24"/><rect x="104" y="50" width="24" height="24"/><rect x="20" y="78" width="24" height="24"/><rect x="76" y="106" width="24" height="20"/></g>
+      </svg>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">The trade</span>Storing/visiting only the nonzeros (gold) saves work — but <strong>scatters memory access</strong>.</div>
+</section>
+
+<!-- Why sparsity is hard -->
+<section data-background-color="#ffffff">
+  <h2>Why Sparsity Is Hard on GPUs</h2>
+  <p class="small">Sparse formats (e.g. <strong>CSR</strong>) store only nonzeros with index arrays. The cost: indirect, scattered access.</p>
+  <div class="cols">
+    <div class="callout warn"><span class="lbl">Uncoalesced access</span>nonzero columns are scattered → many memory transactions</div>
+    <div class="callout warn"><span class="lbl">Load imbalance</span>rows have different #nonzeros → some warps do far more work</div>
+  </div>
+  <div class="cols">
+    <div class="callout warn"><span class="lbl">Divergence</span>variable-length row loops → threads in a warp finish at different times</div>
+    <div class="callout warn"><span class="lbl">Low arithmetic intensity</span>little compute per byte loaded → memory-bound</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Frontier</span>These are open problems — the subject of active research (and your instructor's work).</div>
+</section>
+
+<!-- Bridge to Program 2 -->
+<section data-background-color="#ffffff">
+  <h2>Bridge to Program 2: CUDA SpMV</h2>
+  <p class="small">Program 2 asks you to implement <strong>sparse matrix–vector multiply (SpMV)</strong> in CUDA and compare
+    against a sequential baseline. Everything in this unit shows up there:</p>
+  <ul class="small">
+    <li><strong>Thread/block layout (M2)</strong> — how do you assign threads to rows or nonzeros?</li>
+    <li><strong>Coalescing &amp; memory hierarchy (M3)</strong> — how do you access the CSR arrays?</li>
+    <li><strong>Divergence &amp; load imbalance (M4)</strong> — how do uneven rows hurt you?</li>
+    <li><strong>Measure, then optimize</strong> — compare your kernel to the sequential version</li>
+  </ul>
+  <div class="callout takeaway"><span class="lbl">Goal</span>Not just a working kernel, but understanding <strong>WHY</strong> it performs the way it does.</div>
+</section>
+
+<!-- Module 4 review -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 4 — Review</h2>
+  <div class="qa"><p class="q">1. How does shared-memory tiling reduce global memory traffic?</p>
+    <div class="fragment"><div class="a">A block loads a tile from slow global memory into fast shared memory once, then all threads reuse it many times — fewer global accesses per FLOP, so higher arithmetic intensity.</div></div></div>
+  <div class="qa"><p class="q">2. What causes a shared-memory bank conflict? &nbsp; 3. Why does a parallel reduction take log₂(N) steps?</p>
+    <div class="fragment"><div class="a">A conflict happens when several threads in a warp access the same bank; those accesses serialize. A reduction pairs up partial results and halves the count each step, so N → 1 takes log₂(N) levels.</div></div></div>
+  <div class="qa"><p class="q">4. Give two reasons sparse SpMV is hard on a GPU.</p>
+    <div class="fragment"><div class="a">Any two of: uncoalesced/scattered access to nonzero columns; load imbalance from rows with different nonzero counts; branch divergence from variable-length row loops; low arithmetic intensity (memory-bound).</div></div></div>
+  <div class="qa"><p class="q">5. Which optimizations from this unit will you apply in Program 2?</p>
+    <div class="fragment"><div class="a">Choose a thread/block mapping that coalesces CSR-array access, use shared memory and reductions where rows are processed cooperatively, keep occupancy high, minimize divergence/imbalance, and minimize H2D/D2H copies — then measure against the sequential baseline.</div></div></div>
+</section>
+
+<!-- Unit summary -->
+<section data-background-color="#ffffff">
+  <h2>GPU Unit — Key Takeaways</h2>
+  <div class="cols">
+    <ul class="small">
+      <li>GPUs are <strong>throughput machines</strong>: many simple cores, latency hidden by parallelism</li>
+      <li><strong>SIMT</strong>: you write threads; hardware runs warps of 32 in lockstep</li>
+      <li>The thread hierarchy (<strong>grid/block/thread</strong>) maps onto GPU/SM/core</li>
+    </ul>
+    <ul class="small">
+      <li>Memory hierarchy: registers → <strong>shared (managed!)</strong> → L2 → global</li>
+      <li>Performance = coalescing + shared memory + occupancy − divergence</li>
+      <li>Irregular/<strong>sparse</strong> problems break these assumptions — the hard, interesting frontier</li>
+    </ul>
+  </div>
+  <div class="callout takeaway"><span class="lbl">One sentence</span>
+    A GPU turns a slow-memory, many-core machine into a fast one by <strong>always having more parallel work ready to run</strong> — and your job is to feed it regular, coalesced, reusable data.</div>
+  <p class="center muted small">Next up → <strong>multicore memory hierarchy</strong>, then cache coherence &amp; consistency.</p>
+</section>
+
+</div>
+
+<!-- deck-level fixed footer (course + unit); slide number is reveal-native -->
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>GPU Unit — Programming &amp; Architecture</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.04,
+    minScale: 0.2, maxScale: 1.6,
+    center: false,                 // top-align content so the NC State header bar sits at the slide top
+    hash: true, slideNumber: 'c/t', history: true,
+    transition: 'slide', transitionSpeed: 'fast',
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      {left:'\\(', right:'\\)', display:false},
+      {left:'$$', right:'$$', display:true}
+    ]},
+  });
+</script>
+</body>
+</html>
