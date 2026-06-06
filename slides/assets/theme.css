@@ -28,23 +28,34 @@
 /* ---------- base deck ---------- */
 .reveal {
   font-family: "Inter", "Helvetica Neue", Arial, system-ui, sans-serif;
-  font-size: 28px;
+  font-size: 27px;
   color: var(--ink);
   font-weight: 400;
 }
 .reveal .slides { text-align: left; }
-.reveal .slides section { line-height: 1.34; }
+.reveal .slides section { line-height: 1.3; }
 
 /* Every slide carries the NC State red header bar + wordmark at the top.
-   center:false keeps sections top-aligned so the bar sits at the canvas edge. */
+   center:false keeps sections top-aligned so the bar sits at the canvas edge.
+   .nc-fit is set by the auto-fit script to shrink any slide whose content
+   would otherwise exceed 720px (and be cut off in true 16:9 fullscreen). */
 .reveal .slides > section {
   min-height: 720px;
   box-sizing: border-box;
-  padding: calc(var(--bar-h) + 30px) 56px 56px;
+  padding: calc(var(--bar-h) + 24px) 52px 40px;
+  /* Auto-fit: the script sets --nc-fit < 1 on any slide whose content would
+     exceed 720px, shrinking ALL content (text, tables, SVG diagrams) to fit so
+     nothing is cut off in true 16:9 fullscreen. zoom origin is the top-left. */
+  zoom: var(--nc-fit, 1);
 }
+/* The header bar is counter-scaled by 1/--nc-fit so that after the section zoom
+   it always renders at full width and the exact bar height — pixel-perfect on
+   every slide regardless of how much the content was shrunk. */
 .reveal .slides > section::before {
   content: "";
-  position: absolute; top: 0; left: 0; right: 0; height: var(--bar-h);
+  position: absolute; top: 0; left: 0;
+  width: calc(100% / var(--nc-fit, 1));
+  height: calc(var(--bar-h) / var(--nc-fit, 1));
   background: var(--wolf-red) url("ncstate-bar.jpg") left center / cover no-repeat;
   z-index: 5;
 }
