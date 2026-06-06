@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSC/ECE 506 · Chapter 2 — Perspectives on Parallel Programming</title>
+
+<!-- reveal.js core (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<!-- code highlighting + math -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+<!-- fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<!-- course theme -->
+<link rel="stylesheet" href="assets/theme.css?v=4">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============================ TITLE ============================ -->
+<section class="title-slide" data-background-color="#ffffff">
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <h1>Chapter 2</h1>
+  <div class="sub">Perspectives on Parallel Programming — Models for Expressing Parallelism</div>
+  <div class="meta">
+    Fall Semester · Based on Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em><br>
+    <span class="muted">Use ← → to navigate · <strong>S</strong> for speaker notes · <strong>F</strong> fullscreen · <strong>ESC</strong> overview</span>
+  </div>
+  <aside class="notes">
+    Chapter 1 told us <em>why</em> the industry went parallel. Chapter 2 asks <em>how</em> we express that
+    parallelism: what abstraction does the programmer write against? The two pillars are
+    <strong>shared memory</strong> and <strong>message passing</strong>; almost every other model
+    (PGAS, data-parallel, MapReduce, transactional memory) builds on one of them.
+  </aside>
+</section>
+
+<!-- Roadmap -->
+<section data-background-color="#ffffff">
+  <h2>Chapter Roadmap</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Module 2.1</span><strong>Programming Models</strong><br>
+      <span class="small">What a programming model is; the thread/process analogy; <em>shared memory</em> vs. <em>message passing</em>.</span></div>
+    <div class="callout"><span class="lbl">Module 2.2</span><strong>The Two Models in Code</strong><br>
+      <span class="small">Side-by-side parallelization of the same loop — and what each model costs to develop and tune.</span></div>
+    <div class="callout"><span class="lbl">Module 2.3</span><strong>Other Models</strong><br>
+      <span class="small">PGAS, data-parallel (SIMD), MapReduce, and transactional memory — and how they layer on the two pillars.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The thread that ties it together</span>
+    A programming model is the <strong>abstraction the hardware offers the programmer</strong>. Choosing one trades
+    <strong>control</strong> against <strong>complexity</strong> — and no model removes the need for tuning.</div>
+</section>
+
+<!-- ==================================================================
+     MODULE 2.1 — PARALLEL PROGRAMMING MODELS
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 2.1</div>
+  <div class="mod-title">Parallel Programming Models</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Define a <strong>programming model</strong> and say why the multiprocessor one is still contested</li>
+      <li>Contrast <strong>shared memory</strong> and <strong>message passing</strong> at the hardware-visibility level</li>
+      <li>Use the <strong>thread vs. process</strong> analogy to explain implicit vs. explicit communication</li>
+    </ul>
+  </div>
+</section>
+
+<!-- What is a programming model -->
+<section data-background-color="#ffffff">
+  <h2>What Is a Programming Model?</h2>
+  <div class="callout"><span class="lbl">Programming model</span>
+    An <strong>abstraction provided by the hardware to the programmer</strong>. It decides how easy or hard it is to
+    express an algorithm as computation tasks the hardware understands.</div>
+  <div class="cols">
+    <div class="callout ok"><span class="lbl">Uniprocessor model</span>
+      <ul class="small" style="margin:.2em 0 0 .9em">
+        <li>Based on <strong>program + data</strong></li>
+        <li>Bundled into the <strong>Instruction Set Architecture (ISA)</strong></li>
+        <li>Highly successful at <em>hiding</em> the hardware from programmers</li>
+      </ul></div>
+    <div class="callout warn"><span class="lbl">Multiprocessor model</span>
+      <ul class="small" style="margin:.2em 0 0 .9em">
+        <li>Much debate — still searching for the "right" one</li>
+        <li>Two dominate: <strong>shared memory</strong> &amp; <strong>message passing</strong></li>
+      </ul></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Why it matters</span>
+    The ISA hid one processor from you almost perfectly. <strong>No abstraction hides many processors that well</strong> —
+    that gap is what the rest of this chapter is about.</div>
+</section>
+
+<!-- Shared mem vs msg passing -->
+<section data-background-color="#ffffff">
+  <h2>Shared Memory vs. Message Passing</h2>
+  <div class="cols">
+    <div class="center">
+      <svg viewBox="0 0 300 180" class="chart" style="max-width:340px">
+        <text x="150" y="16" text-anchor="middle" class="note">Shared Memory Model</text>
+        <g fill="#dbeafe" stroke="#3b82f6" stroke-width="2">
+          <circle cx="40" cy="48" r="16"/><circle cx="100" cy="48" r="16"/>
+          <circle cx="160" cy="48" r="16"/><circle cx="240" cy="48" r="16"/>
+        </g>
+        <g class="lbl"><text x="40" y="52" text-anchor="middle">P</text><text x="100" y="52" text-anchor="middle">P</text>
+          <text x="160" y="52" text-anchor="middle">P</text><text x="205" y="52" text-anchor="middle">…</text><text x="240" y="52" text-anchor="middle">P</text></g>
+        <rect x="24" y="110" width="252" height="40" rx="6" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+        <text x="150" y="135" text-anchor="middle" class="lbl">Shared Memory</text>
+        <line x1="40" y1="64" x2="60" y2="110" class="axis"/><text x="38" y="92" class="tiny">st</text>
+        <line x1="240" y1="64" x2="220" y2="110" class="axis"/><text x="238" y="92" class="tiny">ld</text>
+      </svg>
+      <div class="src">Every location is visible to <strong>all</strong> processors.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 300 180" class="chart" style="max-width:340px">
+        <text x="150" y="16" text-anchor="middle" class="note">Message Passing Model</text>
+        <g>
+          <rect x="20" y="30" width="40" height="84" rx="6" fill="#eef2ff" stroke="#6366f1"/>
+          <rect x="80" y="30" width="40" height="84" rx="6" fill="#eef2ff" stroke="#6366f1"/>
+          <rect x="140" y="30" width="40" height="84" rx="6" fill="#eef2ff" stroke="#6366f1"/>
+          <rect x="232" y="30" width="40" height="84" rx="6" fill="#eef2ff" stroke="#6366f1"/>
+        </g>
+        <g fill="#dbeafe" stroke="#3b82f6"><circle cx="40" cy="50" r="13"/><circle cx="100" cy="50" r="13"/><circle cx="160" cy="50" r="13"/><circle cx="252" cy="50" r="13"/></g>
+        <g class="lbl"><text x="40" y="54" text-anchor="middle">P</text><text x="100" y="54" text-anchor="middle">P</text><text x="160" y="54" text-anchor="middle">P</text><text x="205" y="54" text-anchor="middle">…</text><text x="252" y="54" text-anchor="middle">P</text></g>
+        <g fill="#fef3c7" stroke="#f59e0b"><rect x="28" y="86" width="24" height="22" rx="3"/><rect x="88" y="86" width="24" height="22" rx="3"/><rect x="148" y="86" width="24" height="22" rx="3"/><rect x="240" y="86" width="24" height="22" rx="3"/></g>
+        <g class="tiny"><text x="40" y="101" text-anchor="middle">M</text><text x="100" y="101" text-anchor="middle">M</text><text x="160" y="101" text-anchor="middle">M</text><text x="252" y="101" text-anchor="middle">M</text></g>
+        <path d="M50,124 C110,160 200,160 250,118" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#ar)"/>
+        <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#CC0000"/></marker></defs>
+        <text x="60" y="138" class="tiny">send</text><text x="244" y="138" class="tiny">recv</text>
+      </svg>
+      <div class="src">Each location is visible to <strong>one</strong> processor; data moves by explicit messages.</div>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">The one-line difference</span>
+    Shared memory communicates <strong>implicitly through loads/stores</strong>; message passing communicates
+    <strong>explicitly through send/recv</strong>.</div>
+</section>
+
+<!-- Thread/process analogy -->
+<section data-background-color="#ffffff">
+  <h2>Thread vs. Process: The Uniprocessor Analogy</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Process — share nothing (<code class="inline">fork</code>)</div>
+      <pre><code class="language-c" data-trim>
+if (fork() == 0)
+    printf("child, id %d", getpid());
+else
+    printf("parent, id %d", getpid());
+</code></pre>
+      <div class="callout warn"><span class="lbl">Heavyweight</span>
+        <span class="small">High creation cost; processes share nothing →
+        <strong>explicit</strong> communication via sockets, files, messages.</span></div>
+    </div>
+    <div>
+      <div class="code-label">Thread — share everything (<code class="inline">clone</code>)</div>
+      <pre><code class="language-c" data-trim>
+void sayhello() {
+  printf("child thread, id %d", getpid());
+}
+printf("parent thread, id %d", getpid());
+clone(&sayhello, &stack, flags, ());
+</code></pre>
+      <div class="callout ok"><span class="lbl">Lightweight</span>
+        <span class="small">Small creation cost; threads share the address space →
+        <strong>implicit</strong> communication through memory.</span></div>
+    </div>
+  </div>
+  <aside class="notes">This is the crux: shared memory ≈ threads (share address space, communicate implicitly);
+    message passing ≈ processes (share nothing, communicate explicitly). Everything else in 2.1 follows from it.</aside>
+</section>
+
+<!-- Address space layout diagram -->
+<section data-background-color="#ffffff">
+  <h2>Address Spaces: What Each Shares</h2>
+  <div class="cols c3">
+    <div class="center">
+      <div class="src">One process</div>
+      <svg viewBox="0 0 110 220" class="chart" style="max-width:130px">
+        <g fill="#f8fafc" stroke="#475569" stroke-width="1.5">
+          <rect x="10" y="10"  width="90" height="34" rx="3"/>
+          <rect x="10" y="44"  width="90" height="28" rx="3"/>
+          <rect x="10" y="72"  width="90" height="80" rx="3"/>
+          <rect x="10" y="152" width="90" height="28" rx="3"/>
+          <rect x="10" y="180" width="90" height="16" rx="3"/>
+          <rect x="10" y="196" width="90" height="16" rx="3"/>
+        </g>
+        <g class="tiny" text-anchor="middle">
+          <text x="55" y="31">Kernel</text><text x="55" y="62">Stack</text>
+          <text x="55" y="116">(grows ↕)</text><text x="55" y="170">Heap</text>
+          <text x="55" y="192">Data</text><text x="55" y="208">Code</text></g>
+      </svg>
+    </div>
+    <div class="center">
+      <div class="src">Threads in one process</div>
+      <svg viewBox="0 0 110 220" class="chart" style="max-width:130px">
+        <g fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5">
+          <rect x="10" y="10"  width="90" height="30" rx="3"/>
+          <rect x="10" y="40"  width="90" height="22" rx="3"/>
+          <rect x="10" y="62"  width="90" height="22" rx="3"/>
+          <rect x="10" y="84"  width="90" height="68" rx="3"/>
+          <rect x="10" y="152" width="90" height="26" rx="3"/>
+          <rect x="10" y="178" width="90" height="16" rx="3"/>
+          <rect x="10" y="194" width="90" height="16" rx="3"/>
+        </g>
+        <g class="tiny" text-anchor="middle">
+          <text x="55" y="29">Kernel</text><text x="55" y="55">T1 stack</text>
+          <text x="55" y="77">T2 stack</text><text x="55" y="170">Heap</text>
+          <text x="55" y="190">Data</text><text x="55" y="206">Code</text></g>
+      </svg>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Shared</span>
+        <span class="small">Threads share <strong>code, data, heap, kernel</strong> — only stacks are private.</span></div>
+      <div class="callout warn"><span class="lbl">Private</span>
+        <span class="small">Separate processes share <em>nothing</em> logically. A <strong>copy-on-write</strong> optimization lets them
+        share pages until one writes ("initial sharing").</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Thread communication via shared var -->
+<section data-background-color="#ffffff">
+  <h2>Shared Memory: Communication &amp; Synchronization</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">Two threads share a, b, sum, signal</div>
+      <pre><code class="language-c" data-trim>
+int a, b, sum, signal = 0;
+
+void dosum(args) {
+  while (signal == 0) {}  // wait for work
+  sum = a + b;
+  signal = 0;             // done
+}
+void main() {
+  clone(&dosum, ...);     // spawn child
+  a = 5; b = 3;
+  signal = 1;             // tell child to work
+  while (signal == 1) {}  // wait for child
+  printf("sum is %d", sum);
+}
+</code></pre>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Communication</span>
+        <span class="small">The values of <code class="inline">a</code>, <code class="inline">b</code>, <code class="inline">sum</code>
+        are <strong>never explicitly sent</strong> — they live in shared memory.</span></div>
+      <div class="callout warn"><span class="lbl">Synchronization</span>
+        <span class="small"><code class="inline">signal</code> is the only thing being coordinated. The spin-loops
+        <em>sequence</em> the two threads so the read of <code class="inline">sum</code> sees the write.</span></div>
+      <div class="callout takeaway"><span class="lbl">Lesson</span>
+        Shared memory separates <strong>data sharing</strong> (free, through memory) from
+        <strong>synchronization</strong> (which you must write explicitly).</div>
+    </div>
+  </div>
+</section>
+
+<!-- Message passing example -->
+<section data-background-color="#ffffff">
+  <h2>Message Passing: The Same Task</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">Parent sends operands; child returns work</div>
+      <pre><code class="language-c" data-trim>
+int a, b;
+
+void dosum() {
+  recvMsg(mainID, &a, &b);
+  printf("child> sum is %d", a + b);
+}
+void main() {
+  if (fork() == 0)        // child
+    dosum();
+  else {                  // parent
+    a = 5; b = 3;
+    sendMsg(childID, a, b);
+    wait(childID);
+    printf("all done, exiting\n");
+  }
+}
+</code></pre>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Explicit communication</span>
+        <span class="small">Data only crosses between processes via <code class="inline">sendMsg</code> /
+        <code class="inline">recvMsg</code> — nothing is shared.</span></div>
+      <div class="callout ok"><span class="lbl">Synchronization for free</span>
+        <span class="small">Send/receive <strong>automatically synchronize</strong>: the receiver blocks until the
+        message arrives. No separate <code class="inline">signal</code> variable needed.</span></div>
+      <div class="callout takeaway"><span class="lbl">Trade-off</span>
+        Message passing <em>bundles</em> communication and synchronization — simpler reasoning, but you pay to move
+        every byte.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Review 2.1 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 2.1 — Review</h2>
+  <div class="qa">
+    <p class="q">1. What is a programming model, and which two dominate multiprocessors?</p>
+    <div class="fragment"><div class="a">An abstraction the hardware provides to the programmer. The two dominant ones are
+      <strong>shared memory</strong> and <strong>message passing</strong>.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. How does each model communicate and synchronize?</p>
+    <div class="fragment"><div class="a">Shared memory: <strong>implicit</strong> communication through loads/stores, with
+      <strong>explicit</strong> synchronization. Message passing: <strong>explicit</strong> communication via send/recv,
+      which <strong>automatically synchronizes</strong>.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Why is the thread/process analogy useful here?</p>
+    <div class="fragment"><div class="a">Threads share the address space (≈ shared memory); processes share nothing
+      (≈ message passing). The uniprocessor concepts map directly onto the two models.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 2.2 — THE TWO MODELS IN CODE
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 2.2</div>
+  <div class="mod-title">The Two Models in Code</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Parallelize the <em>same</em> serial loop under both models</li>
+      <li>Identify the primitives shared memory needs: <strong>scope, locks, barriers</strong></li>
+      <li>Explain why shared memory is <strong>easier to develop</strong> but <strong>harder to tune</strong></li>
+    </ul>
+  </div>
+</section>
+
+<!-- The serial baseline -->
+<section data-background-color="#ffffff">
+  <h2>The Serial Baseline</h2>
+  <p class="small">Both worked examples parallelize this sequential code — an elementwise add, then a conditional sum:</p>
+  <div class="center">
+    <div style="display:inline-block;text-align:left">
+      <div class="code-label">Sequential</div>
+      <pre><code class="language-c" data-trim>
+for (i = 0; i < 8; i++)
+    a[i] = b[i] + c[i];
+
+sum = 0;
+for (i = 0; i < 8; i++)
+    if (a[i] > 0)
+        sum = sum + a[i];
+
+print sum;
+</code></pre>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">Plan</span>
+    Split the 8 iterations across <strong>2 workers</strong> (4 each). The add loop is embarrassingly parallel;
+    the <strong>sum is a reduction</strong> — that's where the models differ.</div>
+</section>
+
+<!-- Shared memory worked example -->
+<section data-background-color="#ffffff">
+  <h2>Worked Example: Shared Memory</h2>
+  <div class="cols w-64">
+    <div>
+      <pre><code class="language-c" data-trim>
+begin parallel               // spawn child
+private int start_iter, end_iter, i;
+shared int local_iter = 4;
+shared double sum = 0.0, a[], b[], c[];
+shared lock_type mylock;
+
+start_iter = getid() * local_iter;
+end_iter   = start_iter + local_iter;
+for (i = start_iter; i < end_iter; i++)
+    a[i] = b[i] + c[i];
+barrier;
+
+for (i = start_iter; i < end_iter; i++)
+  if (a[i] > 0) {
+    lock(mylock);
+      sum = sum + a[i];
+    unlock(mylock);
+  }
+barrier;                     // necessary
+end parallel                 // kill child
+print sum;
+</code></pre>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">Pluses</span>
+        <span class="small">Communicates directly through memory; <strong>little code modification</strong> vs. the serial version.</span></div>
+      <div class="callout warn"><span class="lbl">Minus</span>
+        <span class="small">Requires <strong>privatization</strong> of loop indices before the parallel region.</span></div>
+      <div class="callout"><span class="lbl">Three primitives appear</span>
+        <ul class="tiny" style="margin:.2em 0 0 .9em">
+          <li><strong>Scope:</strong> <code class="inline">private</code> vs. <code class="inline">shared</code></li>
+          <li><strong>Lock:</strong> protects the <code class="inline">sum</code> reduction</li>
+          <li><strong>Barrier:</strong> all threads finish a phase before the next</li>
+        </ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- Message passing worked example -->
+<section data-background-color="#ffffff">
+  <h2>Worked Example: Message Passing</h2>
+  <div class="cols w-64">
+    <div>
+      <pre><code class="language-c" data-trim>
+// parent and child already spawned
+id = getpid();
+local_iter = 4;
+start_iter = id * local_iter;
+end_iter   = start_iter + local_iter;
+
+if (id == 0) send_msg(P1, b[4..7], c[4..7]);
+else         recv_msg(P0, &b[4..7], &c[4..7]);
+
+for (i = start_iter; i < end_iter; i++)
+    a[i] = b[i] + c[i];
+
+local_sum = 0;
+for (i = start_iter; i < end_iter; i++)
+    if (a[i] > 0) local_sum += a[i];
+
+if (id == 0) {
+  recv_msg(P1, &local_sum1);
+  sum = local_sum + local_sum1;
+  print sum;
+} else send_msg(P0, local_sum);
+</code></pre>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">Plus</span>
+        <span class="small">Communication <strong>only through messages</strong> — no shared state, no locks, no barriers.</span></div>
+      <div class="callout warn"><span class="lbl">Minuses</span>
+        <span class="small">Message send/receive <strong>overhead</strong>; requires <strong>algorithm and program changes</strong>
+        (distribute the input, then gather partial sums).</span></div>
+      <div class="callout takeaway"><span class="lbl">Notice the reshape</span>
+        The reduction becomes an explicit <em>scatter the data → compute local sums → gather the partials</em> dance.
+        Message passing rewrites the algorithm; shared memory mostly annotates it.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Development vs tuning -->
+<section data-background-color="#ffffff">
+  <h2>Development Effort vs. Tuning Effort</h2>
+  <div class="cols">
+    <div class="callout ok"><span class="lbl">Easier to <em>develop</em>: shared memory</span>
+      <ul class="small" style="margin:.2em 0 0 .9em">
+        <li>Transparent data layout</li>
+        <li>Transparent inter-processor communication</li>
+        <li>Code structure changes little</li>
+        <li>Parallelizing / directive-driven compilers help (e.g. OpenMP)</li>
+      </ul></div>
+    <div class="callout warn"><span class="lbl">Harder to <em>tune</em>: shared memory</span>
+      <ul class="small" style="margin:.2em 0 0 .9em">
+        <li>Data layout must be tuned by hand</li>
+        <li>Communication pattern must be tuned</li>
+        <li>Machine <strong>topology</strong> matters for performance</li>
+      </ul></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The catch</span>
+    Shared memory's transparency is also its trap: what's hidden during development —
+    <strong>where data lives and how it moves</strong> — is exactly what you must expose again to scale.</div>
+</section>
+
+<!-- Review 2.2 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 2.2 — Review</h2>
+  <div class="qa">
+    <p class="q">1. What primitives does shared-memory parallel programming require?</p>
+    <div class="fragment"><div class="a"><strong>Variable scope</strong> (shared vs. private) and <strong>synchronization
+      primitives</strong> — locks and barriers.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. How does the reduction differ between the two models?</p>
+    <div class="fragment"><div class="a">Shared memory: a single shared <code class="inline">sum</code> guarded by a <strong>lock</strong>.
+      Message passing: each worker computes a <strong>local sum</strong>, then partials are <strong>gathered</strong> by messages.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Why is shared memory easy to develop but hard to tune?</p>
+    <div class="fragment"><div class="a">It hides data layout and communication (easy to write), but those same hidden details
+      — layout, communication pattern, topology — must be tuned for scalability.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 2.3 — OTHER PROGRAMMING MODELS
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 2.3</div>
+  <div class="mod-title">Other Programming Models</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Explain how <strong>PGAS</strong>, <strong>data-parallel</strong>, <strong>MapReduce</strong>, and <strong>transactional memory</strong> work</li>
+      <li>Say which pillar — shared memory or message passing — each one builds on</li>
+      <li>Describe how transactional memory removes locks and deadlock worries</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Other models overview -->
+<section data-background-color="#ffffff">
+  <h2>Beyond the Two Pillars</h2>
+  <p class="small">Many models exist, but most <strong>build on shared memory or message passing</strong>. We look at four:</p>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">PGAS</span><strong>Partitioned Global Address Space</strong><br>
+      <span class="small">Shared address space, but with <em>locality</em> exposed.</span></div>
+    <div class="callout"><span class="lbl">Data Parallel</span><strong>One op, many data</strong><br>
+      <span class="small">The programming model for SIMD / vector hardware.</span></div>
+    <div class="callout"><span class="lbl">MapReduce</span><strong>Key-based, not location-based</strong><br>
+      <span class="small">Map produces pairs; Reduce aggregates by key.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Plus a fourth</span>
+    <strong>Transactional memory</strong> raises the abstraction of shared memory: mark a region
+    <code class="inline">atomic</code> and let hardware/software handle the rest — no explicit locks.</div>
+</section>
+
+<!-- PGAS -->
+<section data-background-color="#ffffff">
+  <h2>PGAS: Partitioned Global Address Space</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout warn"><span class="lbl">The problem</span>
+        <span class="small">Plain shared memory is too simple for <strong>NUMA</strong> machines: data layout is hidden, yet
+        <strong>thread–data proximity</strong> drives performance.</span></div>
+      <div class="callout ok"><span class="lbl">The PGAS idea</span>
+        <span class="small">Keep a <strong>global shared address space</strong>, but <em>partition</em> it so each thread has an
+        affinity for part of it — the model exposes <strong>both shared and private</strong> regions.</span></div>
+      <p class="small muted">Languages: UPC, Co-Array Fortran, Chapel, Titanium.</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 170" class="chart" style="max-width:280px">
+        <rect x="6" y="6" width="228" height="120" rx="10" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+        <text x="120" y="22" text-anchor="middle" class="note" style="fill:#1d4ed8">Global shared address space</text>
+        <g>
+          <rect x="20" y="34" width="60" height="80" rx="6" fill="#dbeafe" stroke="#3b82f6"/>
+          <rect x="90" y="34" width="60" height="80" rx="6" fill="#dbeafe" stroke="#3b82f6"/>
+          <rect x="160" y="34" width="60" height="80" rx="6" fill="#dbeafe" stroke="#3b82f6"/>
+        </g>
+        <g class="tiny" text-anchor="middle">
+          <text x="50" y="54">Thread 0</text><text x="120" y="54">Thread 1</text><text x="190" y="54">Thread 2</text></g>
+        <g fill="#fef3c7" stroke="#f59e0b"><rect x="28" y="62" width="44" height="44" rx="4"/><rect x="98" y="62" width="44" height="44" rx="4"/><rect x="168" y="62" width="44" height="44" rx="4"/></g>
+        <g class="tiny" text-anchor="middle"><text x="50" y="88">local</text><text x="120" y="88">local</text><text x="190" y="88">local</text></g>
+        <text x="120" y="150" text-anchor="middle" class="lbl">Each partition has affinity to one thread</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- PGAS example UPC -->
+<section data-background-color="#ffffff">
+  <h2>PGAS Example: UPC Matrix Multiply</h2>
+  <div class="cols w-64">
+    <div>
+      <pre><code class="language-c" data-trim>
+shared [N*P/THREADS] double A[N][P]; // rows of A
+shared [N*P/THREADS] double C[N][M]; // rows of C
+shared [M/THREADS]   double B[P][M]; // cols of B
+
+void main(void) {
+  ... // matrices initialized
+  upc_forall (i=0; i<N; i++; &A[i][0]) {
+    for (j=0; j<M; j++) {
+      C[i][j] = 0;
+      for (l=0; l<P; l++)
+        C[i][j] += A[i][l] * B[l][j];
+    }
+  }
+  upc_barrier;
+}
+</code></pre>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Distribution</span>
+        <span class="small">Every node holds <code class="inline">N*P/THREADS</code> rows of <strong>A</strong> and
+        <strong>C</strong> — the <code class="inline">shared [blocksize]</code> declares the layout.</span></div>
+      <div class="callout takeaway"><span class="lbl">Affinity expression</span>
+        <span class="small"><code class="inline">&amp;A[i][0]</code> in <code class="inline">upc_forall</code> assigns
+        iteration <code class="inline">i</code> to the thread <strong>where <code class="inline">A[i][0]</code> lives</strong>
+        — computation follows the data.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Data parallel -->
+<section data-background-color="#ffffff">
+  <h2>Data-Parallel Model</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">Data parallel = programming model for SIMD</span>
+        <span class="small">Either a true vector unit, or a scalar unit with <strong>lanes</strong>.</span></div>
+      <ul class="small">
+        <li>Requires <strong>packing</strong> data into a wide register</li>
+        <li>Once packed, you compute <strong>multiple items at once</strong></li>
+      </ul>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 300 150" class="chart" style="max-width:340px">
+        <g stroke="#475569" fill="#f8fafc">
+          <rect x="10" y="10" width="200" height="18"/>
+          <rect x="10" y="34" width="200" height="18"/><line x1="110" y1="34" x2="110" y2="52" stroke="#475569"/>
+          <rect x="10" y="58" width="200" height="18"/><line x1="60" y1="58" x2="60" y2="76" stroke="#475569"/><line x1="110" y1="58" x2="110" y2="76" stroke="#475569"/><line x1="160" y1="58" x2="160" y2="76" stroke="#475569"/>
+          <rect x="10" y="82" width="200" height="18"/>
+          <g stroke="#475569"><line x1="35" y1="82" x2="35" y2="100"/><line x1="60" y1="82" x2="60" y2="100"/><line x1="85" y1="82" x2="85" y2="100"/><line x1="110" y1="82" x2="110" y2="100"/><line x1="135" y1="82" x2="135" y2="100"/><line x1="160" y1="82" x2="160" y2="100"/><line x1="185" y1="82" x2="185" y2="100"/></g>
+        </g>
+        <g class="tiny"><text x="218" y="23">128-bit register</text><text x="218" y="47">2 × 64-bit</text><text x="218" y="71">4 × 32-bit</text><text x="218" y="95">8 × 16-bit</text></g>
+      </svg>
+      <div class="src">One register, packed into lanes of varying width.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Data parallel example -->
+<section data-background-color="#ffffff">
+  <h2>Data-Parallel Example: SSE Vector Add</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">C += pack 4 floats, add in one instruction</div>
+      <pre><code class="language-x86asm" data-trim>
+; Vector4: four 32-bit floats x,y,z,w
+MOVUPS XMM0, [EAX]   ; load A[0..3]
+MOVUPS XMM1, [EBX]   ; load B[0..3]
+ADDPS  XMM0, XMM1    ; 4 adds at once
+MOVUPS [Result], XMM0; store C[0..3]
+</code></pre>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 280 120" class="chart" style="max-width:320px">
+        <g fill="#dbeafe" stroke="#3b82f6"><rect x="10" y="10" width="60" height="22"/><rect x="74" y="10" width="60" height="22"/><rect x="138" y="10" width="60" height="22"/><rect x="202" y="10" width="60" height="22"/></g>
+        <g class="tiny" text-anchor="middle"><text x="40" y="25">A[3]</text><text x="104" y="25">A[2]</text><text x="168" y="25">A[1]</text><text x="232" y="25">A[0]</text></g>
+        <g fill="#dbeafe" stroke="#3b82f6"><rect x="10" y="48" width="60" height="22"/><rect x="74" y="48" width="60" height="22"/><rect x="138" y="48" width="60" height="22"/><rect x="202" y="48" width="60" height="22"/></g>
+        <g class="tiny" text-anchor="middle"><text x="40" y="63">B[3]</text><text x="104" y="63">B[2]</text><text x="168" y="63">B[1]</text><text x="232" y="63">B[0]</text></g>
+        <g class="tiny" text-anchor="middle"><text x="40" y="44">+</text><text x="104" y="44">+</text><text x="168" y="44">+</text><text x="232" y="44">+</text></g>
+        <g fill="#dcfce7" stroke="#16a34a"><rect x="10" y="86" width="60" height="22"/><rect x="74" y="86" width="60" height="22"/><rect x="138" y="86" width="60" height="22"/><rect x="202" y="86" width="60" height="22"/></g>
+        <g class="tiny" text-anchor="middle"><text x="40" y="101">C[3]</text><text x="104" y="101">C[2]</text><text x="168" y="101">C[1]</text><text x="232" y="101">C[0]</text></g>
+      </svg>
+      <div class="src"><code class="inline">ADDPS</code>: one instruction, four parallel adds.</div>
+    </div>
+  </div>
+</section>
+
+<!-- MapReduce -->
+<section data-background-color="#ffffff">
+  <h2>MapReduce</h2>
+  <div class="callout"><span class="lbl">Key idea</span>
+    Data is accessed by <strong>key</strong> rather than by location (like a database). It can be built on
+    <strong>shared memory or message passing</strong>.</div>
+  <div class="cols">
+    <div class="callout ok"><span class="lbl">Map</span>
+      <span class="small">Each worker processes its input and emits <code class="inline">&lt;key, value&gt;</code> pairs.</span></div>
+    <div class="callout"><span class="lbl">Reduce</span>
+      <span class="small">For each key, aggregate all the values produced for it.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Why it caught on</span>
+    The runtime handles distribution, fault tolerance, and the shuffle — the programmer writes only two pure functions.
+    The modern descendants are Hadoop and Spark.</div>
+</section>
+
+<!-- MapReduce inverted index example -->
+<section data-background-color="#ffffff">
+  <h2>MapReduce Example: Inverted Index</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 340 220" class="chart" style="max-width:420px">
+        <text x="60" y="14" text-anchor="middle" class="note">Input docs</text>
+        <g fill="#dbeafe" stroke="#3b82f6">
+          <rect x="14" y="24" width="80" height="34" rx="4"/><rect x="14" y="68" width="80" height="22" rx="4"/>
+          <rect x="14" y="100" width="80" height="44" rx="4"/><rect x="14" y="154" width="80" height="44" rx="4"/>
+        </g>
+        <g class="tiny" text-anchor="middle">
+          <text x="54" y="38">Doc1: A C D</text><text x="54" y="82">Doc2: B</text>
+          <text x="54" y="118">Doc3: D C</text><text x="54" y="136">A E</text>
+          <text x="54" y="172">Doc4: D A E</text></g>
+        <rect x="135" y="92" width="80" height="40" rx="6" fill="#fef3c7" stroke="#f59e0b"/>
+        <text x="175" y="108" text-anchor="middle" class="tiny">MapReduce</text><text x="175" y="122" text-anchor="middle" class="tiny">map → reduce</text>
+        <g class="axis"><line x1="98" y1="40" x2="133" y2="105"/><line x1="98" y1="79" x2="133" y2="110"/><line x1="98" y1="120" x2="133" y2="114"/><line x1="98" y1="175" x2="133" y2="120"/></g>
+        <line x1="217" y1="112" x2="240" y2="112" class="axis"/>
+        <text x="290" y="50" text-anchor="middle" class="note">Output index</text>
+        <g class="tiny"><text x="244" y="68">A → 1,3,4</text><text x="244" y="84">B → 2</text>
+          <text x="244" y="100">C → 1,3</text><text x="244" y="116">D → 1,3,4</text><text x="244" y="132">E → 3,4</text></g>
+      </svg>
+    </div>
+    <div>
+      <ul class="small">
+        <li>Files are distributed over <strong>map workers</strong></li>
+        <li>Each map worker emits <code class="inline">&lt;LinkX, DocY&gt;</code> when it sees <em>LinkX</em> on <em>DocY</em></li>
+        <li>A <strong>reduce worker</strong> aggregates all Docs that contain the same Link</li>
+      </ul>
+      <div class="callout"><span class="lbl">Result</span>
+        <span class="small">An inverted index: link → list of documents. The classic web-search building block.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Transactional memory -->
+<section data-background-color="#ffffff">
+  <h2>Transactional Memory</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Transaction</span>
+        <span class="small">A code region with the database <strong>ACID</strong> property: Atomicity, Consistency, Isolation, Durability.</span></div>
+      <div class="callout takeaway"><span class="lbl">TM keeps two of the four</span>
+        <span class="small">Transactional memory adopts <strong>Atomicity</strong> and <strong>Isolation</strong> — enough to let us
+        <strong>remove locks</strong> and stop worrying about deadlocks.</span></div>
+    </div>
+    <div>
+      <table>
+        <tr><th>ACID</th><th>In TM?</th></tr>
+        <tr><td>Atomicity</td><td class="hi">Yes</td></tr>
+        <tr><td>Consistency</td><td>—</td></tr>
+        <tr><td>Isolation</td><td class="hi">Yes</td></tr>
+        <tr><td>Durability</td><td>—</td></tr>
+      </table>
+      <p class="small muted">Durability/consistency are database concerns; in memory we just need the appearance of an
+        all-or-nothing, isolated update.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Lock vs TM example -->
+<section data-background-color="#ffffff">
+  <h2>Locks vs. Transactional Memory</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">With locks</div>
+      <pre><code class="language-c" data-trim>
+lock(mylock);
+  sum = sum + a[i];
+unlock(mylock);
+</code></pre>
+      <ul class="tiny">
+        <li>Must pick the right lock granularity</li>
+        <li>Risk of <strong>deadlock</strong> with multiple locks</li>
+        <li>Locking overhead even with no conflict</li>
+      </ul>
+    </div>
+    <div>
+      <div class="code-label">With transactional memory</div>
+      <pre><code class="language-c" data-trim>
+atomic {
+  sum = sum + a[i];
+}
+</code></pre>
+      <ul class="tiny">
+        <li>HW or SW ensures atomicity &amp; isolation</li>
+        <li><strong>No locks</strong>, no locking overhead, no deadlock</li>
+        <li>SW TM: flexible but slow · HW TM: fast but costly</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">The pitch</span>
+    The programmer states <em>what</em> must be atomic; the system figures out <em>how</em> — higher abstraction,
+    simpler reasoning.</div>
+</section>
+
+<!-- Closing comments -->
+<section data-background-color="#ffffff">
+  <h2>Closing Comments</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Many models</span>Lots of programming models exist in the wild.</div>
+    <div class="callout"><span class="lbl">Two roots</span>Most are built on <strong>shared memory</strong> or <strong>message passing</strong>.</div>
+    <div class="callout"><span class="lbl">Always a trade-off</span>More <strong>control</strong> buys performance but adds <strong>complexity</strong>.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The honest truth</span>
+    Whatever model you choose, <strong>parallel programs still require a lot of tuning</strong>. The abstraction makes the
+    program easier to <em>write</em> — it does not make it easy to make <em>fast</em>.</div>
+</section>
+
+<!-- Module review 2.3 / chapter review -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 2.3 — Review</h2>
+  <div class="qa">
+    <p class="q">1. What are the two basic parallel programming models?</p>
+    <div class="fragment"><div class="a">Shared memory and message passing.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. Key advantages and disadvantages of shared memory over message passing?</p>
+    <div class="fragment"><div class="a"><strong>Pluses:</strong> implicit communication, lower development effort, finer-grained
+      communication. <strong>Minuses:</strong> explicit synchronization, higher tuning effort, requires hardware support.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. How does transactional memory simplify parallel programming?</p>
+    <div class="fragment"><div class="a">Higher abstraction (simpler coding and reasoning) and it removes lock-related problems —
+      no explicit locks, no deadlocks.</div></div>
+  </div>
+</section>
+
+<!-- Chapter summary -->
+<section data-background-color="#ffffff">
+  <h2>Chapter 2 — Big Picture</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">2.1 Models</span>A programming model is the hardware's abstraction; shared memory and message passing are the two pillars.</div>
+    <div class="callout"><span class="lbl">2.2 In code</span>Same loop, two styles: shared memory annotates (scope, locks, barriers); message passing reshapes (scatter/gather).</div>
+    <div class="callout"><span class="lbl">2.3 Others</span>PGAS, data-parallel, MapReduce, TM all layer on the two pillars, trading control for complexity.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">One sentence</span>
+    <strong>The model decides how hard the program is to write — but every model still leaves performance to tuning.</strong>
+    Next we look at how the hardware actually makes shared memory work.</div>
+  <p class="center muted small">Next up → <strong>Chapter 3:</strong> the shared-memory parallel programming process in depth.</p>
+</section>
+
+</div>
+
+<!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 2 — Perspectives on Parallel Programming</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.04,
+    minScale: 0.2, maxScale: 1.6,
+    center: false,                 // top-align content so the NC State header bar sits at the slide top
+    hash: true, slideNumber: 'c/t', history: true,
+    transition: 'slide', transitionSpeed: 'fast',
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      {left:'\\(', right:'\\)', display:false},
+      {left:'$$', right:'$$', display:true}
+    ]},
+  });
+</script>
+</body>
+</html>

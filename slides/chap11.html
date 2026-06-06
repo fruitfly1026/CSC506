@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSC/ECE 506 · Chapter 11 — Interconnection Networks</title>
+
+<!-- reveal.js core (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<!-- code highlighting + math -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+<!-- fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<!-- course theme -->
+<link rel="stylesheet" href="assets/theme.css?v=4">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============================ TITLE ============================ -->
+<section class="title-slide" data-background-color="#ffffff">
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <h1>Chapter 11</h1>
+  <div class="sub">Interconnection Networks — Topology, Routing, Deadlock &amp; Routers</div>
+  <div class="meta">
+    Fall Semester · Based on Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em><br>
+    <span class="muted">Use ← → to navigate · <strong>S</strong> for speaker notes · <strong>F</strong> fullscreen · <strong>ESC</strong> overview</span>
+  </div>
+  <aside class="notes">
+    Chapter 11 asks: once we have many cores and a coherence protocol, how do the messages
+    actually get from one node to another? The interconnection network is the substrate that
+    implements coherence. Two modules: (11.1) the design space — components, switching, topology,
+    routing; and (11.2) deadlock avoidance and router microarchitecture, ending with the
+    Alpha 21364 as a real case study.
+  </aside>
+</section>
+
+<!-- Roadmap -->
+<section data-background-color="#ffffff">
+  <h2>Chapter Roadmap</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Module 11.1</span><strong>The Design Space</strong><br>
+      <span class="small">Nodes, links, flits; circuit vs. packet switching; <em>topology</em> metrics; and routing policies from dimension-ordered to adaptive.</span></div>
+    <div class="callout"><span class="lbl">Module 11.2</span><strong>Deadlock &amp; Routers</strong><br>
+      <span class="small">Why cyclic buffer dependence deadlocks; turn restrictions and virtual channels; router microarchitecture and pipeline.</span></div>
+    <div class="callout"><span class="lbl">Case Study</span><strong>Alpha 21364</strong><br>
+      <span class="small">A 128-node 2-D torus with minimal adaptive routing, 19 virtual channels, and a 13-stage router pipeline.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The thread that ties it together</span>
+    The network <strong>implements the coherence mechanism</strong> — moving many small, fixed-size messages with <strong>low latency and high bandwidth</strong>. Every design choice trades those two against cost.</div>
+</section>
+
+<!-- ==================================================================
+     MODULE 11.1 — THE DESIGN SPACE
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 11.1</div>
+  <div class="mod-title">The Interconnect Design Space</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Name the network <strong>components</strong>: nodes, links, channels, messages, packets, flits</li>
+      <li>Contrast <strong>circuit</strong> and <strong>packet</strong> switching</li>
+      <li>Characterize a <strong>topology</strong> with diameter, distance, degree, bisection bandwidth</li>
+      <li>Classify <strong>routing</strong>: minimal/adaptive/deterministic, dimension-ordered, Valiant, up*/down*</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Why the network matters -->
+<section data-background-color="#ffffff">
+  <h2>Why the Network Matters</h2>
+  <div class="cols">
+    <div>
+      <p>The interconnection network <strong>implements the coherence mechanism</strong>:</p>
+      <ul class="small">
+        <li>Sends coherence <strong>requests</strong> node → node</li>
+        <li>Sends data <strong>replies</strong> node → node</li>
+      </ul>
+      <p class="small"><strong>Communication in a DSM has a special profile:</strong></p>
+      <ul class="small">
+        <li>Latency must be <strong>low</strong>; bandwidth must be <strong>high</strong></li>
+        <li>Many small messages of a few <strong>fixed sizes</strong></li>
+        <li>Largest message = one cache block (<strong>64 or 128 B</strong>)</li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Implications</span>
+        Because messages are small and bounded:
+        <ul class="small" style="margin:.4em 0 0 .9em">
+          <li>Only <strong>two layers</strong> are needed — link level and node level</li>
+          <li>The protocol can stay <strong>simple</strong>: no packet dropping, no elaborate flow control</li>
+        </ul></div>
+      <p class="small muted">Contrast with the Internet, which assumes huge variable messages, lossy links, and congestion — an on-chip/DSM network can be far leaner.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Nodes and links -->
+<section data-background-color="#ffffff">
+  <h2>Nodes &amp; Links</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">Node</span>Encapsulates one or more <strong>processors + memory hierarchy</strong>, a <strong>communication controller</strong>, and a <strong>router</strong> that connects it to other nodes.</div>
+      <div class="callout"><span class="lbl">Link</span>A set of <strong>wires</strong> interconnecting a pair of nodes. May be <strong>uni-</strong> or <strong>bidirectional</strong>.</div>
+      <div class="callout"><span class="lbl">Channel</span><code class="inline">link + sender + receiver</code> — the link plus the logic at each end.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 260 200" class="chart" style="max-width:330px">
+        <!-- node box -->
+        <rect x="20" y="14" width="150" height="172" rx="12" fill="#f0f9ff" stroke="#3b82f6" stroke-width="2"/>
+        <text x="95" y="32" text-anchor="middle" class="note" style="fill:#1d4ed8">Node</text>
+        <rect x="40" y="42" width="110" height="30" rx="6" fill="#dbeafe" stroke="#1d4ed8"/><text x="95" y="61" text-anchor="middle" class="lbl">Proc(s)</text>
+        <rect x="40" y="78" width="110" height="30" rx="6" fill="#dbeafe" stroke="#1d4ed8"/><text x="95" y="97" text-anchor="middle" class="lbl">Memory hierarchy</text>
+        <rect x="40" y="114" width="110" height="26" rx="6" fill="#fef3c7" stroke="#f59e0b"/><text x="95" y="131" text-anchor="middle" class="lbl">Comm. controller</text>
+        <rect x="40" y="146" width="110" height="30" rx="6" fill="#fee2e2" stroke="#CC0000"/><text x="95" y="165" text-anchor="middle" class="lbl">Router</text>
+        <!-- links to neighbors -->
+        <line x1="170" y1="161" x2="240" y2="161" stroke="#CC0000" stroke-width="2.5"/>
+        <line x1="95" y1="186" x2="95" y2="196" stroke="#CC0000" stroke-width="2.5"/>
+        <rect x="230" y="148" width="26" height="26" rx="5" fill="#fee2e2" stroke="#CC0000"/><text x="243" y="165" text-anchor="middle" class="lbl">R</text>
+        <text x="205" y="155" text-anchor="middle" class="note">link</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- flits and flow control -->
+<section data-background-color="#ffffff">
+  <h2>Flits &amp; Flow Control</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Flit</span>The <strong>flow-control unit</strong> — the unit of transfer over a link. Flit size is set by link <strong>width</strong>, <strong>latency</strong>, and the amount of <strong>buffering</strong>.</div>
+      <div class="callout"><span class="lbl">Stop / go flow control</span>The <strong>receiver</strong> sends a <em>stop</em> or <em>go</em> signal depending on available buffer space; the <strong>sender</strong> reacts by stopping or resuming flit transmission.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 280 150" class="chart" style="max-width:340px">
+        <rect x="14" y="50" width="60" height="50" rx="8" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2"/><text x="44" y="79" text-anchor="middle" class="lbl">Sender</text>
+        <rect x="206" y="50" width="60" height="50" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/><text x="236" y="73" text-anchor="middle" class="lbl">Receiver</text>
+        <text x="236" y="90" text-anchor="middle" class="tiny" style="fill:#15803d">buffers</text>
+        <!-- data flits forward -->
+        <line x1="74" y1="62" x2="206" y2="62" stroke="#CC0000" stroke-width="2.5" marker-end="url(#ah11)"/>
+        <text x="140" y="55" text-anchor="middle" class="note" style="fill:#CC0000">flits →</text>
+        <!-- stop/go back -->
+        <line x1="206" y1="90" x2="74" y2="90" stroke="#f59e0b" stroke-width="2.5" marker-end="url(#ah11b)"/>
+        <text x="140" y="108" text-anchor="middle" class="note" style="fill:#b45309">← stop / go</text>
+        <defs>
+          <marker id="ah11" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#CC0000"/></marker>
+          <marker id="ah11b" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#f59e0b"/></marker>
+        </defs>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Switching policies -->
+<section data-background-color="#ffffff">
+  <h2>Switching Policies</h2>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Circuit switching</span>Set up a connection along the whole path <em>before</em> sending the message.
+      <p class="tiny" style="margin:.4em 0 0"><strong style="color:var(--ok)">Pros:</strong> fast transmission, low per-packet overhead, energy efficient, no buffers needed, predictable latency.</p>
+      <p class="tiny" style="margin:.2em 0 0"><strong style="color:var(--warn)">Cons:</strong> high setup latency; low utilization when the reserved path is idle.</p></div>
+    <div class="callout"><span class="lbl">Packet switching</span>Break the message into <strong>packets</strong> and route each one individually.
+      <p class="tiny" style="margin:.4em 0 0"><strong style="color:var(--ok)">Pros:</strong> easy to maximize link utilization; no per-message setup.</p>
+      <p class="tiny" style="margin:.2em 0 0"><strong style="color:var(--warn)">Cons:</strong> needs larger buffers; higher and less predictable latency; higher per-packet overheads.</p></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">In practice</span>
+    Multiprocessor and on-chip networks overwhelmingly use <strong>packet switching</strong> — the small fixed messages and shared links make utilization matter more than setup latency.</div>
+</section>
+
+<!-- Packet and flits structure -->
+<section data-background-color="#ffffff">
+  <h2>Messages, Packets &amp; Flits</h2>
+  <div class="cols w-64">
+    <div>
+      <ul class="small">
+        <li>A <strong>message</strong> is broken into <strong>packets</strong> (when one packet is insufficient)</li>
+        <li>Each packet has a <strong>header</strong> (routing info), <strong>payload</strong> (data), and <strong>trailer</strong> (error checking, etc.)</li>
+        <li>A packet is broken into <strong>flits</strong>; the packet is the <strong>unit of routing</strong></li>
+        <li>Flits have <em>no</em> header: a <strong>head flit</strong> (first) carries routing info, followed by <strong>body flits</strong></li>
+      </ul>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 250 180" class="chart" style="max-width:300px">
+        <text x="10" y="22" class="lbl">Message</text>
+        <rect x="10" y="28" width="230" height="18" rx="4" fill="#e0e7ff" stroke="#6366f1"/>
+        <!-- split into packets -->
+        <text x="10" y="68" class="lbl">Packet</text>
+        <rect x="10" y="74" width="60" height="22" rx="4" fill="#fee2e2" stroke="#CC0000"/><text x="40" y="89" text-anchor="middle" class="tiny">header</text>
+        <rect x="70" y="74" width="120" height="22" rx="4" fill="#dbeafe" stroke="#1d4ed8"/><text x="130" y="89" text-anchor="middle" class="tiny">payload</text>
+        <rect x="190" y="74" width="50" height="22" rx="4" fill="#fef3c7" stroke="#f59e0b"/><text x="215" y="89" text-anchor="middle" class="tiny">trailer</text>
+        <!-- split into flits -->
+        <text x="10" y="132" class="lbl">Flits</text>
+        <rect x="10" y="138" width="40" height="22" rx="4" fill="#fee2e2" stroke="#CC0000"/><text x="30" y="153" text-anchor="middle" class="tiny">head</text>
+        <rect x="54" y="138" width="40" height="22" rx="4" fill="#eef2ff" stroke="#6366f1"/><text x="74" y="153" text-anchor="middle" class="tiny">body</text>
+        <rect x="98" y="138" width="40" height="22" rx="4" fill="#eef2ff" stroke="#6366f1"/><text x="118" y="153" text-anchor="middle" class="tiny">body</text>
+        <rect x="142" y="138" width="40" height="22" rx="4" fill="#eef2ff" stroke="#6366f1"/><text x="162" y="153" text-anchor="middle" class="tiny">body</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Topology metrics -->
+<section data-background-color="#ffffff">
+  <h2>Network Topology = Shape of the Network</h2>
+  <p class="small">Topology determines the <strong>distance</strong> a message travels (in links / hops) from one node to another.</p>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Diameter</span>The <strong>largest</strong> distance between any two nodes.</div>
+    <div class="callout"><span class="lbl">Average distance</span>Mean hops over all source–destination pairs.</div>
+    <div class="callout"><span class="lbl">Degree</span>How many links are connected to a switch.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Bisection bandwidth</span>
+    The <strong>minimum number of links cut</strong> when the network is partitioned into two equal halves — a measure of worst-case bandwidth between the two halves.</div>
+</section>
+
+<!-- Worked example: 2x3 mesh -->
+<section data-background-color="#ffffff">
+  <h2>Worked Example: A 2×3 Mesh</h2>
+  <p class="small">Compute diameter, average distance, and bisection bandwidth (as a multiple of link bandwidth <em>L</em>). All links bidirectional.</p>
+  <div class="cols w-37">
+    <div class="center">
+      <svg viewBox="0 0 240 150" class="chart" style="max-width:280px">
+        <!-- bisection cut -->
+        <line x1="120" y1="10" x2="120" y2="140" stroke="#CC0000" stroke-width="2" stroke-dasharray="5 4"/>
+        <text x="120" y="148" text-anchor="middle" class="tiny" style="fill:#CC0000">bisection</text>
+        <!-- links -->
+        <g stroke="#1d4ed8" stroke-width="2">
+          <line x1="40" y1="40" x2="120" y2="40"/><line x1="120" y1="40" x2="200" y2="40"/>
+          <line x1="40" y1="110" x2="120" y2="110"/><line x1="120" y1="110" x2="200" y2="110"/>
+          <line x1="40" y1="40" x2="40" y2="110"/><line x1="120" y1="40" x2="120" y2="110"/><line x1="200" y1="40" x2="200" y2="110"/>
+        </g>
+        <!-- nodes -->
+        <g>
+          <circle cx="40" cy="40" r="14" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2"/><text x="40" y="45" text-anchor="middle" class="lbl">1</text>
+          <circle cx="120" cy="40" r="14" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2"/><text x="120" y="45" text-anchor="middle" class="lbl">2</text>
+          <circle cx="200" cy="40" r="14" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2"/><text x="200" y="45" text-anchor="middle" class="lbl">3</text>
+          <circle cx="40" cy="110" r="14" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2"/><text x="40" y="115" text-anchor="middle" class="lbl">4</text>
+          <circle cx="120" cy="110" r="14" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2"/><text x="120" y="115" text-anchor="middle" class="lbl">5</text>
+          <circle cx="200" cy="110" r="14" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2"/><text x="200" y="115" text-anchor="middle" class="lbl">6</text>
+        </g>
+      </svg>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Diameter</span><strong>3 hops</strong> (e.g. node 1 → node 6).</div>
+      <div class="callout"><span class="lbl">Average distance</span>Sum all 15 pair distances = 25 ⇒ <strong>25 / 15 = 1.67</strong>.</div>
+      <div class="callout"><span class="lbl">Bisection bandwidth</span>The dashed cut severs <strong>3 links</strong> ⇒ <strong>3 × L</strong>.</div>
+    </div>
+  </div>
+  <aside class="notes">15 unordered pairs for 6 nodes. The distance table (from the original slide) sums to 25, giving an average of 1.67 hops.</aside>
+</section>
+
+<!-- Popular topologies families -->
+<section data-background-color="#ffffff">
+  <h2>Popular Topology Families</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">k-ary d-dimensional mesh</span>
+        <strong>d</strong> = number of dimensions, <strong>k</strong> = nodes per dimension. A ring is 1-D; a 2-D mesh is the familiar grid.</div>
+      <div class="callout"><span class="lbl">Hypercube</span>A <strong>binary d-dimensional mesh</strong> (k = 2). Degree grows with d.</div>
+      <div class="callout"><span class="lbl">k-ary tree &amp; butterfly</span>Tree-structured and multistage networks — low diameter, but many switches.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 200" class="chart" style="max-width:300px">
+        <!-- hypercube (3-cube) -->
+        <text x="120" y="16" text-anchor="middle" class="note">3-D hypercube (2-ary 3-cube)</text>
+        <g stroke="#1d4ed8" stroke-width="2" fill="none">
+          <!-- back square -->
+          <rect x="70" y="40" width="90" height="90"/>
+          <!-- front square -->
+          <rect x="40" y="70" width="90" height="90"/>
+          <!-- connectors -->
+          <line x1="70" y1="40" x2="40" y2="70"/>
+          <line x1="160" y1="40" x2="130" y2="70"/>
+          <line x1="70" y1="130" x2="40" y2="160"/>
+          <line x1="160" y1="130" x2="130" y2="160"/>
+        </g>
+        <g fill="#dbeafe" stroke="#1d4ed8" stroke-width="2">
+          <circle cx="70" cy="40" r="8"/><circle cx="160" cy="40" r="8"/>
+          <circle cx="70" cy="130" r="8"/><circle cx="160" cy="130" r="8"/>
+          <circle cx="40" cy="70" r="8"/><circle cx="130" cy="70" r="8"/>
+          <circle cx="40" cy="160" r="8"/><circle cx="130" cy="160" r="8"/>
+        </g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Comparison table -->
+<section data-background-color="#ffffff">
+  <h2>Comparison of Topologies</h2>
+  <p class="small muted">For <em>p</em> nodes. Diameter and bisection BW trade off against degree (router cost) and number of links.</p>
+  <table>
+    <tr><th>Topology</th><th>Diameter</th><th>Bisection BW</th><th>#Links</th><th>Degree</th></tr>
+    <tr><td>Linear array</td><td>\(p-1\)</td><td>\(1\)</td><td>\(p-1\)</td><td>\(2\)</td></tr>
+    <tr><td>Ring</td><td>\(p/2\)</td><td>\(2\)</td><td>\(p\)</td><td>\(2\)</td></tr>
+    <tr><td>2-D mesh</td><td>\(2(\sqrt{p}-1)\)</td><td>\(\sqrt{p}\)</td><td>\(2\sqrt{p}(\sqrt{p}-1)\)</td><td>\(4\)</td></tr>
+    <tr><td class="hi">Hypercube</td><td class="hi">\(\log_2 p\)</td><td class="hi">\(p/2\)</td><td>\(\tfrac{p}{2}\log_2 p\)</td><td>\(\log_2 p\)</td></tr>
+    <tr><td>k-ary d-mesh</td><td>\(d(k-1)\)</td><td>\(k^{d-1}\)</td><td>\(dk^{d-1}(k-1)\)</td><td>\(2d\)</td></tr>
+    <tr><td>k-ary tree</td><td>\(2\log_k p\)</td><td>\(1\)</td><td>\(k(p-1)\)</td><td>\(k+1\)</td></tr>
+    <tr><td>k-ary fat tree</td><td>\(2\log_k p\)</td><td>\(p/2\)</td><td>\(k(p-1)\)</td><td>\(k+1\)</td></tr>
+    <tr><td>Butterfly</td><td>\(\log_2 p\)</td><td>\(p/2\)</td><td>\(2p\log_2 p\)</td><td>\(4\)</td></tr>
+  </table>
+</section>
+
+<!-- Increase k vs d -->
+<section data-background-color="#ffffff">
+  <h2>Mesh: Increase k or Increase d?</h2>
+  <p class="small">When more nodes must be added, is it better to raise the <strong>arity (k)</strong> or the <strong>dimension (d)</strong>?</p>
+  <div class="cols">
+    <div class="callout ok"><span class="lbl">In favor of more dimensions</span>
+      <ul class="small" style="margin:.3em 0 0 .9em">
+        <li>Diameter grows <strong>slower</strong> in hypercube &amp; butterfly</li>
+        <li>Bisection bandwidth grows <strong>faster</strong> in hypercube &amp; butterfly</li>
+      </ul></div>
+    <div class="callout warn"><span class="lbl">The catch</span>
+      <ul class="small" style="margin:.3em 0 0 .9em">
+        <li>Hypercube routers are <strong>more expensive</strong> (higher degree)</li>
+        <li>Butterfly needs <strong>a lot of routers</strong></li>
+      </ul></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Reality on chip</span>
+    Low-dimensional meshes and tori dominate on-chip networks: wiring is planar, routers stay cheap, and (as we'll see) cut-through routing softens the diameter penalty.</div>
+</section>
+
+<!-- Routing policy: store&forward vs cut-through -->
+<section data-background-color="#ffffff">
+  <h2>Routing: Store-and-Forward vs. Cut-Through</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Store-and-Forward</span>Send <em>all</em> flits over one link, then over the next, and so on.
+        <div class="eq small">\( T = H \cdot (T_r + L/B) \)</div></div>
+      <div class="callout"><span class="lbl">Cut-Through</span>Pipeline flits across links — a flit moves on as soon as the head is routed.
+        <div class="eq small">\( T = H \cdot T_r + L/B \)</div></div>
+      <p class="tiny"><em>H</em> = distance (hops) · <em>T<sub>r</sub></em> = router delay · <em>L</em> = packet length · <em>B</em> = channel bandwidth.</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 250 170" class="chart" style="max-width:300px">
+        <text x="60" y="16" text-anchor="middle" class="note">Store-and-forward</text>
+        <g>
+          <rect x="14" y="26" width="90" height="14" rx="3" fill="#fecaca" stroke="#CC0000"/>
+          <rect x="14" y="46" width="90" height="14" rx="3" fill="#fecaca" stroke="#CC0000"/>
+          <rect x="14" y="66" width="90" height="14" rx="3" fill="#fecaca" stroke="#CC0000"/>
+        </g>
+        <text x="125" y="50" class="tiny" style="fill:#CC0000">whole packet<tspan x="125" dy="12">per hop</tspan></text>
+        <text x="60" y="108" text-anchor="middle" class="note">Cut-through</text>
+        <g fill="#bfdbfe" stroke="#1d4ed8">
+          <rect x="14" y="118" width="40" height="12" rx="3"/>
+          <rect x="40" y="132" width="40" height="12" rx="3"/>
+          <rect x="66" y="146" width="40" height="12" rx="3"/>
+        </g>
+        <text x="135" y="138" class="tiny" style="fill:#1d4ed8">flits pipelined<tspan x="135" dy="12">across hops</tspan></text>
+      </svg>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Implication</span>
+    Cut-through makes latency depend mostly on <strong>L/B</strong>, not <em>H</em> — it <strong>reduces the importance of topology</strong>.</div>
+</section>
+
+<!-- Aspects of routing -->
+<section data-background-color="#ffffff">
+  <h2>Aspects of a Routing Policy</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Minimal?</span>Minimal = every packet takes the <strong>fewest hops</strong>. Non-minimal may detour.</div>
+    <div class="callout"><span class="lbl">Deterministic?</span>Deterministic = each src–dest pair always uses a <strong>single path</strong>.</div>
+    <div class="callout"><span class="lbl">Adaptive?</span>Adaptive = a message can <strong>change path</strong> while in flight.</div>
+  </div>
+  <div class="callout warn"><span class="lbl">Deadlock-free?</span>
+    Deadlock arises when several messages <strong>mutually wait</strong> for each other's buffer space. A good policy is either provably deadlock-free or paired with an escape mechanism (Module 11.2).</div>
+</section>
+
+<!-- Topology dependent routing (butterfly) -->
+<section data-background-color="#ffffff">
+  <h2>Topology-Dependent Routing</h2>
+  <div class="cols">
+    <div>
+      <p>In some topologies, the <strong>structure imposes the routing</strong>.</p>
+      <div class="callout"><span class="lbl">Butterfly</span>Routing is <strong>minimal, deterministic, deadlock-free, non-adaptive</strong>. The destination ID directly selects the output port at each router along the path.</div>
+      <div class="callout warn"><span class="lbl">Downside</span>Lack of path diversity <strong>reduces usable bandwidth</strong> under adversarial traffic patterns.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 220 180" class="chart" style="max-width:260px">
+        <!-- simple 2-stage butterfly sketch -->
+        <g fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.5">
+          <rect x="20" y="30" width="34" height="20" rx="3"/><rect x="20" y="120" width="34" height="20" rx="3"/>
+          <rect x="160" y="30" width="34" height="20" rx="3"/><rect x="160" y="120" width="34" height="20" rx="3"/>
+        </g>
+        <g stroke="#94a3b8" stroke-width="1.4">
+          <line x1="54" y1="40" x2="160" y2="40"/><line x1="54" y1="40" x2="160" y2="130"/>
+          <line x1="54" y1="130" x2="160" y2="40"/><line x1="54" y1="130" x2="160" y2="130"/>
+        </g>
+        <!-- chosen path -->
+        <line x1="54" y1="40" x2="160" y2="130" stroke="#CC0000" stroke-width="2.5"/>
+        <text x="110" y="170" text-anchor="middle" class="tiny">dest ID picks the port at each stage</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Routing in mesh/torus -->
+<section data-background-color="#ffffff">
+  <h2>Routing in Mesh / Torus</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">Dimension-ordered (X-Y)</span>
+        Travel fully in X, <em>then</em> fully in Y, until the destination is reached. (Y-X is equally valid.)
+        <span class="tiny" style="display:block;margin-top:.3em">Simple, but <strong>lacks path diversity</strong>.</span></div>
+      <div class="callout"><span class="lbl">Valiant routing</span>
+        Pick a <strong>random intermediate node</strong>, route to it, then on to the destination.
+        <span class="tiny" style="display:block;margin-top:.3em">Can be minimal or non-minimal; <strong>improves path diversity</strong> and spreads adversarial traffic.</span></div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 200 180" class="chart" style="max-width:240px">
+        <!-- 4x4 grid -->
+        <g stroke="#cbd5e1" stroke-width="1.4">
+          <line x1="30" y1="30" x2="170" y2="30"/><line x1="30" y1="70" x2="170" y2="70"/>
+          <line x1="30" y1="110" x2="170" y2="110"/><line x1="30" y1="150" x2="170" y2="150"/>
+          <line x1="30" y1="30" x2="30" y2="150"/><line x1="76" y1="30" x2="76" y2="150"/>
+          <line x1="123" y1="30" x2="123" y2="150"/><line x1="170" y1="30" x2="170" y2="150"/>
+        </g>
+        <!-- X-Y path src(30,150) -> dest(170,30): X first then Y -->
+        <polyline points="30,150 170,150 170,30" fill="none" stroke="#CC0000" stroke-width="3"/>
+        <circle cx="30" cy="150" r="6" fill="#16a34a"/><text x="30" y="172" text-anchor="middle" class="tiny">src</text>
+        <circle cx="170" cy="30" r="6" fill="#CC0000"/><text x="170" y="22" text-anchor="middle" class="tiny">dest</text>
+        <text x="100" y="145" text-anchor="middle" class="tiny" style="fill:#CC0000">X first</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Up*/Down* routing construction -->
+<section data-background-color="#ffffff">
+  <h2>Up*/Down* Routing — Construction</h2>
+  <p class="small">A general scheme that <strong>enables routing in any topology</strong>, regular or irregular.</p>
+  <ol class="small">
+    <li><strong>Choose a root</strong> node.</li>
+    <li><strong>Breadth-first traversal:</strong> nodes reached become children; repeat until all are visited. Each child→parent link is an <strong>"up" link</strong>.</li>
+    <li>For links <em>within</em> a level: the <strong>"up" direction goes from the lower-numbered node to the higher-numbered node</strong>.</li>
+  </ol>
+  <div class="center">
+    <svg viewBox="0 0 320 130" class="chart" style="max-width:380px">
+      <g stroke="#1d4ed8" stroke-width="2">
+        <line x1="160" y1="28" x2="90" y2="78"/><line x1="160" y1="28" x2="230" y2="78"/>
+        <line x1="90" y1="78" x2="50" y2="118"/><line x1="90" y1="78" x2="130" y2="118"/>
+        <line x1="230" y1="78" x2="270" y2="118"/>
+      </g>
+      <g fill="#dbeafe" stroke="#1d4ed8" stroke-width="2">
+        <circle cx="160" cy="28" r="13"/><circle cx="90" cy="78" r="13"/><circle cx="230" cy="78" r="13"/>
+        <circle cx="50" cy="118" r="13"/><circle cx="130" cy="118" r="13"/><circle cx="270" cy="118" r="13"/>
+      </g>
+      <text x="160" y="33" text-anchor="middle" class="lbl">root</text>
+      <text x="200" y="48" class="tiny" style="fill:#CC0000">↑ up</text>
+    </svg>
+  </div>
+</section>
+
+<!-- Up*/Down* valid paths -->
+<section data-background-color="#ffffff">
+  <h2>Up*/Down* Routing — Valid Paths</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Rule</span>A valid path may go <strong>up first, then down</strong>, until the destination. <strong>Down-then-up is forbidden.</strong></div>
+      <div class="callout takeaway"><span class="lbl">Why it works</span>Forbidding the down→up turn breaks every cycle of channel dependence ⇒ <strong>deadlock-free</strong>.</div>
+      <p class="small">Path diversity is provided, but the resulting paths <strong>may not be minimal</strong>.</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 220 150" class="chart" style="max-width:260px">
+        <g stroke="#cbd5e1" stroke-width="2">
+          <line x1="110" y1="20" x2="50" y2="70"/><line x1="110" y1="20" x2="170" y2="70"/>
+          <line x1="50" y1="70" x2="30" y2="120"/><line x1="50" y1="70" x2="90" y2="120"/>
+          <line x1="170" y1="70" x2="190" y2="120"/>
+        </g>
+        <!-- valid up then down path: leaf(30,120)->50,70->110,20->170,70->190,120 -->
+        <polyline points="30,120 50,70 110,20 170,70 190,120" fill="none" stroke="#16a34a" stroke-width="3"/>
+        <g fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.8">
+          <circle cx="110" cy="20" r="10"/><circle cx="50" cy="70" r="10"/><circle cx="170" cy="70" r="10"/>
+          <circle cx="30" cy="120" r="10"/><circle cx="90" cy="120" r="10"/><circle cx="190" cy="120" r="10"/>
+        </g>
+        <text x="110" y="142" text-anchor="middle" class="tiny" style="fill:#15803d">up ↗ … ↘ down (valid)</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Adaptive routing -->
+<section data-background-color="#ffffff">
+  <h2>Adaptive Routing</h2>
+  <div class="cols">
+    <div>
+      <p>Adapts to the <strong>state of the network</strong> — avoids congestion by <strong>deflecting</strong> a packet to another port. May be minimal or non-minimal.</p>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Risks</span>
+        <ul class="small" style="margin:.3em 0 0 .9em">
+          <li>May meet <strong>worse</strong> congestion after deflecting</li>
+          <li><strong>Livelock</strong> — a packet may circle forever; bound the number of deflections</li>
+        </ul></div>
+    </div>
+  </div>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Adaptive 1 — Source routing</span>
+      The routing table at the <strong>source</strong> encodes the <strong>full path</strong>; re-programmable for traffic / faults.
+      <p class="tiny" style="margin:.3em 0 0"><strong style="color:var(--ok)">Pro:</strong> table looked up <em>once</em> at the source. <strong style="color:var(--warn)">Con:</strong> large table.</p></div>
+    <div class="callout"><span class="lbl">Adaptive 2 — Per-hop routing</span>
+      Each router's table holds only the <strong>next output port</strong>, not the whole path.
+      <p class="tiny" style="margin:.3em 0 0"><strong style="color:var(--ok)">Pro:</strong> small tables. <strong style="color:var(--warn)">Con:</strong> a lookup at <em>every</em> router.</p></div>
+  </div>
+</section>
+
+<!-- Module 11.1 review -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 11.1 — Review</h2>
+  <div class="qa">
+    <p class="q">1. Describe stop/go flow control.</p>
+    <div class="fragment"><div class="a">A <strong>link-level</strong> scheme: the destination router sends a <em>stop</em> or <em>go</em> signal to the source router depending on the destination's buffer level; the source pauses or resumes flits accordingly.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. What metrics characterize a network topology?</p>
+    <div class="fragment"><div class="a">Diameter, average distance, bisection bandwidth, number of links, and degree of connection.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Packet vs. circuit switching — better and worse?</p>
+    <div class="fragment"><div class="a"><strong>Better:</strong> easier to maximize link utilization, no connection setup. <strong>Worse:</strong> larger buffers, higher and less predictable latency, higher per-packet overheads.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">4. Sort by routing-table area: adaptive source, dimension-ordered, adaptive per-hop.</p>
+    <div class="fragment"><div class="a">Adaptive source (largest) &gt; adaptive per-hop (smaller) &gt; dimension-ordered (zero).</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 11.2 — DEADLOCK & ROUTERS
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 11.2</div>
+  <div class="mod-title">Deadlock Avoidance &amp; Router Architecture</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Explain how <strong>cyclic buffer dependence</strong> causes deadlock</li>
+      <li>Apply <strong>turn restrictions</strong> (X-Y, west-first, north-last) and <strong>virtual channels</strong></li>
+      <li>Describe a <strong>router pipeline</strong> (DC → VA → SA → ST) and speculation</li>
+      <li>Walk through the <strong>Alpha 21364</strong> network as a case study</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Deadlock -->
+<section data-background-color="#ffffff">
+  <h2>What Is Deadlock?</h2>
+  <div class="cols w-64">
+    <div>
+      <p>The network's <strong>inability to forward packets</strong>, caused by limited buffer space and a <strong>cyclic dependence</strong> on buffer acquisition.</p>
+      <p class="small">In the figure: four packets fill their input buffers and each needs the <em>next</em> output buffer — but that buffer is already full, in a cycle.</p>
+      <p class="small"><strong>Handling deadlock:</strong></p>
+      <ul class="tiny">
+        <li><strong>Detect &amp; break</strong> — expensive</li>
+        <li><strong>Drop packets</strong> — hurts performance, complicates the protocol</li>
+        <li><strong>Avoid</strong> — restrict routing</li>
+        <li><strong>Adapt / escape</strong> — escape channel or separate VCs per packet type</li>
+      </ul>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 180 180" class="chart" style="max-width:220px">
+        <!-- 4 routers in a square with cyclic dependence -->
+        <g fill="#fee2e2" stroke="#CC0000" stroke-width="2">
+          <rect x="30" y="20" width="44" height="34" rx="5"/><rect x="106" y="20" width="44" height="34" rx="5"/>
+          <rect x="106" y="120" width="44" height="34" rx="5"/><rect x="30" y="120" width="44" height="34" rx="5"/>
+        </g>
+        <g stroke="#CC0000" stroke-width="2.5" fill="none">
+          <line x1="74" y1="37" x2="106" y2="37" marker-end="url(#dh)"/>
+          <line x1="128" y1="54" x2="128" y2="120" marker-end="url(#dh)"/>
+          <line x1="106" y1="137" x2="74" y2="137" marker-end="url(#dh)"/>
+          <line x1="52" y1="120" x2="52" y2="54" marker-end="url(#dh)"/>
+        </g>
+        <defs><marker id="dh" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#CC0000"/></marker></defs>
+        <text x="90" y="174" text-anchor="middle" class="tiny" style="fill:#CC0000">cyclic buffer wait</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Turn restriction -->
+<section data-background-color="#ffffff">
+  <h2>Turn Restriction in Mesh Routing</h2>
+  <p class="small">Of the 8 possible turns in a 2-D mesh, forbidding the right subset breaks all cycles. Each scheme forbids a different pair.</p>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Dimension-ordered (X-Y)</span><span class="small">Forbids <strong>all four turns</strong> from Y into X — you must finish X before turning into Y.</span></div>
+    <div class="callout"><span class="lbl">West-first</span><span class="small">All <strong>westward</strong> travel happens first; forbids the two turns <em>into</em> the west direction.</span></div>
+    <div class="callout"><span class="lbl">North-last</span><span class="small">All <strong>northward</strong> travel happens last; forbids the two turns <em>out of</em> the north direction.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Principle</span>
+    Cyclic channel acquisition is what enables deadlock — eliminating selected turns removes every cycle while still leaving many legal paths.</div>
+</section>
+
+<!-- Turn restriction example: paths -->
+<section data-background-color="#ffffff">
+  <h2>Example: Which Paths Are Allowed?</h2>
+  <div class="cols w-37">
+    <div class="center">
+      <svg viewBox="0 0 240 170" class="chart" style="max-width:280px">
+        <!-- grid -->
+        <g stroke="#cbd5e1" stroke-width="1.2">
+          <line x1="20" y1="30" x2="220" y2="30"/><line x1="20" y1="65" x2="220" y2="65"/>
+          <line x1="20" y1="100" x2="220" y2="100"/><line x1="20" y1="135" x2="220" y2="135"/>
+          <line x1="20" y1="30" x2="20" y2="135"/><line x1="70" y1="30" x2="70" y2="135"/>
+          <line x1="120" y1="30" x2="120" y2="135"/><line x1="170" y1="30" x2="170" y2="135"/><line x1="220" y1="30" x2="220" y2="135"/>
+        </g>
+        <!-- Path 1: up then turn (north out -> forbidden in north-last region) green/labels approximate -->
+        <polyline points="70,135 70,40 95,40" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+        <text x="60" y="22" class="tiny" style="fill:#2563eb">Path 1</text>
+        <!-- Path 2: from below going up-left turn -->
+        <polyline points="60,150 60,100 30,100" fill="none" stroke="#16a34a" stroke-width="2.5"/>
+        <text x="40" y="165" class="tiny" style="fill:#15803d">Path 2</text>
+        <!-- Path 3: middle east then south -->
+        <polyline points="120,100 170,100 170,135" fill="none" stroke="#7c3aed" stroke-width="2.5"/>
+        <text x="150" y="118" class="tiny" style="fill:#6d28d9">Path 3</text>
+        <!-- Path 4: east then south top -->
+        <polyline points="160,40 200,40 200,75" fill="none" stroke="#CC0000" stroke-width="2.5"/>
+        <text x="186" y="32" class="tiny" style="fill:#CC0000">Path 4</text>
+      </svg>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">X-Y dimension-ordered</span>Allowed: <strong>Path 4</strong></div>
+      <div class="callout"><span class="lbl">West-first</span>Allowed: <strong>Paths 2, 3, 4</strong></div>
+      <div class="callout"><span class="lbl">North-last</span>Allowed: <strong>Paths 1, 3, 4</strong></div>
+    </div>
+  </div>
+</section>
+
+<!-- Deadlock avoidance & escape -->
+<section data-background-color="#ffffff">
+  <h2>Deadlock Avoidance &amp; Escape</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Avoidance (irregular)</span>In up*/down* routing, forbidding the <strong>down→up turn</strong> avoids deadlock — the same cycle-breaking idea applied to any topology.</div>
+      <div class="callout"><span class="lbl">Escape</span>Use a <strong>virtual channel</strong> as an escape route from a possible deadlock. Routing <em>within</em> the escape channel must itself be <strong>deadlock-free</strong>.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 220 150" class="chart" style="max-width:260px">
+        <!-- one physical channel carrying 2 VCs: regular + escape -->
+        <rect x="20" y="30" width="180" height="34" rx="6" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2"/>
+        <text x="110" y="52" text-anchor="middle" class="lbl">VC0 — regular (deadlock possible)</text>
+        <rect x="20" y="86" width="180" height="34" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+        <text x="110" y="108" text-anchor="middle" class="lbl">VC1 — escape (deadlock-free)</text>
+        <text x="110" y="18" text-anchor="middle" class="note">one physical channel</text>
+        <text x="110" y="138" text-anchor="middle" class="tiny" style="fill:#15803d">spill to escape VC under congestion</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Router architecture -->
+<section data-background-color="#ffffff">
+  <h2>Router Architecture</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 280 200" class="chart" style="max-width:340px">
+        <rect x="10" y="14" width="260" height="172" rx="10" fill="#f8fafc" stroke="#94a3b8"/>
+        <text x="140" y="30" text-anchor="middle" class="note">Router</text>
+        <!-- allocators -->
+        <rect x="100" y="38" width="50" height="22" rx="4" fill="#fef3c7" stroke="#f59e0b"/><text x="125" y="53" text-anchor="middle" class="tiny">VC alloc</text>
+        <rect x="158" y="38" width="56" height="22" rx="4" fill="#fef3c7" stroke="#f59e0b"/><text x="186" y="53" text-anchor="middle" class="tiny">SW alloc</text>
+        <!-- input boxes -->
+        <g fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.5">
+          <rect x="20" y="80" width="40" height="20" rx="3"/><rect x="20" y="104" width="40" height="20" rx="3"/>
+          <rect x="20" y="128" width="40" height="20" rx="3"/><rect x="20" y="152" width="40" height="20" rx="3"/>
+        </g>
+        <text x="40" y="76" text-anchor="middle" class="tiny">input</text>
+        <!-- crossbar switch -->
+        <rect x="100" y="80" width="80" height="92" rx="6" fill="#fff" stroke="#1d4ed8" stroke-width="1.5"/>
+        <line x1="105" y1="86" x2="175" y2="166" stroke="#1d4ed8" stroke-width="2"/>
+        <line x1="175" y1="86" x2="105" y2="166" stroke="#1d4ed8" stroke-width="2"/>
+        <text x="140" y="76" text-anchor="middle" class="tiny">crossbar</text>
+        <!-- output boxes -->
+        <g fill="#dcfce7" stroke="#16a34a" stroke-width="1.5">
+          <rect x="220" y="80" width="40" height="20" rx="3"/><rect x="220" y="104" width="40" height="20" rx="3"/>
+          <rect x="220" y="128" width="40" height="20" rx="3"/><rect x="220" y="152" width="40" height="20" rx="3"/>
+        </g>
+        <text x="240" y="76" text-anchor="middle" class="tiny">output</text>
+        <g stroke="#94a3b8" stroke-width="1.2">
+          <line x1="60" y1="90" x2="100" y2="100"/><line x1="60" y1="138" x2="100" y2="140"/>
+          <line x1="180" y1="100" x2="220" y2="90"/><line x1="180" y1="140" x2="220" y2="138"/>
+        </g>
+      </svg>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Router complexity depends on</span>
+        <ul class="small" style="margin:.3em 0 0 .9em">
+          <li>Whether <strong>virtual channels</strong> are used</li>
+          <li>How many VCs <strong>share a physical channel</strong></li>
+          <li>Whether <strong>wormhole</strong> or <strong>virtual cut-through</strong> is used</li>
+        </ul></div>
+      <p class="small muted">VCs add buffering and an allocation stage but enable escape channels and higher utilization.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Router pipeline -->
+<section data-background-color="#ffffff">
+  <h2>The Router Pipeline</h2>
+  <p class="small">The <strong>head flit</strong> traverses four stages; body and tail flits inherit its route and only need switch traversal.</p>
+  <div class="cols w-64">
+    <div>
+      <ol class="small">
+        <li><strong>DC</strong> — Decode &amp; Compute: decode the header, compute the output channel, buffer at the input channel</li>
+        <li><strong>VA</strong> — Virtual-Channel Allocation: allocate an output VC for the packet</li>
+        <li><strong>SA</strong> — Switch Allocation: allocate the switch to connect input ↔ output VC</li>
+        <li><strong>ST</strong> — Switch Traversal: send the flit through the switch to the output VC</li>
+      </ol>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 260 150" class="chart" style="max-width:320px">
+        <!-- non-speculative head flit row -->
+        <text x="10" y="28" class="tiny">head</text>
+        <g font-size="9">
+          <rect x="36" y="16" width="36" height="18" fill="#fee2e2" stroke="#CC0000"/><text x="54" y="29" text-anchor="middle" class="tiny">DC</text>
+          <rect x="74" y="16" width="36" height="18" fill="#dbeafe" stroke="#1d4ed8"/><text x="92" y="29" text-anchor="middle" class="tiny">VA</text>
+          <rect x="112" y="16" width="36" height="18" fill="#fef3c7" stroke="#f59e0b"/><text x="130" y="29" text-anchor="middle" class="tiny">SA</text>
+          <rect x="150" y="16" width="36" height="18" fill="#dcfce7" stroke="#16a34a"/><text x="168" y="29" text-anchor="middle" class="tiny">ST</text>
+        </g>
+        <text x="10" y="58" class="tiny">body</text>
+        <g>
+          <rect x="112" y="46" width="36" height="18" fill="#fef3c7" stroke="#f59e0b"/><text x="130" y="59" text-anchor="middle" class="tiny">SA</text>
+          <rect x="150" y="46" width="36" height="18" fill="#dcfce7" stroke="#16a34a"/><text x="168" y="59" text-anchor="middle" class="tiny">ST</text>
+        </g>
+        <!-- speculative -->
+        <text x="10" y="100" class="note">speculative</text>
+        <g>
+          <rect x="36" y="108" width="36" height="18" fill="#fee2e2" stroke="#CC0000"/><text x="54" y="121" text-anchor="middle" class="tiny">DC</text>
+          <rect x="74" y="108" width="48" height="18" fill="#e9d5ff" stroke="#7c3aed"/><text x="98" y="121" text-anchor="middle" class="tiny">VA/SA</text>
+          <rect x="124" y="108" width="36" height="18" fill="#dcfce7" stroke="#16a34a"/><text x="142" y="121" text-anchor="middle" class="tiny">ST</text>
+        </g>
+        <text x="130" y="143" text-anchor="middle" class="tiny" style="fill:#6d28d9">speculation overlaps VA+SA</text>
+      </svg>
+    </div>
+  </div>
+  <aside class="notes">Non-speculative: VA then SA in sequence; if SA fails the flit stalls and retries SA. Speculative pipeline overlaps VA and SA into one stage to cut a cycle, gambling that the VC will be granted.</aside>
+</section>
+
+<!-- Case study Alpha 21364 -->
+<section data-background-color="#ffffff">
+  <h2>Case Study: Alpha 21364 Network</h2>
+  <div class="cols w-64">
+    <div>
+      <ul class="small">
+        <li><strong>128 nodes</strong> arranged as a <strong>4×8 2-D torus</strong></li>
+        <li>Each node: Proc + 2 memory controllers + Mem + Router</li>
+        <li>Router ports: <strong>N, E, S, W</strong> + local cache + 2 MCs + 1 I/O</li>
+        <li><strong>Minimal adaptive routing:</strong> one of two ports chosen by congestion, and the selected port must <strong>reduce Manhattan distance</strong></li>
+      </ul>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 260 150" class="chart" style="max-width:320px">
+        <!-- 4x8 torus sketch (show a 4x4 corner + wrap) -->
+        <g stroke="#cbd5e1" stroke-width="1.2">
+          <line x1="30" y1="30" x2="230" y2="30"/><line x1="30" y1="65" x2="230" y2="65"/>
+          <line x1="30" y1="100" x2="230" y2="100"/><line x1="30" y1="135" x2="230" y2="135"/>
+        </g>
+        <g stroke="#cbd5e1" stroke-width="1.2">
+          <line x1="30" y1="30" x2="30" y2="135"/><line x1="80" y1="30" x2="80" y2="135"/>
+          <line x1="130" y1="30" x2="130" y2="135"/><line x1="180" y1="30" x2="180" y2="135"/><line x1="230" y1="30" x2="230" y2="135"/>
+        </g>
+        <!-- wrap arcs (torus) -->
+        <path d="M30,30 C12,30 12,135 30,135" fill="none" stroke="#CC0000" stroke-width="1.4" stroke-dasharray="3 3"/>
+        <path d="M30,30 C30,12 230,12 230,30" fill="none" stroke="#CC0000" stroke-width="1.4" stroke-dasharray="3 3"/>
+        <g fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.4">
+          <circle cx="30" cy="30" r="6"/><circle cx="80" cy="30" r="6"/><circle cx="130" cy="30" r="6"/><circle cx="180" cy="30" r="6"/><circle cx="230" cy="30" r="6"/>
+          <circle cx="30" cy="65" r="6"/><circle cx="80" cy="65" r="6"/><circle cx="130" cy="65" r="6"/><circle cx="180" cy="65" r="6"/><circle cx="230" cy="65" r="6"/>
+          <circle cx="30" cy="100" r="6"/><circle cx="80" cy="100" r="6"/><circle cx="130" cy="100" r="6"/><circle cx="180" cy="100" r="6"/><circle cx="230" cy="100" r="6"/>
+          <circle cx="30" cy="135" r="6"/><circle cx="80" cy="135" r="6"/><circle cx="130" cy="135" r="6"/><circle cx="180" cy="135" r="6"/><circle cx="230" cy="135" r="6"/>
+        </g>
+        <text x="130" y="150" text-anchor="middle" class="tiny" style="fill:#CC0000">torus = mesh + wraparound</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Alpha 21364 details -->
+<section data-background-color="#ffffff">
+  <h2>Alpha 21364 — Flits, VCs &amp; Deadlock</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Flits</span><strong>Phit = Flit = 39 bits</strong> (32 data + 7 ECC). The head flit holds the header (2-bit direction + 8-bit destination + 6 others).</div>
+      <div class="callout"><span class="lbl">Packet classes</span>Six classes — read/write = <strong>3 flits</strong>, data response = <strong>18–19 flits</strong>, plus 4 others.</div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Virtual channels</span><strong>19 VCs per physical channel.</strong> Each packet class gets its own VC and uses 2 more. <strong>Virtual cut-through</strong> is used, so VC buffer sizes differ by packet size.</div>
+      <div class="callout warn"><span class="lbl">Deadlock</span>Adaptive routing isn't deadlock-free, so it uses one of <strong>2 escape VCs</strong> — one for <em>source ID &lt; dest ID</em>, the other for <em>&gt;</em>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Alpha 21364 pipeline -->
+<section data-background-color="#ffffff">
+  <h2>Alpha 21364 — Router Pipeline</h2>
+  <p class="small">A deep <strong>13-stage</strong> pipeline: a 7-stage scheduling pipeline plus 6 more stages.</p>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Scheduling pipeline (upper)</span>
+        <ul class="tiny" style="margin:.3em 0 0 .9em">
+          <li><strong>ECC</strong> — verify SECDED code (first), generate a new code (second)</li>
+          <li><strong>DW</strong> — decode + write table entry</li>
+          <li><strong>LA, GA</strong> — local arbitration (input port), global arbitration (output port)</li>
+          <li><strong>RE</strong> — entry-table read</li>
+          <li><strong>X</strong> — switch traversal</li>
+        </ul></div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Data pipeline (lower)</span>
+        <ul class="tiny" style="margin:.3em 0 0 .9em">
+          <li><strong>WrQ, RQ</strong> — write to buffer / read from buffer</li>
+          <li><strong>W</strong> — wait</li>
+        </ul></div>
+      <div class="callout takeaway"><span class="lbl">Takeaway</span>The head flit drives scheduling; the data flits flow through the lower pipeline, decoupled from the routing decisions.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Module 11.2 review -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 11.2 — Review</h2>
+  <div class="qa">
+    <p class="q">1. What principle underlies deadlock-free routing? Name a few schemes.</p>
+    <div class="fragment"><div class="a"><strong>Cyclic channel acquisition</strong> creates the possibility of deadlock — break the cycles. Examples: dimension-ordered routing, turn restriction (west-first / north-last), and up*/down* routing.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. How can a virtual channel be used to escape a deadlock?</p>
+    <div class="fragment"><div class="a">A <strong>regular VC</strong> (deadlock possible) is used first; an <strong>escape VC</strong> (provably deadlock-free) is used upon congestion, guaranteeing forward progress.</div></div>
+  </div>
+</section>
+
+<!-- Chapter summary -->
+<section data-background-color="#ffffff">
+  <h2>Chapter 11 — Big Picture</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">11.1 Design space</span>Nodes, flits, packet switching, topology metrics, and routing — every choice trades latency, bandwidth, and cost.</div>
+    <div class="callout"><span class="lbl">11.2 Deadlock</span>Cyclic buffer dependence deadlocks; turn restrictions, up*/down*, and escape VCs break the cycles.</div>
+    <div class="callout"><span class="lbl">Routers</span>DC → VA → SA → ST pipeline; the Alpha 21364 shows it at scale — 128-node torus, 19 VCs, 13 stages.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">One sentence</span>
+    <strong>The interconnection network is the substrate that makes coherence and parallelism actually move</strong> — its topology and routing set the latency and bandwidth that bound the whole machine.</div>
+  <p class="center muted small">The network you choose here ripples through every coherence and consistency decision in the rest of the course.</p>
+</section>
+
+</div>
+
+<!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 11 — Interconnection Networks</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.04,
+    minScale: 0.2, maxScale: 1.6,
+    center: false,                 // top-align content so the NC State header bar sits at the slide top
+    hash: true, slideNumber: 'c/t', history: true,
+    transition: 'slide', transitionSpeed: 'fast',
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      {left:'\\(', right:'\\)', display:false},
+      {left:'$$', right:'$$', display:true}
+    ]},
+  });
+</script>
+</body>
+</html>

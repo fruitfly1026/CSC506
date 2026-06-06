@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSC/ECE 506 · Chapter 9 — Memory Consistency Models</title>
+
+<!-- reveal.js core (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<!-- code highlighting + math -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+<!-- fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<!-- course theme -->
+<link rel="stylesheet" href="assets/theme.css?v=4">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============================ TITLE ============================ -->
+<section class="title-slide" data-background-color="#ffffff">
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <h1>Chapter 9</h1>
+  <div class="sub">Memory Consistency Models — what order do other threads see your memory accesses in?</div>
+  <div class="meta">
+    Fall Semester · Based on Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em><br>
+    <span class="muted">Use ← → to navigate · <strong>S</strong> for speaker notes · <strong>F</strong> fullscreen · <strong>ESC</strong> overview</span>
+  </div>
+  <aside class="notes">
+    Coherence (Chapters 6–8) answered: for a <em>single</em> location, what value does a read return?
+    Consistency answers a broader question: across <em>all</em> locations, in what order are one thread's
+    reads and writes seen by every other thread? Two modules: (9.1) sequential consistency and processor
+    consistency; (9.2) the more relaxed models — weak ordering, release consistency, lazy release consistency,
+    and the fences that act as safety nets.
+  </aside>
+</section>
+
+<!-- Roadmap -->
+<section data-background-color="#ffffff">
+  <h2>Chapter Roadmap</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Module 9.1</span><strong>Expectation &amp; Sequential Consistency</strong><br>
+      <span class="small">Coherence vs. consistency, the program-order + atomicity intuition, Lamport's <strong>SC</strong>, building &amp; optimizing an SC machine, and <strong>processor consistency</strong>.</span></div>
+    <div class="callout"><span class="lbl">Module 9.2</span><strong>More Relaxed Models</strong><br>
+      <span class="small">Weak ordering, release consistency (acquire/release), lazy RC, and how <strong>fences</strong> (PowerPC, IA-64) act as the safety net.</span></div>
+    <div class="callout takeaway"><span class="lbl">The tension</span>
+      <span class="small">Reordering buys <strong>performance</strong>; SC buys <strong>intuition</strong>. Relaxed models keep the speed and hand the ordering job to the programmer via fences.</span></div>
+  </div>
+  <div class="callout"><span class="lbl">One question for the whole chapter</span>
+    A processor can finish loads and stores out of order for speed. <strong>How much reordering is a program allowed to observe — and how do we rein it in when we need to?</strong></div>
+</section>
+
+<!-- ==================================================================
+     MODULE 9.1 — SEQUENTIAL CONSISTENCY
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 9.1</div>
+  <div class="mod-title">Programmers' Expectation &amp; Sequential Consistency</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Distinguish <strong>cache coherence</strong> from <strong>memory consistency</strong></li>
+      <li>State the two programmer expectations: <strong>program order</strong> and <strong>atomicity</strong></li>
+      <li>Give Lamport's definition of <strong>sequential consistency (SC)</strong> and enumerate legal outcomes</li>
+      <li>Describe how to <strong>build</strong> an SC machine and <strong>optimize</strong> it (prefetch, speculation)</li>
+      <li>Say what <strong>processor consistency (PC)</strong> relaxes and why</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Coherence vs consistency -->
+<section data-background-color="#ffffff">
+  <h2>Cache Coherence vs. Memory Consistency</h2>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Cache coherence</span>
+      Orders writes to a <strong>single</strong> memory location.<br>
+      <span class="small">Only needed for systems <em>with caches</em>. (Chapters 6–8.)</span></div>
+    <div class="callout warn"><span class="lbl">Memory consistency</span>
+      Orders reads/writes across <strong>all</strong> memory locations.<br>
+      <span class="small">Concerns systems <em>with or without</em> caches.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Why a consistency model at all?</span>
+    Coherence per-location is not enough: a program's correctness can depend on how a write to <code class="inline">A</code>
+    is ordered relative to a write to <code class="inline">B</code>. The consistency model is the <strong>contract</strong>
+    that tells the programmer which inter-location orderings the hardware guarantees.</div>
+</section>
+
+<!-- Programmer intuition 1: program order -->
+<section data-background-color="#ffffff">
+  <h2>Programmer's Intuition I — Program Order</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Post–wait handoff</div>
+      <pre><code class="language-c" data-trim>
+// P0                  // P1
+S1: datum = 5;         S3: while (!datumIsReady) ;
+S2: datumIsReady = 1;  S4: ... = datum;   // expect 5
+</code></pre>
+      <p class="small">The programmer <strong>expects S4 to read 5</strong>. That breaks if
+        <code class="inline">S2</code> runs before <code class="inline">S1</code>, or
+        <code class="inline">S4</code> before <code class="inline">S3</code>.</p>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Hypothesis 1 · Program order</span>
+        Memory accesses in a thread are executed in the order they appear in source code.</div>
+      <div class="callout warn"><span class="lbl">The subtle part</span>
+        This order must hold not just within the thread, but <strong>as seen by all other threads</strong>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Programmer intuition 2: atomicity -->
+<section data-background-color="#ffffff">
+  <h2>Programmer's Intuition II — Atomicity</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">3-way propagation (init x=y=z=xReady=xyReady=0)</div>
+      <pre><code class="language-c" data-trim>
+// P0            // P1                     // P2
+S1: x = 5;       S3: while (!xReady) ;     S6: while (!xyReady) ;
+S2: xReady = 1;  S4: y = x + 4;            S7: z = x * y;
+                 S5: xyReady = 1;
+</code></pre>
+    </div>
+    <div>
+      <p class="small">Programmer expects <code class="inline">z = 45</code> at S7 (x=5, y=9).
+        This implies: if the new <code class="inline">x</code> reached P1, it must also have reached P2.</p>
+      <div class="callout"><span class="lbl">Hypothesis 2 · Atomicity</span>
+        A read/write appears to happen <strong>instantaneously with respect to all processors</strong>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Store atomicity violation -->
+<section data-background-color="#ffffff">
+  <h2>How Atomicity Gets Violated</h2>
+  <p class="small">Without atomic writes, the new value of <code class="inline">x</code> can reach P1 but lag reaching P2:</p>
+  <table>
+    <tr><th>Step</th><th>What happens</th><th>State at P2</th></tr>
+    <tr><td>1</td><td>New <code class="inline">x</code> &amp; <code class="inline">xReady</code> reach P1, <strong>not yet</strong> P2</td><td>still old <code class="inline">x</code></td></tr>
+    <tr><td>2</td><td>P1 computes <code class="inline">y</code>; <code class="inline">y</code> &amp; <code class="inline">xyReady</code> reach P2 <em>before</em> x does</td><td>old <code class="inline">x</code>, new <code class="inline">y</code></td></tr>
+    <tr><td class="hi">3</td><td>P2 already read <strong>old</strong> <code class="inline">x</code> → <code class="inline">z = 0</code>; <em>then</em> new x arrives</td><td class="hi">z = 0, not 45</td></tr>
+  </table>
+  <div class="callout warn"><span class="lbl">Root cause</span>
+    The write to <code class="inline">x</code> was <strong>not atomic</strong> — it became visible to different processors at different times.</div>
+</section>
+
+<!-- Lamport SC -->
+<section data-background-color="#ffffff">
+  <h2>Sequential Consistency — Lamport's Definition</h2>
+  <div class="callout takeaway"><span class="lbl">Summary of expectations</span>
+    Memory accesses from a processor are performed <strong>in program order</strong>, and each is performed <strong>atomically</strong>.</div>
+  <blockquote style="font-size:1.05em;border-left:5px solid var(--wolf-red);padding:.4em 0 .4em 1em;margin:.5em 0;color:var(--ink-soft)">
+    "A multiprocessor is <strong>sequentially consistent</strong> if the result of any execution is the same as if the
+    operations of all processors were executed in some <strong>sequential order</strong>, and the operations of each
+    individual processor appear in this sequence in the <strong>order specified by its program</strong>."
+    <div class="src" style="margin-top:.3em">— Leslie Lamport, 1979</div>
+  </blockquote>
+  <p class="small">Empirically, programmer expectations fit <strong>SC</strong> very closely — it is the model people reason with by default.</p>
+</section>
+
+<!-- SC outcomes example 1 -->
+<section data-background-color="#ffffff">
+  <h2>SC vs. Non-SC Outcomes — Example A</h2>
+  <div class="cols w-37">
+    <div>
+      <div class="code-label">init a=b=0</div>
+      <pre><code class="language-c" data-trim>
+// P0        // P1
+S1: a = 1;   S3: ...=b;
+S2: b = 1;   S4: ...=a;
+</code></pre>
+      <p class="tiny muted">Non-deterministic — no synchronization. In SC, S1→S2 and S3→S4 are guaranteed.</p>
+    </div>
+    <div>
+      <table>
+        <tr><th>Interleaving</th><th>(a,b) read by P1</th></tr>
+        <tr><td>S1 S2 S3 S4</td><td>1, 1</td></tr>
+        <tr><td>S3 S4 S1 S2</td><td>0, 0</td></tr>
+        <tr><td>S1 S3 S2 S4</td><td>1, 0</td></tr>
+        <tr><td class="hi">any SC order</td><td class="hi">0, 1 → impossible</td></tr>
+      </table>
+      <p class="small"><strong>(a,b)=(0,1) needs both</strong> S4→S1 (for a=0) <em>and</em> S2→S3 (for b=1) — contradictory under SC.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Non-SC machine example 1 -->
+<section data-background-color="#ffffff">
+  <h2>On a Non-SC Machine — Example A</h2>
+  <p>The illegal outcome <strong>(a,b) = (0,1)</strong> becomes possible if ordering is broken:</p>
+  <div class="cols">
+    <div class="callout warn"><span class="lbl">Order S4 S1 S2 S3</span>
+      <code class="inline">S3→S4</code> violated — the order between <strong>two reads</strong> is broken.</div>
+    <div class="callout warn"><span class="lbl">Order S2 S3 S4 S1</span>
+      <code class="inline">S1→S2</code> violated — the order between <strong>two writes</strong> is broken.</div>
+  </div>
+  <div class="callout"><span class="lbl">Takeaway</span>
+    A forbidden SC result is a fingerprint: it can only appear when the hardware reordered accesses the programmer assumed were in order.</div>
+</section>
+
+<!-- SC example 2 (work on this) -->
+<section data-background-color="#ffffff">
+  <h2>SC vs. Non-SC Outcomes — Example B</h2>
+  <div class="cols w-37">
+    <div>
+      <div class="code-label">init a=b=0 (store-buffer / Dekker shape)</div>
+      <pre><code class="language-c" data-trim>
+// P0        // P1
+S1: a = 1;   S3: b = 1;
+S2: ...=b;   S4: ...=a;
+</code></pre>
+      <p class="tiny muted">Each thread writes one flag, then reads the other. In SC, S1→S2 and S3→S4 hold.</p>
+    </div>
+    <div>
+      <table>
+        <tr><th>Interleaving</th><th>(b read by P0, a read by P1)</th></tr>
+        <tr><td>S1 S2 S3 S4</td><td>0, 1</td></tr>
+        <tr><td>S3 S4 S1 S2</td><td>1, 0</td></tr>
+        <tr><td>S1 S3 S2 S4</td><td>1, 1</td></tr>
+        <tr><td class="hi">any SC order</td><td class="hi">0, 0 → impossible</td></tr>
+      </table>
+      <p class="small"><strong>(0,0) needs both</strong> S4→S1 (a read 0) and S2→S3 (b read 0) — contradictory under SC.</p>
+    </div>
+  </div>
+  <div class="callout warn"><span class="lbl">This is the store-buffer litmus test</span>
+    On real x86/ARM, both threads can buffer their store and read the other's <em>old</em> flag → <strong>(0,0)</strong> is observable. SC forbids it.</div>
+</section>
+
+<!-- Non-SC example 2 -->
+<section data-background-color="#ffffff">
+  <h2>On a Non-SC Machine — Example B</h2>
+  <p>The illegal outcome <strong>(0,0)</strong> appears when a write and a younger read to <em>different</em> locations are reordered:</p>
+  <div class="cols">
+    <div class="callout warn"><span class="lbl">Order S4 S1 S2 S3</span>
+      <code class="inline">S3→S4</code> violated — a <strong>write reordered after a younger read</strong>.</div>
+    <div class="callout warn"><span class="lbl">Order S2 S3 S4 S1</span>
+      <code class="inline">S1→S2</code> violated — again a <strong>write↔younger-read</strong> reorder.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Exactly the order PC relaxes</span>
+    Both Example-B violations are the <strong>Store → Load</strong> ordering. Processor consistency deliberately drops it — coming up.</div>
+</section>
+
+<!-- Non-determinism -->
+<section data-background-color="#ffffff">
+  <h2>Does Preserving Order Matter?</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Both example codes are <strong>non-deterministic</strong> — they lack synchronization. Such races are rare and notoriously hard to debug.</p>
+      <p class="small">Non-determinism is sometimes <em>intentional</em> (legitimate uses exist). If so, ordering may not matter.</p>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">But usually it matters</span>
+        <ul class="small" style="margin:.2em 0 0 .9em">
+          <li>Programs go non-deterministic <em>by accident</em> (forgotten synchronization)</li>
+          <li>Predictable ordering keeps programmers <strong>sane while debugging</strong></li>
+          <li>Even correctly synchronized programs <strong>need ordering</strong> for the synchronization itself to work</li>
+        </ul></div>
+      <p class="small center muted">So: how do we build a system that guarantees SC?</p>
+    </div>
+  </div>
+</section>
+
+<!-- Building SC -->
+<section data-background-color="#ffffff">
+  <h2>Building an SC System</h2>
+  <div class="cols">
+    <div>
+      <h3>Program order</h3>
+      <ul class="small">
+        <li>Stop the <strong>compiler</strong> from reordering memory accesses</li>
+        <li>Declare critical variables <code class="inline">volatile</code> (no register allocation, no dead-code elimination)</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Atomicity</h3>
+      <ul class="small">
+        <li>Expose accesses to the cache <strong>one at a time, in program order</strong> (pipeline may overlap internally)</li>
+        <li><strong>Load</strong> completes when the block is read from cache</li>
+        <li><strong>Store</strong> completes when invalidation is posted on the bus / acknowledged</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">Cost</span>
+    Naïvely, each access must <em>fully complete</em> before the next is exposed — that serializes the memory system.</div>
+</section>
+
+<!-- SC ordering example -->
+<section data-background-color="#ffffff">
+  <h2>Example of SC Ordering</h2>
+  <div class="cols w-37">
+    <div>
+      <div class="code-label">Program order</div>
+      <pre><code class="language-x86asm" data-trim>
+S1: ld R1, A
+S2: ld R2, B
+S3: st R3, C
+S4: st R4, D
+S5: ld R5, D
+</code></pre>
+    </div>
+    <div>
+      <p class="small">S1 must complete before S2, S2 before S3, and so on.</p>
+      <ul class="small">
+        <li>If <strong>S1 misses</strong> and S2 hits, S2 <em>still</em> waits for S1</li>
+        <li>S5 waits for S4 even though stores are usually retired early and exposed late</li>
+        <li>S5 waits for S4 <strong>even though they target the same location D</strong></li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout warn"><span class="lbl">The performance pain</span>
+    Strict SC throws away the latency-hiding that out-of-order memory systems are built for.</div>
+</section>
+
+<!-- Improving SC 1: prefetch -->
+<section data-background-color="#ffffff">
+  <h2>Improving SC Performance — Prefetching</h2>
+  <p class="small">Keep the ordering, but make each completion <strong>faster</strong> by turning misses into hits:</p>
+  <div class="cols">
+    <div class="callout ok"><span class="lbl">Load prefetch</span>
+      As soon as the address is known/predictable, prefetch the block in <strong>Exclusive/Shared</strong> state.</div>
+    <div class="callout ok"><span class="lbl">Store prefetch</span>
+      Prefetch the block in <strong>Modified</strong> state (exclusive prefetch) so the store hits.</div>
+  </div>
+  <div class="callout warn"><span class="lbl">Not perfect</span>
+    <strong>Too late</strong> → little benefit. <strong>Too early</strong> → cache pollution, and the block may be stolen before use.</div>
+</section>
+
+<!-- Improving SC 2: speculation -->
+<section data-background-color="#ffffff">
+  <h2>Improving SC Performance — Load Speculation</h2>
+  <p class="small">Violate ordering speculatively, but <strong>undo</strong> if atomicity turns out to be broken. The undo machinery already exists for branch speculation (ILP, ECE 521).</p>
+  <div class="cols">
+    <div>
+      <div class="code-label">load A; load B</div>
+      <ul class="small">
+        <li>Strict SC: B waits for A to complete</li>
+        <li>Speculate: B accesses cache anyway, <strong>marked speculative</strong></li>
+        <li>If B's block is <strong>invalidated before B retires</strong> → atomicity violated → cancel &amp; re-execute B</li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Loads only</span>
+        Store speculation is hard — a store, once exposed, <strong>cannot be canceled</strong>. So only <strong>load speculation</strong> is used.</div>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Result</span>
+    Modern aggressive cores can present an <strong>SC interface</strong> while still reordering under the hood — at the cost of recovery logic.</div>
+</section>
+
+<!-- Relaxed models intro -->
+<section data-background-color="#ffffff">
+  <h2>Relaxed Consistency Models</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Idea: <strong>allow some accesses to reorder or overlap</strong>. But violating SC can break intuition — so provide a <strong>safety net</strong> the programmer uses where needed.</p>
+      <div class="callout"><span class="lbl">Memory fence / barrier</span>
+        A fence instruction <strong>orders preceding load/stores before following load/stores</strong>. It is the programmer's responsibility to insert fences.</div>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">The family</span>
+        <ul class="small" style="margin:.2em 0 0 .9em">
+          <li><strong>PC</strong> — Processor Consistency</li>
+          <li><strong>WO</strong> — Weak Ordering</li>
+          <li><strong>RC</strong> — Release Consistency</li>
+          <li><strong>LRC</strong> — Lazy Release Consistency</li>
+        </ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- Fence implementation -->
+<section data-background-color="#ffffff">
+  <h2>Implementing a Memory Fence</h2>
+  <p class="small">A fence guarantees that <strong>younger</strong> memory ops are not issued until <strong>older</strong> ops have <em>globally performed</em>:</p>
+  <ul class="small">
+    <li>Wait until all older <strong>writes</strong> are posted on the bus (or InvAck received)</li>
+    <li>Wait until all older <strong>reads</strong> have completed</li>
+    <li><strong>Flush the pipeline</strong> so younger memory ops can't issue early</li>
+  </ul>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Who inserts them?</span>Thread-library / synchronization-library authors.</div>
+    <div class="callout warn"><span class="lbl">If you DIY synchronization without fences</span>The machine does <strong>not</strong> guarantee correctness. (Other, finer fence types exist — later.)</div>
+  </div>
+</section>
+
+<!-- Processor Consistency -->
+<section data-background-color="#ffffff">
+  <h2>Processor Consistency (PC)</h2>
+  <div class="cols">
+    <div>
+      <p class="small">SC enforces all four orderings: <span class="pill blue">LD→LD</span> <span class="pill blue">LD→ST</span> <span class="pill">ST→LD</span> <span class="pill blue">ST→ST</span></p>
+      <div class="callout takeaway"><span class="lbl">PC drops one</span>
+        PC removes the <strong>Store → Load</strong> constraint — exactly the order whose loss produced Example B's (0,0).</div>
+    </div>
+    <div>
+      <h3>Implications for ILP</h3>
+      <ul class="small">
+        <li>Committed stores sit in a <strong>write buffer</strong>, exposed to caches later</li>
+        <li>Loads <strong>do not wait</strong> for older stores — they hit the cache right away (no speculation needed!)</li>
+        <li>A load dependent on an older store can <strong>bypass</strong> (read the value straight from the buffer)</li>
+        <li>PC also <strong>drops write atomicity</strong></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- PC bypass diagram -->
+<section data-background-color="#ffffff">
+  <h2>PC: A Load Bypasses Older Stores</h2>
+  <div class="cols w-37">
+    <div class="center">
+      <svg viewBox="0 0 250 230" class="chart" style="max-width:240px">
+        <!-- program execution arrow -->
+        <line x1="200" y1="14" x2="200" y2="210" stroke="#0f172a" stroke-width="3" marker-end="url(#ah)"/>
+        <defs><marker id="ah" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0f172a"/></marker></defs>
+        <text x="214" y="60" class="note" style="fill:#0f172a">Program</text>
+        <text x="214" y="74" class="note" style="fill:#0f172a">order</text>
+        <!-- ops -->
+        <g font-weight="700" font-size="12">
+          <rect x="70" y="14" width="90" height="30" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="115" y="34" text-anchor="middle" class="lbl">Load</text>
+          <rect x="70" y="52" width="90" height="30" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="115" y="72" text-anchor="middle" class="lbl">Load</text>
+          <rect x="70" y="90" width="90" height="30" rx="5" fill="#fee2e2" stroke="#CC0000"/><text x="115" y="110" text-anchor="middle" class="lbl">Store</text>
+          <rect x="70" y="128" width="90" height="30" rx="5" fill="#fee2e2" stroke="#CC0000"/><text x="115" y="148" text-anchor="middle" class="lbl">Store</text>
+          <rect x="70" y="176" width="90" height="30" rx="5" fill="#dcfce7" stroke="#22c55e"/><text x="115" y="196" text-anchor="middle" class="lbl">Load</text>
+        </g>
+        <!-- bypass arc from the bottom load up past the two stores -->
+        <path d="M70,191 C30,180 30,75 70,67" fill="none" stroke="#16a34a" stroke-width="2.5" marker-end="url(#ah2)"/>
+        <defs><marker id="ah2" markerWidth="9" markerHeight="9" refX="4" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#16a34a"/></marker></defs>
+      </svg>
+      <div class="src">This load bypasses 2 stores.</div>
+    </div>
+    <div>
+      <div class="cols">
+        <div class="callout ok"><span class="lbl">PC produces SC results</span>
+          <pre class="tiny"><code class="language-c" data-trim>
+//P1            //P2
+data = 2000;    while(flag==0){}
+flag = 1;       print data;
+</code></pre></div>
+      </div>
+      <div class="callout warn"><span class="lbl">PC fails SC — but such code is rare</span>
+        <pre class="tiny"><code class="language-c" data-trim>
+//P1               //P2
+flag1 = 1;         flag2 = 1;
+if (flag2==0) ..   if (flag1==0) ..
+</code></pre>
+        <span class="tiny">Both stores buffered, both loads bypass → both ifs can fire.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- PC vs expectation -->
+<section data-background-color="#ffffff">
+  <h2>How Close Is PC to Intuition?</h2>
+  <div class="cols">
+    <div class="callout ok"><span class="lbl">Usually very close</span>
+      <ul class="small" style="margin:.2em 0 0 .9em">
+        <li>Post–wait synchronization works correctly</li>
+        <li>Major OSes were ported to PC with relative ease</li>
+      </ul></div>
+    <div class="callout warn"><span class="lbl">Where it bites</span>
+      <ul class="small" style="margin:.2em 0 0 .9em">
+        <li>Errors usually trace to <strong>races that also fail under SC</strong></li>
+        <li>But debugging those races under PC is <strong>harder</strong></li>
+        <li><strong>Non-atomic writes</strong> still surprise programmers (recall the 3-way example)</li>
+      </ul></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Bottom line</span>
+    PC keeps most intuition while unlocking real store-to-load performance — the dropped write atomicity is the price.</div>
+</section>
+
+<!-- Module 9.1 review -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 9.1 — Review</h2>
+  <div class="qa">
+    <p class="q">1. What two expectations do programmers have when writing a parallel program?</p>
+    <div class="fragment"><div class="a"><strong>Program order</strong> — accesses appear in source-code order; and <strong>atomicity</strong> — each access happens all-at-once with respect to every processor.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. Name two optimizations that speed up a sequentially consistent machine.</p>
+    <div class="fragment"><div class="a"><strong>Prefetching</strong> (read and exclusive/write prefetch) and <strong>load speculation</strong> (with cancel-and-replay on invalidation).</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Which ordering does Processor Consistency relax?</p>
+    <div class="fragment"><div class="a"><strong>Store → Load.</strong> Loads need not wait for older stores; it also drops write atomicity.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 9.2 — MORE RELAXED MODELS
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 9.2</div>
+  <div class="mod-title">More Relaxed Consistency Models</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Explain <strong>weak ordering (WO)</strong> and its two assumptions</li>
+      <li>Define <strong>release consistency (RC)</strong> with acquire/release semantics and the two migration rules</li>
+      <li>Describe <strong>lazy release consistency (LRC)</strong> and when it wins</li>
+      <li>Insert <strong>fences</strong> to realize SC / PC / WO on PowerPC- and IA-64-style ISAs</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Weak ordering -->
+<section data-background-color="#ffffff">
+  <h2>Weak Ordering (WO)</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Key observation</span>
+        If a programmer wants one ld/st ordered after another, they would have <strong>inserted synchronization</strong>. Most bug-free programs are synchronized.</div>
+      <div class="callout takeaway"><span class="lbl">Key idea</span>
+        It is safe to reorder/overlap <strong>all</strong> memory ops <em>except at synchronization points</em> — and blame the programmer for the rest.</div>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">WO relies on 2 assumptions</span>
+        <ol class="small" style="margin:.2em 0 0 1.1em">
+          <li>Programs are <strong>properly synchronized</strong></li>
+          <li>Programmers <strong>correctly label</strong> which ld/st act as synchronization accesses</li>
+        </ol></div>
+    </div>
+  </div>
+</section>
+
+<!-- WO rationale diagram -->
+<section data-background-color="#ffffff">
+  <h2>Why WO Is Safe</h2>
+  <div class="cols w-37">
+    <div class="center">
+      <svg viewBox="0 0 200 250" class="chart" style="max-width:185px">
+        <!-- block 1 -->
+        <rect x="40" y="10" width="120" height="46" rx="6" fill="#eef2ff" stroke="#6366f1"/>
+        <text x="100" y="30" text-anchor="middle" class="lbl">Load/Store</text>
+        <text x="100" y="46" text-anchor="middle" class="lbl">⋮ Load/Store</text>
+        <!-- synch -->
+        <rect x="40" y="62" width="120" height="26" rx="6" fill="#fee2e2" stroke="#CC0000"/>
+        <text x="100" y="79" text-anchor="middle" class="lbl" style="fill:#CC0000;font-weight:700">Synch</text>
+        <!-- block 2 -->
+        <rect x="40" y="94" width="120" height="46" rx="6" fill="#eef2ff" stroke="#6366f1"/>
+        <text x="100" y="114" text-anchor="middle" class="lbl">Load/Store</text>
+        <text x="100" y="130" text-anchor="middle" class="lbl">⋮ Load/Store</text>
+        <!-- synch -->
+        <rect x="40" y="146" width="120" height="26" rx="6" fill="#fee2e2" stroke="#CC0000"/>
+        <text x="100" y="163" text-anchor="middle" class="lbl" style="fill:#CC0000;font-weight:700">Synch</text>
+        <!-- block 3 -->
+        <rect x="40" y="178" width="120" height="46" rx="6" fill="#eef2ff" stroke="#6366f1"/>
+        <text x="100" y="198" text-anchor="middle" class="lbl">Load/Store</text>
+        <text x="100" y="214" text-anchor="middle" class="lbl">⋮ Load/Store</text>
+      </svg>
+      <div class="src">Synch may be a lock acquire/release.</div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Two rules at a synch</span>
+        Before a synch, <strong>all previous ops must finish</strong>. Before any ld/st, <strong>all previous synch must finish</strong>.</div>
+      <ul class="small">
+        <li><strong>Inside</strong> a critical section only one thread runs → reordering anything within it is safe.</li>
+        <li><strong>Outside</strong> a critical section we don't care about order (we'd have synchronized if we did).</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- WO challenges -->
+<section data-background-color="#ffffff">
+  <h2>Challenges for WO</h2>
+  <p class="small">How does the hardware know a given ld/st is a synchronization point?</p>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Heuristics</span>
+      <ul class="small" style="margin:.2em 0 0 .9em">
+        <li>Treat all <strong>atomic</strong> instructions as synch (fetch-and-op, test-and-set)</li>
+        <li>Treat all <strong>LL / SC</strong> (load-linked / store-conditional) as synch</li>
+      </ul></div>
+    <div class="callout warn"><span class="lbl">But what about plain ld/st that are synch points?</span>
+      The programmer must:
+      <ul class="small" style="margin:.2em 0 0 .9em">
+        <li>Insert <strong>safety nets</strong> (fence instructions), or</li>
+        <li><strong>Label</strong> them as synchronization accesses (e.g. convert to atomics)</li>
+      </ul></div>
+  </div>
+</section>
+
+<!-- WO vs PC -->
+<section data-background-color="#ffffff">
+  <h2>WO vs. PC</h2>
+  <div class="cols">
+    <div class="callout"><span class="lbl">WO is more aggressive</span>
+      <ul class="small" style="margin:.2em 0 0 .9em">
+        <li>Relaxes <strong>read→write, read→read, write→write</strong> (not just store→load)</li>
+        <li>More overlap → <strong>higher performance</strong></li>
+      </ul></div>
+    <div class="callout warn"><span class="lbl">…but more complex</span>
+      <ul class="small" style="margin:.2em 0 0 .9em">
+        <li>Must <strong>distinguish</strong> normal ld/st from synch operations</li>
+        <li>Sometimes <strong>PC wins</strong> — e.g. a lock release immediately followed by a read</li>
+      </ul></div>
+  </div>
+</section>
+
+<!-- Release Consistency -->
+<section data-background-color="#ffffff">
+  <h2>Release Consistency (RC)</h2>
+  <p>RC splits a synchronization operation into two distinct kinds:</p>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Acquire</span>
+      Gains access to a shared variable.
+      <ul class="small" style="margin:.2em 0 0 .9em">
+        <li>Lock acquisition</li>
+        <li><code class="inline">Wait()</code> in signal–wait synchronization</li>
+      </ul></div>
+    <div class="callout"><span class="lbl">Release</span>
+      Relinquishes access.
+      <ul class="small" style="margin:.2em 0 0 .9em">
+        <li>Lock release</li>
+        <li><code class="inline">Post()</code> / <code class="inline">Signal()</code> in signal–wait</li>
+      </ul></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Why split?</span>
+    Acquire and release need ordering in <strong>opposite directions</strong> — so each gets a one-directional barrier instead of WO's full barrier.</div>
+</section>
+
+<!-- Acquire / release semantics -->
+<section data-background-color="#ffffff">
+  <h2>Acquire &amp; Release Semantics</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Acquire — blocks upward migration</span>
+        No ld/st <em>after</em> <code class="inline">sync_acquire</code> may execute until the acquire completes.</div>
+      <p class="small">Placed after taking the lock, it ensures no critical-section access runs before the lock is fully held — preventing races inside.</p>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Release — blocks downward migration</span>
+        All ld/st <em>before</em> <code class="inline">sync_release</code> must have globally performed before the release executes.</div>
+      <p class="small">Placed before releasing the lock, it ensures the critical section's writes are visible to others first.</p>
+    </div>
+  </div>
+  <div class="center">
+    <svg viewBox="0 0 520 96" class="chart" style="max-width:560px">
+      <!-- acquire fence -->
+      <line x1="40" y1="48" x2="200" y2="48" stroke="#94a3b8" stroke-width="1"/>
+      <rect x="95" y="38" width="60" height="20" rx="4" fill="#dcfce7" stroke="#22c55e"/><text x="125" y="52" text-anchor="middle" class="lbl">acquire</text>
+      <path d="M125,38 L125,16" stroke="#16a34a" stroke-width="2.5" marker-end="url(#up)"/>
+      <defs><marker id="up" markerWidth="9" markerHeight="9" refX="4.5" refY="2" orient="auto"><path d="M0,9 L4.5,0 L9,9 z" fill="#16a34a"/></marker></defs>
+      <text x="160" y="24" class="note" style="fill:#16a34a">no upward migration</text>
+      <!-- release fence -->
+      <line x1="320" y1="48" x2="480" y2="48" stroke="#94a3b8" stroke-width="1"/>
+      <rect x="375" y="38" width="60" height="20" rx="4" fill="#fee2e2" stroke="#CC0000"/><text x="405" y="52" text-anchor="middle" class="lbl">release</text>
+      <path d="M405,58 L405,82" stroke="#CC0000" stroke-width="2.5" marker-end="url(#dn)"/>
+      <defs><marker id="dn" markerWidth="9" markerHeight="9" refX="4.5" refY="7" orient="auto"><path d="M0,0 L4.5,9 L9,0 z" fill="#CC0000"/></marker></defs>
+      <text x="318" y="92" class="note" style="fill:#CC0000">no downward migration</text>
+    </svg>
+  </div>
+</section>
+
+<!-- RC in post-wait -->
+<section data-background-color="#ffffff">
+  <h2>RC in Post–Wait Synchronization</h2>
+  <div class="cols w-37">
+    <div class="center">
+      <svg viewBox="0 0 360 200" class="chart" style="max-width:360px">
+        <text x="70" y="20" class="lbl" style="font-weight:700">Thread P0</text>
+        <text x="250" y="20" class="lbl" style="font-weight:700">Thread P1</text>
+        <!-- P0 -->
+        <text x="20" y="46" class="lbl" style="font-family:var(--mono,monospace)">S1: datum = 5;</text>
+        <text x="20" y="66" class="lbl" style="font-family:var(--mono,monospace)">S2: datumIsReady=1;</text>
+        <rect x="14" y="54" width="150" height="18" fill="none" stroke="#CC0000" stroke-dasharray="3 2"/>
+        <text x="20" y="92" class="note" style="fill:#CC0000">S2 = release</text>
+        <!-- P1 -->
+        <text x="210" y="120" class="lbl" style="font-family:var(--mono,monospace)">S3: while(!datumIsReady);</text>
+        <text x="210" y="140" class="lbl" style="font-family:var(--mono,monospace)">S4: ... = datum;</text>
+        <rect x="204" y="108" width="150" height="18" fill="none" stroke="#16a34a" stroke-dasharray="3 2"/>
+        <text x="210" y="166" class="note" style="fill:#16a34a">S3 = acquire</text>
+        <!-- handoff arrow -->
+        <path d="M120,66 C180,80 200,100 250,116" fill="none" stroke="#0f172a" stroke-width="1.5" marker-end="url(#ho)"/>
+        <defs><marker id="ho" markerWidth="9" markerHeight="9" refX="5" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#0f172a"/></marker></defs>
+      </svg>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Release side (P0)</span>
+        S2 is the <strong>release</strong>. So S1 (<code class="inline">datum=5</code>) is guaranteed to have performed before S2.</div>
+      <div class="callout"><span class="lbl">Acquire side (P1)</span>
+        S3 is the <strong>acquire</strong>. So S3 must have performed before S4 reads <code class="inline">datum</code>.</div>
+      <p class="small center muted">P1 is guaranteed to read the value P0 wrote.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Why RC safe (lock) -->
+<section data-background-color="#ffffff">
+  <h2>Why RC Is Safe — Critical Section</h2>
+  <div class="cols w-37">
+    <div>
+      <div class="code-label">Shared sum, lock L1</div>
+      <pre><code class="language-c" data-trim>
+// producer
+lock(L1);        // acquire
+S2: sum += x;
+unlock(L1);      // release
+// consumer
+S4: lock(L1);    // acquire
+S5: ... = sum;
+unlock(L1);
+</code></pre>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">unlock = release</span>
+        S2 (the update to <code class="inline">sum</code>) is guaranteed to have performed before the <code class="inline">unlock(L1)</code>.</div>
+      <div class="callout"><span class="lbl">lock = acquire</span>
+        The lock is acquired before S5 reads <code class="inline">sum</code>, so the consumer sees the updated value.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Overlapped critical sections -->
+<section data-background-color="#ffffff">
+  <h2>Overlapping Critical Sections: WO vs. RC</h2>
+  <div class="cols">
+    <div class="center">
+      <svg viewBox="0 0 240 200" class="chart" style="max-width:240px">
+        <rect x="20" y="14" width="60" height="36" rx="5" fill="#fde68a" stroke="#d97706"/><text x="50" y="36" text-anchor="middle" class="lbl">lock(A)</text>
+        <rect x="20" y="58" width="60" height="30" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="50" y="77" text-anchor="middle" class="lbl">block 1</text>
+        <rect x="20" y="96" width="60" height="30" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="50" y="115" text-anchor="middle" class="lbl">block 2</text>
+        <rect x="20" y="134" width="60" height="30" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="50" y="153" text-anchor="middle" class="lbl">block 3</text>
+        <!-- WO: serialized -->
+        <text x="100" y="76" class="note">WO: serialized</text>
+        <line x1="95" y1="73" x2="95" y2="153" stroke="#94a3b8" stroke-dasharray="3 3"/>
+        <!-- RC: overlap brace -->
+        <path d="M150,58 C172,58 172,150 150,150" fill="none" stroke="#16a34a" stroke-width="2.5"/>
+        <text x="160" y="108" class="note" style="fill:#16a34a">RC: overlap</text>
+        <text x="160" y="122" class="note" style="fill:#16a34a">1·2·3</text>
+      </svg>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">With WO</span>
+        Only ld/st <em>within</em> each block overlap; blocks <strong>cannot</strong> overlap across the synch boundary.</div>
+      <div class="callout takeaway"><span class="lbl">With RC</span>
+        Blocks 1, 2, 3 <strong>can overlap</strong> in execution — none may start before <code class="inline">lock(A)</code> performs, but they need not wait on each other.</div>
+    </div>
+  </div>
+</section>
+
+<!-- LRC -->
+<section data-background-color="#ffffff">
+  <h2>Lazy Release Consistency (LRC)</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Key observation</span>
+        New values aren't <em>needed</em> until an <strong>acquire</strong> is performed — so why propagate them early?</div>
+      <div class="callout takeaway"><span class="lbl">LRC idea</span>
+        Delay propagation: push all new values only when the <strong>acquire</strong> happens (pull on demand) rather than eagerly at each write.</div>
+      <p class="small muted">This is where the consistency model and the coherence mechanism blend together.</p>
+    </div>
+    <div>
+      <div class="center">
+        <svg viewBox="0 0 220 170" class="chart" style="max-width:230px">
+          <!-- RC eager -->
+          <text x="40" y="16" class="lbl" style="font-weight:700">RC (eager)</text>
+          <line x1="40" y1="24" x2="40" y2="150" stroke="#94a3b8"/>
+          <g fill="#CC0000"><circle cx="40" cy="48" r="4"/><circle cx="40" cy="72" r="4"/><circle cx="40" cy="96" r="4"/><circle cx="40" cy="120" r="4"/></g>
+          <text x="50" y="50" class="note">write→propagate</text>
+          <!-- LRC lazy -->
+          <text x="150" y="16" class="lbl" style="font-weight:700">LRC (lazy)</text>
+          <line x1="150" y1="24" x2="150" y2="150" stroke="#94a3b8"/>
+          <rect x="138" y="120" width="24" height="14" rx="3" fill="#16a34a"/><text x="150" y="131" text-anchor="middle" class="lbl" style="fill:#fff;font-size:8px">acq</text>
+          <path d="M150,40 C170,70 170,100 150,118" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#lz)"/>
+          <defs><marker id="lz" markerWidth="9" markerHeight="9" refX="5" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#16a34a"/></marker></defs>
+          <text x="158" y="80" class="note" style="fill:#16a34a">one bulk</text>
+          <text x="158" y="92" class="note" style="fill:#16a34a">propagation</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">When LRC wins</span>
+    Systems where <strong>many small write propagations</strong> are costly vs. <strong>a few large ones</strong> — e.g. <em>software</em> shared-memory multiprocessors.</div>
+</section>
+
+<!-- Usage example PowerPC post-wait -->
+<section data-background-color="#ffffff">
+  <h2>Usage Example: PowerPC Fences</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Post–wait, full fence</div>
+      <pre><code class="language-x86asm" data-trim>
+; P0 (post)        ; P1 (wait)
+st  datum, 5       loop: ld r, ready
+lwsync             cmp r, 0 ; beq loop
+st  ready, 1       isync
+                   ld  ... , datum
+</code></pre>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">lwsync — full fence</span>
+        Without labeling, a full fence is needed on the post side to block <strong>both</strong> downward and upward migration.</div>
+      <div class="callout"><span class="lbl">isync — acquire fence</span>
+        On the wait side, an acquire fence suffices so <code class="inline">datum</code> is not read too soon.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Usage example IA-64 -->
+<section data-background-color="#ffffff">
+  <h2>Usage Example: IA-64 Labeled Synch</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Post–wait with labeled accesses</div>
+      <pre><code class="language-x86asm" data-trim>
+; P0 (post)            ; P1 (wait)
+st       datum, 5      loop: ld.acq r, ready
+st.rel   ready, 1            cmp r,0 ; beq loop
+                             ld  ..., datum
+</code></pre>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Labeling beats fences</span>
+        With per-access labels (<code class="inline">st.rel</code> / <code class="inline">ld.acq</code>), a <strong>release</strong> store on the post side is sufficient — no separate full fence instruction.</div>
+      <p class="small muted">This is the RC philosophy baked into the ISA.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Usage example PowerPC LL/SC -->
+<section data-background-color="#ffffff">
+  <h2>Usage Example: PowerPC LL/SC Lock</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">Lock via load-linked / store-conditional</div>
+      <pre><code class="language-x86asm" data-trim>
+acquire:
+  lwarx  r, 0, lock      ; load-linked
+  cmp    r, 0 ; bne acquire
+  stwcx. one, 0, lock    ; store-conditional
+  bne    acquire
+  isync                  ; <-- acquire fence
+  ; ... critical section ...
+  lwsync                 ; <-- release fence
+  st     lock, 0         ; release the lock
+</code></pre>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">isync</span>
+        Inserted <strong>right before entering</strong> the critical section — blocks upward migration (acquire).</div>
+      <div class="callout"><span class="lbl">lwsync</span>
+        Inserted <strong>right before the store that releases</strong> the lock — blocks downward migration (release).</div>
+    </div>
+  </div>
+</section>
+
+<!-- Alternative view: language-level -->
+<section data-background-color="#ffffff">
+  <h2>An Alternative View: Language-Level Models</h2>
+  <p class="small">Embed the consistency model in the <strong>programming-language</strong> spec; the compiler inserts fences to map it onto whatever the hardware provides.</p>
+  <div class="cols">
+    <div>
+      <ul class="small">
+        <li>Absent in early languages (C, C++, early Java)</li>
+        <li>Adopted in <strong>Java</strong> (Java Memory Model, Pugh et al.); later in <strong>C++11</strong> and modern C</li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">Pro</span>Programmers get <strong>certainty</strong> — portable, well-defined ordering.</div>
+      <div class="callout warn"><span class="lbl">Con</span>Compiler may <strong>sacrifice performance for correctness</strong> — though benefits usually outweigh costs.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Fence-insertion divider concept -->
+<section data-background-color="#ffffff">
+  <h2>Fence-Insertion Exercises — Setup</h2>
+  <div class="cols w-37">
+    <div>
+      <div class="code-label">Original program</div>
+      <pre><code class="language-x86asm" data-trim>
+Lock L1
+Rd A
+Rd B
+Wr B
+Wr D
+Rd E
+Unlock L1
+Rd F
+</code></pre>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">The game</span>
+        Given a machine that guarantees <em>no</em> ordering except via a <strong>full fence</strong> (younger ops wait for older ops to globally complete), insert the <em>minimum</em> fences to realize <strong>SC</strong>, <strong>PC</strong>, and <strong>WO</strong>.</div>
+      <p class="small">Recall: SC keeps all four orders; PC drops <strong>ST→LD</strong>; WO only orders at <strong>synch</strong> (Lock/Unlock).</p>
+    </div>
+  </div>
+</section>
+
+<!-- Fence insertion: fully relaxed machine -->
+<section data-background-color="#ffffff">
+  <h2>Exercise 1 — On a Fully Relaxed Machine</h2>
+  <div class="cols c3">
+    <div>
+      <div class="code-label" style="color:#CC0000">SC — fence every pair</div>
+      <pre class="tiny"><code class="language-x86asm" data-trim>
+Lock L1
+fence
+Rd A
+fence
+Rd B
+Wr B        ; dep: no fence
+fence
+Wr D
+fence
+Rd E
+fence
+Unlock L1
+fence
+Rd F
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label" style="color:#2563eb">PC — drop ST→LD fences</div>
+      <pre class="tiny"><code class="language-x86asm" data-trim>
+Lock L1
+fence
+Rd A
+fence
+Rd B
+Wr B
+fence
+Wr D
+            ; ST→LD ok
+Rd E
+fence
+Unlock L1
+            ; ST→LD ok
+Rd F
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label" style="color:#16a34a">WO — fence only at synch</div>
+      <pre class="tiny"><code class="language-x86asm" data-trim>
+Lock L1
+fence
+Rd A
+Rd B
+Wr B
+Wr D
+Rd E
+fence
+Unlock L1
+fence
+Rd F
+</code></pre>
+    </div>
+  </div>
+  <div class="callout small"><span class="lbl">Note</span>The <code class="inline">Rd B → Wr B</code> data dependence is enforced by the hardware even under SC, so no fence is needed there.</div>
+</section>
+
+<!-- Latency example -->
+<section data-background-color="#ffffff">
+  <h2>Latency Example — SC vs. PC vs. WO</h2>
+  <p class="small">Cache hit = 1 cycle, miss = 10, cache initially empty, ≤ 1 op issued/cycle. Completion-time intervals:</p>
+  <table class="tiny">
+    <tr><th>Op</th><th>SC</th><th>PC</th><th>WO</th></tr>
+    <tr><td>Lock L1</td><td>[0,10]</td><td>[0,10]</td><td>[0,10]</td></tr>
+    <tr><td>Rd A</td><td>[10,20]</td><td>[10,20]</td><td>[10,20]</td></tr>
+    <tr><td>Rd B</td><td>[20,30]</td><td>[20,30]</td><td>[11,21]</td></tr>
+    <tr><td>Wr B</td><td>[30,31]</td><td>[30,31]</td><td>[21,22]</td></tr>
+    <tr><td>Wr D</td><td>[31,41]</td><td>[31,41]</td><td>[12,22]</td></tr>
+    <tr><td>Rd E</td><td>[41,51]</td><td>[32,42]</td><td>[13,23]</td></tr>
+    <tr><td>Unlock L1</td><td>[51,52]</td><td>[42,43]</td><td>[23,24]</td></tr>
+    <tr><td>Rd F</td><td class="hi">[52,62]</td><td class="hi">[43,53]</td><td class="hi">[24,34]</td></tr>
+  </table>
+  <div class="callout takeaway"><span class="lbl">The payoff</span>
+    SC finishes at <strong>62</strong>, PC at <strong>53</strong>, WO at <strong>34</strong> cycles. More relaxation → more overlap → ~2× speedup here.</div>
+</section>
+
+<!-- Module 9.2 review -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 9.2 — Review</h2>
+  <div class="qa">
+    <p class="q">1. What ordering is relaxed, and what is imposed, by Weak Ordering?</p>
+    <div class="fragment"><div class="a"><strong>Relaxed:</strong> any ld/st → ld/st ordering. <strong>Imposed:</strong> synch → ld/st and ld/st → synch.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. How does Release Consistency improve on Weak Ordering?</p>
+    <div class="fragment"><div class="a">It <strong>splits synch into acquire and release</strong>, and so allows <strong>overlapped execution of critical sections</strong>.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. What migration is prevented by a regular fence, an acquire, and a release?</p>
+    <div class="fragment"><div class="a">Regular fence → <strong>both</strong> directions. <strong>Acquire → upward</strong> migration. <strong>Release → downward</strong> migration.</div></div>
+  </div>
+</section>
+
+<!-- Chapter summary -->
+<section data-background-color="#ffffff">
+  <h2>Chapter 9 — Big Picture</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Consistency ≠ coherence</span>Coherence orders one location; consistency orders <em>all</em> locations as seen across threads.</div>
+    <div class="callout"><span class="lbl">SC is the intuition</span>Program order + atomicity. Easy to reason about, expensive to enforce — but prefetch &amp; load speculation help.</div>
+    <div class="callout"><span class="lbl">Relax for speed</span>PC drops ST→LD; WO orders only at synch; RC splits acquire/release; LRC delays propagation.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">One sentence</span>
+    <strong>Relaxed models trade away guaranteed ordering for performance, then hand the ordering back to the programmer through fences and acquire/release labels.</strong></div>
+  <p class="center muted small">The four orderings — <span class="pill blue">LD→LD</span> <span class="pill blue">LD→ST</span> <span class="pill">ST→LD</span> <span class="pill blue">ST→ST</span> — and which a model keeps, are the whole story.</p>
+</section>
+
+</div>
+
+<!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 9 — Memory Consistency Models</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.04,
+    minScale: 0.2, maxScale: 1.6,
+    center: false,                 // top-align content so the NC State header bar sits at the slide top
+    hash: true, slideNumber: 'c/t', history: true,
+    transition: 'slide', transitionSpeed: 'fast',
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      {left:'\\(', right:'\\)', display:false},
+      {left:'$$', right:'$$', display:true}
+    ]},
+  });
+</script>
+</body>
+</html>

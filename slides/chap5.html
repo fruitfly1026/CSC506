@@ -1,0 +1,1330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSC/ECE 506 · Chapter 5 — Introduction to Memory Hierarchy Organization</title>
+
+<!-- reveal.js core (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<!-- code highlighting + math -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+<!-- fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<!-- course theme -->
+<link rel="stylesheet" href="assets/theme.css?v=4">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============================ TITLE ============================ -->
+<section class="title-slide" data-background-color="#ffffff">
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <h1>Chapter 5</h1>
+  <div class="sub">Introduction to Memory Hierarchy Organization</div>
+  <div class="meta">
+    Fall Semester · Based on Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em><br>
+    <span class="muted">Use ← → to navigate · <strong>S</strong> for speaker notes · <strong>F</strong> fullscreen · <strong>ESC</strong> overview</span>
+  </div>
+  <aside class="notes">
+    Chapter 5 reviews the cache concepts from CDA 5106 and then extends them to the multicore setting.
+    Three modules: (5.1) basic cache architecture — the ABCs of caches: placement, mapping, replacement,
+    and write policy; (5.2) more basic architecture — inclusion, split caches, addressing, the 3 (really 5) C's
+    of misses, performance metrics, prefetching; (5.3) how physically distributed caches are organized in a
+    multicore: united vs. distributed, private vs. shared, hashing, victim replication, and capacity sharing.
+  </aside>
+</section>
+
+<!-- Roadmap -->
+<section data-background-color="#ffffff">
+  <h2>Chapter Roadmap</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Module 5.1</span><strong>Basic Cache Architecture 1</strong><br>
+      <span class="small">Sets / ways / blocks, associativity trade-offs, the index function, locating a block, replacement, and write policy.</span></div>
+    <div class="callout"><span class="lbl">Module 5.2</span><strong>Basic Cache Architecture 2</strong><br>
+      <span class="small">Inclusion, split vs. multi-banked, virtual vs. physical addressing, the 3 C's, AMAT, and prefetching.</span></div>
+    <div class="callout"><span class="lbl">Module 5.3</span><strong>Multicore Cache Organization</strong><br>
+      <span class="small">United / distributed / hybrid physical layout, private vs. shared logic, hashing, victim replication, capacity sharing.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The thread that ties it together</span>
+    A cache is a small fast table that bets on <strong>locality</strong>. In a multicore, that table gets <strong>physically scattered</strong> across the die — and every design choice trades <em>distance to data</em> against <em>wasted capacity</em>.</div>
+</section>
+
+<!-- ==================================================================
+     MODULE 5.1 — BASIC CACHE ARCHITECTURE 1
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 5.1</div>
+  <div class="mod-title">Basic Cache Architecture 1</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Describe a cache as a table of <strong>sets × ways</strong>, and name the <strong>placement</strong> and <strong>replacement</strong> policies</li>
+      <li>Break a memory address into <strong>tag / index / offset</strong> and locate a block step-by-step</li>
+      <li>Contrast direct-mapped, set-associative, and fully-associative caches, and the LRU / pseudo-LRU and write policies</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Why caches -->
+<section data-background-color="#ffffff">
+  <h2>Why Caches Exist</h2>
+  <div class="cols">
+    <div>
+      <p>Main-memory latency used to be a few clock cycles. Today it is <strong>several hundred cycles</strong>.</p>
+      <ul>
+        <li>Keep <strong>small but fast storage</strong> near the processor — a <strong>cache</strong></li>
+        <li>Works because programs have <strong>temporal</strong> and <strong>spatial locality</strong></li>
+        <li>Hit rates of <strong>70–95%</strong> are not uncommon</li>
+      </ul>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 200" class="chart" style="max-width:300px">
+        <rect x="80" y="8"  width="80" height="26" rx="6" fill="#dbeafe" stroke="#3b82f6"/><text x="120" y="25" text-anchor="middle" class="lbl">Core</text>
+        <rect x="70" y="44" width="100" height="24" rx="6" fill="#fee2e2" stroke="#CC0000"/><text x="120" y="60" text-anchor="middle" class="lbl">L1 — fast, tiny</text>
+        <rect x="55" y="78" width="130" height="26" rx="6" fill="#fef3c7" stroke="#f59e0b"/><text x="120" y="95" text-anchor="middle" class="lbl">L2 / L3 — larger</text>
+        <rect x="35" y="114" width="170" height="36" rx="6" fill="#f1f5f9" stroke="#64748b"/><text x="120" y="136" text-anchor="middle" class="lbl">Main memory — huge, slow</text>
+        <line x1="120" y1="34" x2="120" y2="44" class="axis"/>
+        <line x1="120" y1="68" x2="120" y2="78" class="axis"/>
+        <line x1="120" y1="104" x2="120" y2="114" class="axis"/>
+        <text x="120" y="172" text-anchor="middle" class="note">faster &amp; smaller ↑ · bigger &amp; slower ↓</text>
+      </svg>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">The bet</span>Store the few things you use a lot close by; recently or nearby-touched data is likely to be touched again soon.</div>
+</section>
+
+<!-- Cache organization as a table -->
+<section data-background-color="#ffffff">
+  <h2>A Cache Is a Table</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 300 200" class="chart" style="max-width:360px">
+        <!-- way headers -->
+        <text x="70"  y="18" text-anchor="middle" class="lbl">way 0</text>
+        <text x="130" y="18" text-anchor="middle" class="lbl">way 1</text>
+        <text x="190" y="18" text-anchor="middle" class="lbl">way 2</text>
+        <text x="250" y="18" text-anchor="middle" class="lbl">way 3</text>
+        <!-- set rows -->
+        <g fill="#fff" stroke="#64748b">
+          <rect x="40" y="26" width="60" height="34"/><rect x="100" y="26" width="60" height="34"/><rect x="160" y="26" width="60" height="34"/><rect x="220" y="26" width="60" height="34"/>
+          <rect x="40" y="60" width="60" height="34"/><rect x="100" y="60" width="60" height="34"/><rect x="160" y="60" width="60" height="34"/><rect x="220" y="60" width="60" height="34"/>
+          <rect x="40" y="94" width="60" height="34"/><rect x="100" y="94" width="60" height="34"/><rect x="160" y="94" width="60" height="34"/><rect x="220" y="94" width="60" height="34"/>
+        </g>
+        <rect x="100" y="60" width="60" height="34" fill="#fee2e2" stroke="#CC0000" stroke-width="2"/>
+        <text x="130" y="81" text-anchor="middle" class="lbl">block</text>
+        <text x="34" y="47" text-anchor="end" class="lbl">set 0</text>
+        <text x="34" y="81" text-anchor="end" class="lbl">set 1</text>
+        <text x="34" y="115" text-anchor="end" class="lbl">set 2</text>
+        <text x="160" y="150" text-anchor="middle" class="note">a set = a row · a way = a column · a line = a cell</text>
+      </svg>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Placement policy</span>Which line holds a block fetched from the lower level? A block lands in <strong>one of the ways</strong> of its set.</div>
+      <div class="callout"><span class="lbl">Replacement policy</span>When the set is full, <strong>which block in the set is evicted</strong> to make room?</div>
+      <p class="small muted">These two policies are what make a cache a cache — everything else is just a table.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Associativities -->
+<section data-background-color="#ffffff">
+  <h2>Three Associativities</h2>
+  <div class="cols c3">
+    <div class="center">
+      <svg viewBox="0 0 150 150" class="chart" style="max-width:170px">
+        <g fill="#fff" stroke="#64748b">
+          <rect x="55" y="14" width="40" height="20"/><rect x="55" y="34" width="40" height="20"/>
+          <rect x="55" y="54" width="40" height="20"/><rect x="55" y="74" width="40" height="20"/>
+        </g>
+        <rect x="55" y="54" width="40" height="20" fill="#fee2e2" stroke="#CC0000" stroke-width="2"/>
+        <text x="75" y="110" text-anchor="middle" class="lbl">Direct mapped</text>
+        <text x="75" y="126" text-anchor="middle" class="note">1 line only</text>
+      </svg>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 150 150" class="chart" style="max-width:170px">
+        <g fill="#fff" stroke="#64748b">
+          <rect x="35" y="14" width="35" height="20"/><rect x="80" y="14" width="35" height="20"/>
+          <rect x="35" y="44" width="35" height="20"/><rect x="80" y="44" width="35" height="20"/>
+          <rect x="35" y="74" width="35" height="20"/><rect x="80" y="74" width="35" height="20"/>
+        </g>
+        <rect x="35" y="44" width="35" height="20" fill="#fee2e2" stroke="#CC0000" stroke-width="2"/>
+        <rect x="80" y="44" width="35" height="20" fill="#ffe9c2" stroke="#f59e0b" stroke-width="2"/>
+        <text x="75" y="110" text-anchor="middle" class="lbl">Set-associative</text>
+        <text x="75" y="126" text-anchor="middle" class="note">one of N ways</text>
+      </svg>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 150 150" class="chart" style="max-width:170px">
+        <g fill="#fee2e2" stroke="#CC0000">
+          <rect x="20" y="34" width="26" height="20"/><rect x="46" y="34" width="26" height="20"/>
+          <rect x="72" y="34" width="26" height="20"/><rect x="98" y="34" width="26" height="20"/>
+        </g>
+        <text x="75" y="110" text-anchor="middle" class="lbl">Fully associative</text>
+        <text x="75" y="126" text-anchor="middle" class="note">any line</text>
+      </svg>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">One spectrum</span>
+    Direct-mapped is a 1-way set-associative cache; fully-associative is a single set with all the ways. Everything in between is <strong>N-way set-associative</strong>.</div>
+</section>
+
+<!-- Trade-offs -->
+<section data-background-color="#ffffff">
+  <h2>Trade-offs in Associativity</h2>
+  <div class="cols">
+    <div>
+      <h3>Fully associative</h3>
+      <ul class="small">
+        <li>Flexible placement anywhere</li>
+        <li>Usually a <strong>lower miss rate</strong></li>
+      </ul>
+      <div class="callout warn"><span class="lbl">But</span>Power hungry — must search the <strong>entire cache</strong> to find a block.</div>
+    </div>
+    <div>
+      <h3>Direct mapped</h3>
+      <ul class="small">
+        <li>Rigid: one possible location</li>
+        <li>Usually a <strong>higher miss rate</strong></li>
+      </ul>
+      <div class="callout ok"><span class="lbl">But</span>Power efficient — search only <strong>one place</strong>.</div>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">Miss rate</span>The fraction of cache accesses that do <em>not</em> find the block. Set-associativity is the practical middle ground real caches choose.</div>
+</section>
+
+<!-- Address breakdown / indexing -->
+<section data-background-color="#ffffff">
+  <h2>Mapping a Block to a Set</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 380 130" class="chart">
+        <rect x="20"  y="30" width="160" height="40" fill="#dbeafe" stroke="#3b82f6"/><text x="100" y="55" text-anchor="middle" class="lbl">Tag</text>
+        <rect x="180" y="30" width="120" height="40" fill="#fef3c7" stroke="#f59e0b"/><text x="240" y="55" text-anchor="middle" class="lbl">Index</text>
+        <rect x="300" y="30" width="60"  height="40" fill="#dcfce7" stroke="#22c55e"/><text x="330" y="55" text-anchor="middle" class="lbl">Offset</text>
+        <text x="190" y="20" text-anchor="middle" class="note">memory address (high bits → low bits)</text>
+        <text x="100" y="90" text-anchor="middle" class="note">identifies the block</text>
+        <text x="240" y="90" text-anchor="middle" class="note">selects the set</text>
+        <text x="330" y="90" text-anchor="middle" class="note">byte in block</text>
+      </svg>
+    </div>
+    <div>
+      <div class="eq">\( setIdx = blkAddr \bmod numSets \)</div>
+      <p class="small">If <code class="inline">numSets</code> is a <strong>power of 2</strong>, the modulo is free — just take the low index bits.</p>
+      <ul class="small">
+        <li>Index bits sit <em>just above</em> the block-offset bits</li>
+        <li>e.g. <strong>2048 sets, 64-byte blocks</strong>: offset = low <strong>6</strong> bits, index = next <strong>11</strong> bits (\(2^{11}=2048\)), the rest is tag</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- Other mapping functions -->
+<section data-background-color="#ffffff">
+  <h2>Other Mapping Functions</h2>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Prime modulo</span>Use a prime number of sets. Resistant to <strong>non-uniform set utilization</strong> caused by strided accesses (which would otherwise hammer a few sets).</div>
+    <div class="callout"><span class="lbl">XOR indexing</span>XOR several address bit-fields together to randomize the set mapping <strong>cheaply</strong> — spreads accesses without an expensive divide.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Why bother</span>
+    A power-of-two modulo is cheap but can leave sets idle under regular access patterns. Prime / XOR hashing trades a little hardware for <strong>better set utilization</strong>.</div>
+</section>
+
+<!-- Locating a block -->
+<section data-background-color="#ffffff">
+  <h2>Locating a Block (Step by Step)</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 320 230" class="chart">
+        <rect x="10" y="10" width="300" height="30" fill="#dbeafe" stroke="#3b82f6"/>
+        <text x="60"  y="30" text-anchor="middle" class="lbl">Tag</text>
+        <text x="170" y="30" text-anchor="middle" class="lbl">Index</text>
+        <text x="280" y="30" text-anchor="middle" class="lbl">Off</text>
+        <line x1="170" y1="40" x2="170" y2="60" class="axis"/>
+        <text x="230" y="56" class="note">① index → set</text>
+        <!-- set with two ways -->
+        <g fill="#fff" stroke="#64748b">
+          <rect x="60" y="62" width="60" height="28"/><rect x="120" y="62" width="60" height="28"/>
+          <rect x="190" y="62" width="60" height="28"/><rect x="250" y="62" width="60" height="28"/>
+        </g>
+        <text x="90"  y="80" text-anchor="middle" class="lbl">tag</text>
+        <text x="150" y="80" text-anchor="middle" class="lbl">tag</text>
+        <text x="220" y="80" text-anchor="middle" class="lbl">data</text>
+        <text x="280" y="80" text-anchor="middle" class="lbl">data</text>
+        <text x="20" y="80" class="note">② read tags</text>
+        <!-- comparators -->
+        <circle cx="90" cy="120" r="14" fill="#fee2e2" stroke="#CC0000"/><text x="90" y="124" text-anchor="middle" class="lbl">=?</text>
+        <circle cx="150" cy="120" r="14" fill="#fee2e2" stroke="#CC0000"/><text x="150" y="124" text-anchor="middle" class="lbl">=?</text>
+        <line x1="90" y1="90" x2="90" y2="106" class="axis"/>
+        <line x1="150" y1="90" x2="150" y2="106" class="axis"/>
+        <text x="200" y="124" class="note">③ compare tags → hit / miss</text>
+        <text x="20" y="160" class="note">④ read data · ⑤ select hitting way</text>
+        <text x="20" y="180" class="note">⑥ select requested byte/word (offset)</text>
+        <text x="20" y="200" class="note">⑦ return to processor</text>
+      </svg>
+    </div>
+    <div>
+      <ol class="small">
+        <li>Index → map address to a <strong>set</strong></li>
+        <li>Read out the <strong>tags</strong> from the set</li>
+        <li><strong>Compare</strong> address tag to stored tags — match = <strong>hit</strong>, else <strong>miss</strong></li>
+        <li>Read out the data from the set</li>
+        <li>On a hit, select the block from the <strong>way that hit</strong></li>
+        <li>Use the offset to pick the byte/word</li>
+        <li>Return it to the processor</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- Replacement policy -->
+<section data-background-color="#ffffff">
+  <h2>Replacement Policy</h2>
+  <p class="small">Which block to evict to make room for a new one?</p>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">LRU</span>Evict the <strong>least recently used</strong> block. Usually performs well.<br>
+      <span class="tiny">Bad when the working set is just slightly larger than the cache; expensive at high associativity.</span></div>
+    <div class="callout"><span class="lbl">FIFO</span>Evict the <strong>earliest block brought in</strong>, regardless of use. Cheap, but ignores recency.</div>
+    <div class="callout"><span class="lbl">Pseudo-LRU</span>Approximates LRU. Behaves like LRU for the more-recently-used half. <strong>Cheaper</strong> — keep a tree of bits recording the recent path.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Cost vs. quality</span>
+    True LRU is \(O(\text{ways}^2)\) state; pseudo-LRU is \(O(\text{ways})\). High-associativity caches almost always use an approximation.</div>
+</section>
+
+<!-- LRU matrix implementation -->
+<section data-background-color="#ffffff">
+  <h2>LRU: Matrix Implementation</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 220 200" class="chart" style="max-width:280px">
+        <text x="110" y="14" text-anchor="middle" class="note">access stream: B, C, A, D — state after A</text>
+        <text x="40" y="40" class="lbl">w0</text><text x="40" y="68" class="lbl">w1</text><text x="40" y="96" class="lbl">w2</text><text x="40" y="124" class="lbl">w3</text>
+        <text x="78" y="28" text-anchor="middle" class="lbl">w0</text><text x="113" y="28" text-anchor="middle" class="lbl">w1</text><text x="148" y="28" text-anchor="middle" class="lbl">w2</text><text x="183" y="28" text-anchor="middle" class="lbl">w3</text>
+        <g font-family="JetBrains Mono" font-size="13" text-anchor="middle" fill="#0f172a">
+          <!-- row0 -->
+          <rect x="62" y="30" width="34" height="22" fill="#fff" stroke="#64748b"/><text x="79" y="46">0</text>
+          <rect x="96" y="30" width="34" height="22" fill="#fee2e2" stroke="#CC0000"/><text x="113" y="46">1</text>
+          <rect x="130" y="30" width="34" height="22" fill="#fee2e2" stroke="#CC0000"/><text x="147" y="46">1</text>
+          <rect x="164" y="30" width="34" height="22" fill="#fee2e2" stroke="#CC0000"/><text x="181" y="46">1</text>
+          <!-- row1 -->
+          <rect x="62" y="52" width="34" height="22" fill="#fff" stroke="#64748b"/><text x="79" y="68">0</text>
+          <rect x="96" y="52" width="34" height="22" fill="#fff" stroke="#64748b"/><text x="113" y="68">0</text>
+          <rect x="130" y="52" width="34" height="22" fill="#fff" stroke="#64748b"/><text x="147" y="68">0</text>
+          <rect x="164" y="52" width="34" height="22" fill="#fff" stroke="#64748b"/><text x="181" y="68">1</text>
+          <!-- row2 -->
+          <rect x="62" y="74" width="34" height="22" fill="#fff" stroke="#64748b"/><text x="79" y="90">0</text>
+          <rect x="96" y="74" width="34" height="22" fill="#fff" stroke="#64748b"/><text x="113" y="90">1</text>
+          <rect x="130" y="74" width="34" height="22" fill="#fff" stroke="#64748b"/><text x="147" y="90">0</text>
+          <rect x="164" y="74" width="34" height="22" fill="#fff" stroke="#64748b"/><text x="181" y="90">1</text>
+          <!-- row3 -->
+          <rect x="62" y="96" width="34" height="22" fill="#fff" stroke="#64748b"/><text x="79" y="112">0</text>
+          <rect x="96" y="96" width="34" height="22" fill="#fff" stroke="#64748b"/><text x="113" y="112">0</text>
+          <rect x="130" y="96" width="34" height="22" fill="#fff" stroke="#64748b"/><text x="147" y="112">0</text>
+          <rect x="164" y="96" width="34" height="22" fill="#fff" stroke="#64748b"/><text x="181" y="112">0</text>
+        </g>
+        <text x="110" y="140" text-anchor="middle" class="note">row A is all 1s → A is MRU · row D all 0s → LRU</text>
+      </svg>
+    </div>
+    <div>
+      <ul class="small">
+        <li>Give each way a <strong>row and a column</strong> of a bit matrix</li>
+        <li>On a hit in way <em>k</em>: <strong>set row k to 1</strong>, then <strong>clear column k to 0</strong></li>
+        <li>The <strong>count of 1's in a row</strong> = that way's recency rank (more 1's = more recently used)</li>
+        <li>Evict the way whose row has the <strong>fewest 1's</strong></li>
+      </ul>
+      <p class="src">State \(\propto\) ways² — exact, but it doesn't scale.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Pseudo-LRU tree -->
+<section data-background-color="#ffffff">
+  <h2>Pseudo-LRU: Tree of Bits</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 260 200" class="chart" style="max-width:320px">
+        <!-- root -->
+        <circle cx="130" cy="24" r="14" fill="#fee2e2" stroke="#CC0000"/><text x="130" y="29" text-anchor="middle" class="lbl">0</text>
+        <!-- level 2 -->
+        <circle cx="80" cy="78" r="13" fill="#fff" stroke="#64748b"/><text x="80" y="83" text-anchor="middle" class="lbl">0</text>
+        <circle cx="180" cy="78" r="13" fill="#fff" stroke="#64748b"/><text x="180" y="83" text-anchor="middle" class="lbl">0</text>
+        <line x1="120" y1="34" x2="86" y2="66" class="axis"/>
+        <line x1="140" y1="34" x2="174" y2="66" class="axis"/>
+        <!-- leaves -->
+        <g fill="#fff" stroke="#64748b">
+          <rect x="40" y="130" width="40" height="26"/><rect x="84" y="130" width="40" height="26"/>
+          <rect x="140" y="130" width="40" height="26"/><rect x="184" y="130" width="40" height="26"/>
+        </g>
+        <rect x="40" y="130" width="40" height="26" fill="#fee2e2" stroke="#CC0000" stroke-width="2"/>
+        <text x="60"  y="148" text-anchor="middle" class="lbl">A</text><text x="104" y="148" text-anchor="middle" class="lbl">B</text>
+        <text x="160" y="148" text-anchor="middle" class="lbl">C</text><text x="204" y="148" text-anchor="middle" class="lbl">D</text>
+        <line x1="72" y1="90" x2="60" y2="124" class="axis"/>
+        <line x1="88" y1="90" x2="104" y2="124" class="axis"/>
+        <line x1="172" y1="90" x2="160" y2="124" class="axis"/>
+        <line x1="188" y1="90" x2="204" y2="124" class="axis"/>
+        <text x="130" y="180" text-anchor="middle" class="note">follow the bits: 0 → left, 0 → left ⇒ victim = A</text>
+      </svg>
+    </div>
+    <div>
+      <ul class="small">
+        <li>True LRU is \(O(\text{ways}^2)\) — too expensive at high associativity</li>
+        <li>Pseudo-LRU keeps <strong>one bit per internal tree node</strong>: \(O(\text{ways})\)</li>
+        <li>Each access <strong>flips the bits along its path</strong> to point <em>away</em> from itself</li>
+        <li>To find a victim, walk the tree following the bits to a leaf</li>
+      </ul>
+      <div class="callout small"><span class="lbl">Good enough</span>Tracks LRU well for the most-recently-used half of a set at a fraction of the cost.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Write policy: WT vs WB -->
+<section data-background-color="#ffffff">
+  <h2>Write Policy: Write-Through vs. Write-Back</h2>
+  <p class="small">When is a new value propagated to the lower level?</p>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Write-through</span>Propagate <strong>immediately</strong> on every write. Simple; keeps lower level current.</div>
+    <div class="callout ok"><span class="lbl">Write-back</span>Propagate <strong>only on eviction</strong>. Multiple writes to a block → <strong>one</strong> propagation, not many. Conserves bandwidth.</div>
+  </div>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Typical L1</span><strong>Write-through</strong> — L1↔L2 bandwidth is plentiful; L1 can be protected by parity alone.</div>
+    <div class="callout"><span class="lbl">Typical L2</span><strong>Write-back</strong> — bandwidth to the (often off-chip) lower level is scarce, so save it.</div>
+  </div>
+</section>
+
+<!-- Write allocate -->
+<section data-background-color="#ffffff">
+  <h2>Write Policy: Allocate vs. No-Allocate</h2>
+  <p class="small">Is a block brought into the cache <em>on a write miss</em>? (A read miss <strong>always</strong> allocates.)</p>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Write-allocate</span>Fetch the block on a write miss, then write. <strong>Typical choice.</strong></div>
+      <div class="callout"><span class="lbl">Write no-allocate</span>Write straight to the lower level; don't pull the block in.</div>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">Rationale (no-allocate)</span>If a block will be <strong>overwritten completely</strong>, why fetch it first?</div>
+      <div class="callout warn"><span class="lbl">Pitfall</span>The block may be <strong>read or written again soon</strong> — and larger blocks raise the odds of multiple partial writes. Usually write-allocate wins.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Review 5.1 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 5.1 — Review</h2>
+  <div class="qa">
+    <p class="q">1. In a 4-way cache, what do "set", "way", and "line" mean?</p>
+    <div class="fragment"><div class="a">A <strong>set</strong> is a row selected by the index; a <strong>way</strong> is one of the 4 columns; a <strong>line</strong> is a single cell (one block's worth of storage).</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. For 2048 sets and 64-byte blocks, how many offset and index bits?</p>
+    <div class="fragment"><div class="a"><strong>6 offset</strong> bits (\(2^6=64\)) and <strong>11 index</strong> bits (\(2^{11}=2048\)); the remaining high bits are the tag.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Why is pseudo-LRU preferred to true LRU in big caches?</p>
+    <div class="fragment"><div class="a">True LRU costs \(O(\text{ways}^2)\) state; pseudo-LRU is \(O(\text{ways})\) and tracks recency well enough.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 5.2 — BASIC CACHE ARCHITECTURE 2
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 5.2</div>
+  <div class="mod-title">Basic Cache Architecture 2</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Explain <strong>inclusion / exclusion / NINE</strong> and why inclusion simplifies external requests</li>
+      <li>Justify <strong>split</strong> and <strong>multi-banked</strong> caches and the <strong>VIPT</strong> addressing compromise</li>
+      <li>Classify misses with the <strong>3 (really 5) C's</strong> and compute <strong>AMAT</strong>; describe prefetching</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Inclusion policy -->
+<section data-background-color="#ffffff">
+  <h2>Inclusion in Multi-Level Caches</h2>
+  <p class="small">Should a block in the upper (smaller) cache also live in the lower (larger) one?</p>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Inclusion</span><strong>Always</strong> — every upper-level block is also in the lower level.</div>
+    <div class="callout"><span class="lbl">NINE</span>Not enforced — <em>may or may not</em> be present.</div>
+    <div class="callout"><span class="lbl">Exclusion</span><strong>Never</strong> duplicated — a block lives in exactly one level.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Why inclusion?</span>
+    An external (coherence) request only needs to <strong>check the lower level</strong>: if it's not there, the upper level can't have it either. Reduces tag contention at the busy upper level. (Value inclusion = the copies must also match.)</div>
+</section>
+
+<!-- Inclusion enforcement + pitfall -->
+<section data-background-color="#ffffff">
+  <h2>Enforcing Inclusion — and Its Cost</h2>
+  <div class="cols">
+    <div>
+      <h3>Protocol</h3>
+      <ul class="small">
+        <li>A fetched block is placed in the <strong>lower level too</strong>, not just the upper level</li>
+        <li>When a lower-level block is replaced, <strong>probe the upper level</strong> and evict its copy as well (back-invalidation)</li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Pitfall</span>Inclusion <strong>wastes capacity</strong> — the lower level re-stores what the upper level already holds. Worse in multicore.</div>
+      <p class="small">e.g. AMD Barcelona quad-core: <strong>4 × 512 KB</strong> L2 + a <strong>2 MB</strong> L3 — a strictly inclusive L3 could be almost entirely shadowed by the L2s.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Comparing inclusion policies diagram -->
+<section data-background-color="#ffffff">
+  <h2>Comparing Inclusion Policies</h2>
+  <p class="small">After an L1+L2 miss on X and Y (Z already in L2), then after X is evicted from L1:</p>
+  <div class="cols c3">
+    <div class="center">
+      <svg viewBox="0 0 150 150" class="chart" style="max-width:160px">
+        <text x="75" y="12" text-anchor="middle" class="lbl">Inclusive</text>
+        <text x="14" y="34" class="note">L1</text>
+        <g fill="#fff" stroke="#64748b"><rect x="40" y="22" width="30" height="20"/><rect x="70" y="22" width="30" height="20"/></g>
+        <rect x="40" y="22" width="30" height="20" fill="#dbeafe" stroke="#3b82f6"/><text x="55" y="37" text-anchor="middle" class="lbl">X</text>
+        <text x="85" y="37" text-anchor="middle" class="lbl">Y</text>
+        <text x="14" y="86" class="note">L2</text>
+        <g fill="#fff" stroke="#64748b"><rect x="40" y="54" width="30" height="20"/><rect x="70" y="54" width="30" height="20"/><rect x="40" y="74" width="30" height="20"/><rect x="70" y="74" width="30" height="20"/><rect x="40" y="94" width="30" height="20"/><rect x="70" y="94" width="30" height="20"/></g>
+        <text x="55" y="69" text-anchor="middle" class="lbl">Y</text><text x="85" y="89" text-anchor="middle" class="lbl">X</text><text x="55" y="109" text-anchor="middle" class="lbl">Z</text>
+        <text x="75" y="135" text-anchor="middle" class="note">X stays in L2 ✓</text>
+      </svg>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 150 150" class="chart" style="max-width:160px">
+        <text x="75" y="12" text-anchor="middle" class="lbl">Exclusive</text>
+        <text x="14" y="34" class="note">L1</text>
+        <g fill="#fff" stroke="#64748b"><rect x="40" y="22" width="30" height="20"/><rect x="70" y="22" width="30" height="20"/></g>
+        <rect x="40" y="22" width="30" height="20" fill="#dbeafe" stroke="#3b82f6"/><text x="55" y="37" text-anchor="middle" class="lbl">X</text>
+        <text x="85" y="37" text-anchor="middle" class="lbl">Y</text>
+        <text x="14" y="86" class="note">L2</text>
+        <g fill="#fff" stroke="#64748b"><rect x="40" y="54" width="30" height="20"/><rect x="70" y="54" width="30" height="20"/><rect x="40" y="74" width="30" height="20"/><rect x="70" y="74" width="30" height="20"/><rect x="40" y="94" width="30" height="20"/><rect x="70" y="94" width="30" height="20"/></g>
+        <text x="55" y="109" text-anchor="middle" class="lbl">Z</text>
+        <text x="75" y="135" text-anchor="middle" class="note">X only in L1, no dup</text>
+      </svg>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 150 150" class="chart" style="max-width:160px">
+        <text x="75" y="12" text-anchor="middle" class="lbl">NINE</text>
+        <text x="14" y="34" class="note">L1</text>
+        <g fill="#fff" stroke="#64748b"><rect x="40" y="22" width="30" height="20"/><rect x="70" y="22" width="30" height="20"/></g>
+        <rect x="40" y="22" width="30" height="20" fill="#dbeafe" stroke="#3b82f6"/><text x="55" y="37" text-anchor="middle" class="lbl">X</text>
+        <text x="85" y="37" text-anchor="middle" class="lbl">Y</text>
+        <text x="14" y="86" class="note">L2</text>
+        <g fill="#fff" stroke="#64748b"><rect x="40" y="54" width="30" height="20"/><rect x="70" y="54" width="30" height="20"/><rect x="40" y="74" width="30" height="20"/><rect x="70" y="74" width="30" height="20"/><rect x="40" y="94" width="30" height="20"/><rect x="70" y="94" width="30" height="20"/></g>
+        <text x="55" y="69" text-anchor="middle" class="lbl">Y</text><text x="85" y="89" text-anchor="middle" class="lbl">X</text><text x="55" y="109" text-anchor="middle" class="lbl">Z</text>
+        <text x="75" y="135" text-anchor="middle" class="note">independent of L1</text>
+      </svg>
+    </div>
+  </div>
+  <div class="callout small"><span class="lbl">Read it</span>Inclusion duplicates (X in both) and back-invalidates; exclusion never duplicates (max capacity); NINE just lets each level evict on its own.</div>
+</section>
+
+<!-- Split cache -->
+<section data-background-color="#ffffff">
+  <h2>Split Cache Organization</h2>
+  <div class="cols">
+    <div>
+      <p class="small">A <strong>unified L1</strong> holding instructions + data must serve both each cycle:</p>
+      <ul class="small">
+        <li>Supply instructions to the pipeline every cycle</li>
+        <li>Serve several load/store accesses every cycle</li>
+        <li>⇒ needs <strong>many ports</strong> → expensive and slow</li>
+      </ul>
+      <div class="callout ok"><span class="lbl">Solution</span>Split into an <strong>I-cache</strong> and a <strong>D-cache</strong> so instruction and data accesses stop contending for ports. Less useful for lower levels (low access frequency).</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 180" class="chart" style="max-width:280px">
+        <text x="60" y="14" text-anchor="middle" class="note">Unified L1</text>
+        <rect x="30" y="22" width="60" height="60" fill="#fff" stroke="#64748b"/>
+        <line x1="36" y1="18" x2="44" y2="22" class="axis"/><text x="40" y="14" class="lbl"> </text>
+        <line x1="45" y1="6" x2="45" y2="22" class="axis"/><line x1="75" y1="6" x2="75" y2="22" class="axis"/>
+        <text x="45" y="98" text-anchor="middle" class="note">I + D ports</text>
+        <text x="180" y="14" text-anchor="middle" class="note">Split I / D</text>
+        <rect x="130" y="22" width="44" height="60" fill="#dbeafe" stroke="#3b82f6"/><text x="152" y="56" text-anchor="middle" class="lbl">I</text>
+        <rect x="186" y="22" width="44" height="60" fill="#dcfce7" stroke="#22c55e"/><text x="208" y="56" text-anchor="middle" class="lbl">D</text>
+        <line x1="152" y1="6" x2="152" y2="22" class="axis"/><line x1="208" y1="6" x2="208" y2="22" class="axis"/>
+        <text x="180" y="98" text-anchor="middle" class="note">separate ports</text>
+        <text x="120" y="135" text-anchor="middle" class="note">Multi-banked: split by <tspan font-style="italic">address</tspan> (even / odd blocks → bank 0 / 1)</text>
+        <rect x="70" y="142" width="44" height="26" fill="#fef3c7" stroke="#f59e0b"/><text x="92" y="159" text-anchor="middle" class="lbl">bank0</text>
+        <rect x="126" y="142" width="44" height="26" fill="#fef3c7" stroke="#f59e0b"/><text x="148" y="159" text-anchor="middle" class="lbl">bank1</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Cache addressing intro -->
+<section data-background-color="#ffffff">
+  <h2>Virtual vs. Physical Addressing</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Virtual memory lets each program assume it owns the whole address space, and lets many programs reside at once.</p>
+      <ul class="small">
+        <li>Separate the <strong>virtual address</strong> (seen by the program) from the <strong>physical address</strong> (actual location)</li>
+        <li>The OS manages <strong>VA → PA translation</strong> at page granularity</li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Index with VA?</span>Access the cache <strong>directly</strong> (fast), but contents are <em>invalid on context switch</em>.</div>
+      <div class="callout warn"><span class="lbl">Index with PA?</span>Valid across switches, but <strong>latency too high</strong> — must do a TLB lookup first.</div>
+      <p class="small muted">So… what's a good compromise?</p>
+    </div>
+  </div>
+</section>
+
+<!-- VIPT -->
+<section data-background-color="#ffffff">
+  <h2>Virtually-Indexed, Physically-Tagged (VIPT)</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 320 200" class="chart">
+        <!-- VA -->
+        <rect x="20" y="14" width="180" height="26" fill="#dbeafe" stroke="#3b82f6"/><text x="95" y="31" text-anchor="middle" class="lbl">Virtual page #</text>
+        <rect x="200" y="14" width="100" height="26" fill="#fef3c7" stroke="#f59e0b"/><text x="250" y="31" text-anchor="middle" class="lbl">Page offset</text>
+        <text x="160" y="10" text-anchor="middle" class="note">Virtual address</text>
+        <!-- TLB -->
+        <rect x="60" y="70" width="90" height="30" fill="#ede9fe" stroke="#8b5cf6"/><text x="105" y="89" text-anchor="middle" class="lbl">TLB</text>
+        <line x1="95" y1="40" x2="105" y2="70" class="axis"/>
+        <!-- PA frame -->
+        <rect x="20" y="120" width="130" height="26" fill="#fee2e2" stroke="#CC0000"/><text x="85" y="137" text-anchor="middle" class="lbl">Phys frame #</text>
+        <line x1="105" y1="100" x2="85" y2="120" class="axis"/>
+        <text x="85" y="162" text-anchor="middle" class="note">Tag</text>
+        <!-- index from page offset -->
+        <line x1="230" y1="40" x2="230" y2="120" stroke="#22c55e" stroke-dasharray="4 3"/>
+        <text x="250" y="60" class="note">index +</text><text x="250" y="74" class="note">blk offset</text>
+        <rect x="210" y="120" width="40" height="50" fill="#fff" stroke="#64748b"/>
+        <text x="230" y="186" text-anchor="middle" class="note">cache array</text>
+      </svg>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Key insight</span>The <strong>page-offset bits are identical</strong> in the VA and PA — translation never touches them.</div>
+      <ul class="small">
+        <li><strong>Index</strong> the cache with the (untranslated) page-offset bits — start the array read <em>immediately</em></li>
+        <li>In parallel, the <strong>TLB produces the physical tag</strong> for the comparison</li>
+      </ul>
+      <div class="callout warn"><span class="lbl">Constraint</span>Index must fit within the page offset → caps <strong>capacity / associativity</strong> for a given page size.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Types of misses -->
+<section data-background-color="#ffffff">
+  <h2>Types of Cache Misses — the C's</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Compulsory</span>First-ever reference to a block — it must be brought in once. (a.k.a. cold misses)</div>
+    <div class="callout"><span class="lbl">Conflict</span>Too many active blocks map to the same set — <strong>insufficient associativity</strong>.</div>
+    <div class="callout"><span class="lbl">Capacity</span>Working set exceeds the <strong>cache size</strong>; blocks evicted then re-referenced.</div>
+  </div>
+  <div class="cols">
+    <div class="callout warn"><span class="lbl">Coherence</span><em>Multiprocessor only</em> — a block was <strong>invalidated by another processor</strong>.</div>
+    <div class="callout warn"><span class="lbl">System-related</span>System calls, interrupts, and <strong>context switches</strong> pollute / flush the cache.</div>
+  </div>
+</section>
+
+<!-- Factors table -->
+<section data-background-color="#ffffff">
+  <h2>What Each Parameter Does to Misses</h2>
+  <table>
+    <tr><th>Change</th><th>Compulsory</th><th>Conflict</th><th>Capacity</th></tr>
+    <tr><td>Larger cache size</td><td>unchanged</td><td>unchanged</td><td class="hi">reduced</td></tr>
+    <tr><td>Larger block size</td><td class="hi">reduced</td><td>unclear</td><td>unclear</td></tr>
+    <tr><td>Larger associativity</td><td>unchanged</td><td class="hi">reduced</td><td>unchanged</td></tr>
+  </table>
+  <div class="callout"><span class="lbl">Read the diagonal</span>
+    Bigger cache fights <strong>capacity</strong> misses; more associativity fights <strong>conflict</strong> misses; bigger blocks fetch neighbors and cut <strong>compulsory</strong> misses — but can hurt the others (more eviction, less effective capacity).</div>
+</section>
+
+<!-- Context switch misses -->
+<section data-background-color="#ffffff">
+  <h2>Context-Switch Misses</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 320 200" class="chart">
+        <line class="axis" x1="45" y1="20" x2="45" y2="165"/>
+        <line class="axis" x1="45" y1="165" x2="300" y2="165"/>
+        <text x="170" y="188" text-anchor="middle" class="lbl">cache size →</text>
+        <text x="18" y="95" text-anchor="middle" class="lbl" transform="rotate(-90 18 95)">misses</text>
+        <!-- natural misses fall -->
+        <path class="trend" d="M55,40 C120,90 200,135 295,150"/>
+        <text x="120" y="55" class="note">natural misses ↓</text>
+        <!-- context switch misses rise then plateau -->
+        <path d="M55,158 C130,150 200,70 295,60" stroke="#CC0000" stroke-width="3" fill="none"/>
+        <text x="150" y="120" class="note" style="fill:#CC0000">context-switch misses ↑</text>
+      </svg>
+    </div>
+    <div>
+      <ul>
+        <li><strong>Natural misses</strong> (compulsory/conflict/capacity) <em>fall</em> as the cache grows</li>
+        <li><strong>Context-switch misses</strong> <em>rise</em> with cache size — a bigger cache holds more of each process's footprint, so more is lost when another process runs</li>
+        <li>They keep rising until total working sets <strong>fit together</strong></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- Performance metrics -->
+<section data-background-color="#ffffff">
+  <h2>Cache Performance Metrics</h2>
+  <div class="cols">
+    <div>
+      <h3>Average Access Time (AAT)</h3>
+      <div class="eq small">\( AAT = L1_T + L1_{MR}\,(L2_T + L2_{MR}\,L2_{MT}) \)</div>
+      <ul class="tiny">
+        <li>\(L_xT\) = level-x access time</li>
+        <li>\(L_x{MR}\) = level-x miss rate</li>
+        <li>\(L_x{MT}\) = level-x miss penalty</li>
+      </ul>
+      <p class="small muted">You only pay the lower level when the upper level misses — hence the multiplied terms.</p>
+    </div>
+    <div>
+      <h3>Cycles per Instruction</h3>
+      <div class="eq small">\( cpi = (1 - h_2 - h_m)\,cpi_0 + h_2\,t_2 + h_m\,t_m \)</div>
+      <ul class="tiny">
+        <li>\(h_2\) = fraction of insts that reach L2 · \(h_m\) = reach memory</li>
+        <li>\(cpi_0\) = CPI of insts that stay in L1</li>
+        <li>\(t_2,\,t_m\) = avg penalty for an L2 / memory access</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- Prefetching -->
+<section data-background-color="#ffffff">
+  <h2>Prefetching</h2>
+  <p class="small">Bring data into the cache <strong>before</strong> the program asks for it.</p>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Software</span>Special prefetch instructions inserted by the compiler.</div>
+      <div class="callout"><span class="lbl">Hardware</span>An engine detects access patterns and prefetches automatically.</div>
+      <p class="small"><strong>Basic techniques:</strong> sequential prefetching (extrapolate consecutive block accesses) and stride prefetching.</p>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Coverage</span>Fraction of misses that were prefetched.</div>
+      <div class="callout"><span class="lbl">Accuracy</span>Fraction of prefetches that turn out useful.</div>
+      <div class="callout"><span class="lbl">Timeliness</span>Arrives early enough to hide latency, but not so early it's evicted first.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Stream buffers + multiprocessor prefetch -->
+<section data-background-color="#ffffff">
+  <h2>Stream Buffers &amp; Multiprocessor Prefetch</h2>
+  <div class="cols">
+    <div>
+      <h3>Stream buffers <span class="src">[Jouppi '90]</span></h3>
+      <ul class="small">
+        <li>On a miss, check the stream buffers for a match</li>
+        <li>Match → move the block into the cache</li>
+        <li>No match → <strong>allocate a new stream buffer</strong> and prefetch the continuation until it's full</li>
+      </ul>
+      <p class="src">Variants are widely deployed (Pentium, PowerPC, …).</p>
+    </div>
+    <div>
+      <h3>Harder in multiprocessors</h3>
+      <p class="small">Timeliness is harder; a prefetch that's too early may:</p>
+      <ul class="tiny">
+        <li>Be evicted before use, or evict a more useful block (uniprocessor)</li>
+        <li>Be <strong>invalidated by another processor</strong></li>
+        <li>Cause a <strong>downgrade</strong> on another processor's copy</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- AMD vs Intel example -->
+<section data-background-color="#ffffff">
+  <h2>Example: AMD Shanghai vs. Intel Nehalem</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Two contemporaries, two L3 inclusion choices:</p>
+      <ul class="small">
+        <li>AMD Shanghai L3 is <strong>NINE</strong>: inclusive would waste ~1/3 capacity; exclusive would need too much L2→L3 bandwidth</li>
+        <li>L3-miss latency: inclusive ≈ <strong>65 ns</strong> RT (go to memory) vs. NINE ≈ <strong>77 ns</strong> (probe L1s &amp; L2s first)</li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Bandwidth</span>Sustained L2 BW: <strong>31 GB/s</strong> (Intel) vs. <strong>21.5 GB/s</strong> (AMD) — likely tied to AMD's exclusive L2.</div>
+      <div class="callout"><span class="lbl">AMD compensates</span>Bigger L1 with more ports → L1 read BW <strong>80 GB/s</strong> (AMD) vs. <strong>41 GB/s</strong> (Intel).</div>
+    </div>
+  </div>
+  <aside class="notes">
+    AMD Shanghai uses a NINE (non-inclusive, non-exclusive) L3. Inclusive would incur too much wasted capacity (about 1/3); exclusive would require too much bandwidth (4 L2s feeding the L3). L3-miss latency: inclusive sends straight to the memory controller (65 ns round trip); NINE must probe all L1s and L2s first (77 ns round trip). Sustained L2 bandwidth is 31 GB/s Intel vs 21.5 GB/s AMD, likely related to AMD's exclusive L2, which AMD compensates for by making L1 large and adding more L1 ports — L1 read bandwidth 80 GB/s AMD vs 41 GB/s Intel.
+  </aside>
+</section>
+
+<!-- Cache vs scratchpad -->
+<section data-background-color="#ffffff">
+  <h2>Alternative View: Cache vs. Scratchpad</h2>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Cache</span>Placement &amp; replacement <strong>managed by hardware</strong>. Used by servers and general-purpose systems.</div>
+    <div class="callout"><span class="lbl">Scratchpad</span>Everything <strong>managed by software</strong>. Common in embedded systems.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Why scratchpad?</span>
+    It gives <strong>predictability</strong> of hits and misses — essential for guaranteeing <strong>real-time</strong> behavior, where a cache's variability is unacceptable.</div>
+</section>
+
+<!-- Latency vs throughput -->
+<section data-background-color="#ffffff">
+  <h2>Optimizing for Latency vs. Throughput</h2>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Latency-oriented (CPUs)</span>A miss <strong>stalls</strong> the processor — few independent instructions to hide it.
+      <ul class="tiny" style="margin-top:.3em">
+        <li>Small register file · deep cache hierarchy</li>
+        <li>Large last-level cache (LLC) · low memory BW</li>
+        <li>Latency-tolerant tricks (prefetching)</li>
+      </ul>
+    </div>
+    <div class="callout"><span class="lbl">Throughput-oriented (GPUs)</span>A miss is <strong>hidden by switching threads</strong> — many are ready.
+      <ul class="tiny" style="margin-top:.3em">
+        <li>Large register file (many threads) · shallow hierarchy</li>
+        <li>Small LLC · high memory BW</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Same idea, opposite knobs</span>
+    CPUs <em>avoid</em> stalls with big caches; GPUs <em>tolerate</em> them with massive thread-level parallelism and bandwidth. e.g. NVIDIA H100: small per-SM caches, huge register files, HBM bandwidth.</div>
+</section>
+
+<!-- Other topics -->
+<section data-background-color="#ffffff">
+  <h2>Other Cache Topics</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Pipelined access</span>Sequential vs. parallel tag–data lookups.</div>
+    <div class="callout"><span class="lbl">Way prediction</span>Guess the hitting way to save energy/latency.</div>
+    <div class="callout"><span class="lbl">Stack-distance profile</span>Model reuse to predict miss behavior.</div>
+  </div>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Nonblocking cache</span>Serve hits while misses are outstanding (hit-under-miss).</div>
+    <div class="callout"><span class="lbl">Write-back queue / write combining</span>Buffer and merge evicted dirty blocks.</div>
+  </div>
+</section>
+
+<!-- Review 5.2 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 5.2 — Review</h2>
+  <div class="qa">
+    <p class="q">1. Why does inclusion simplify handling an external coherence request?</p>
+    <div class="fragment"><div class="a">You only check the lower level. If the block isn't there, the upper level can't have it — so the upper level's tags aren't disturbed.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. In VIPT, why can the cache start the lookup before translation finishes?</p>
+    <div class="fragment"><div class="a">The page-offset bits are identical in VA and PA, so the index (taken from them) is available immediately; the TLB supplies the physical tag in parallel.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Which "C" does more associativity reduce, and which does a bigger cache reduce?</p>
+    <div class="fragment"><div class="a">More associativity → fewer <strong>conflict</strong> misses; bigger cache → fewer <strong>capacity</strong> misses.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 5.3 — MULTICORE CACHE ORGANIZATION
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 5.3</div>
+  <div class="mod-title">Multicore Cache Organization</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Separate <strong>physical</strong> (united / distributed / hybrid) from <strong>logical</strong> (private / shared) organization</li>
+      <li>Estimate min / max / avg access time for distributed caches, and compute AAT for private vs. shared</li>
+      <li>Explain <strong>address-to-tile hashing</strong>, <strong>victim replication</strong>, and <strong>capacity sharing</strong></li>
+    </ul>
+  </div>
+</section>
+
+<!-- Single vs multicore -->
+<section data-background-color="#ffffff">
+  <h2>From Single Core to Multicore</h2>
+  <div class="cols">
+    <div>
+      <p>We've covered single-core multi-level caches — the ABCs, placement, replacement, inclusion.</p>
+      <p><strong>How do we organize caches across many cores?</strong></p>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Physical question</span>One large <strong>monolithic</strong> cache (uniformly slow) or many small <strong>tiles</strong>?</div>
+      <div class="callout"><span class="lbl">Logical question</span>Each core uses only its own cache, or are caches <strong>shared</strong>? Closer data vs. less fragmentation?</div>
+    </div>
+  </div>
+</section>
+
+<!-- Physical vs logical -->
+<section data-background-color="#ffffff">
+  <h2>Physical vs. Logical Organization</h2>
+  <div class="callout"><span class="lbl">The setup</span>You have <strong>N cores</strong> and <strong>M cache parts</strong> (think banks). How do you connect them?</div>
+  <div class="cols">
+    <div>
+      <h3>Physical (how connected)</h3>
+      <ul class="small">
+        <li><strong>United:</strong> cache is directly accessible by cores — <em>without</em> going through a network</li>
+        <li><strong>Distributed:</strong> each part is directly reachable by only <em>some</em> cores (others via a NoC)</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Logical (who may fill it)</h3>
+      <ul class="small">
+        <li><strong>Private:</strong> only one core may fill a given part with its data</li>
+        <li><strong>Shared:</strong> any core may fill any part</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Two independent axes</span>Physical ≠ logical. You can have shared-on-distributed, private-on-distributed, etc. — that combination is the whole design space.</div>
+</section>
+
+<!-- United -->
+<section data-background-color="#ffffff">
+  <h2>United Cache Organization</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 280 180" class="chart" style="max-width:330px">
+        <text x="140" y="14" text-anchor="middle" class="note">Power4 united L2 — crossbar</text>
+        <!-- L1s -->
+        <g fill="#dbeafe" stroke="#3b82f6">
+          <rect x="20" y="26" width="50" height="22" rx="4"/><rect x="80" y="26" width="50" height="22" rx="4"/>
+          <rect x="150" y="26" width="50" height="22" rx="4"/><rect x="210" y="26" width="50" height="22" rx="4"/>
+        </g>
+        <text x="45" y="41" text-anchor="middle" class="lbl">L1</text><text x="105" y="41" text-anchor="middle" class="lbl">L1</text>
+        <text x="175" y="41" text-anchor="middle" class="lbl">L1</text><text x="235" y="41" text-anchor="middle" class="lbl">L1</text>
+        <!-- crossbar -->
+        <rect x="20" y="78" width="240" height="22" fill="#fde68a" stroke="#f59e0b"/><text x="140" y="93" text-anchor="middle" class="lbl">crossbar</text>
+        <g class="axis"><line x1="45" y1="48" x2="45" y2="78"/><line x1="105" y1="48" x2="105" y2="78"/><line x1="175" y1="48" x2="175" y2="78"/><line x1="235" y1="48" x2="235" y2="78"/></g>
+        <!-- L2 banks -->
+        <g fill="#dcfce7" stroke="#22c55e">
+          <rect x="50" y="120" width="50" height="24" rx="4"/><rect x="115" y="120" width="50" height="24" rx="4"/><rect x="180" y="120" width="50" height="24" rx="4"/>
+        </g>
+        <text x="75" y="136" text-anchor="middle" class="lbl">L2</text><text x="140" y="136" text-anchor="middle" class="lbl">L2</text><text x="205" y="136" text-anchor="middle" class="lbl">L2</text>
+        <g class="axis"><line x1="75" y1="100" x2="75" y2="120"/><line x1="140" y1="100" x2="140" y2="120"/><line x1="205" y1="100" x2="205" y2="120"/></g>
+        <text x="140" y="166" text-anchor="middle" class="note">every L1 reaches every L2 bank</text>
+      </svg>
+    </div>
+    <div>
+      <ul class="small">
+        <li>Crossbar connects each L1 to <strong>all</strong> L2 banks</li>
+        <li>Bus count grows with cores (N) and banks (M); bus size scales with (N+M)</li>
+        <li>Access time scales with <strong>N²</strong></li>
+      </ul>
+      <div class="callout ok"><span class="lbl">+</span>Uniform latency to every bank.</div>
+      <div class="callout warn"><span class="lbl">−</span>Does <strong>not scale</strong> to many cores.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Distributed -->
+<section data-background-color="#ffffff">
+  <h2>Distributed Cache Organization</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 220 200" class="chart" style="max-width:280px">
+        <text x="110" y="14" text-anchor="middle" class="note">Tiled multicore — 2D mesh</text>
+        <!-- 3x3 tiles with routers -->
+        <g>
+          <!-- tiles -->
+          <g fill="#dbeafe" stroke="#3b82f6">
+            <rect x="22" y="26" width="40" height="34" rx="4"/><rect x="90" y="26" width="40" height="34" rx="4"/><rect x="158" y="26" width="40" height="34" rx="4"/>
+            <rect x="22" y="92" width="40" height="34" rx="4"/><rect x="90" y="92" width="40" height="34" rx="4"/><rect x="158" y="92" width="40" height="34" rx="4"/>
+            <rect x="22" y="158" width="40" height="34" rx="4"/><rect x="90" y="158" width="40" height="34" rx="4"/><rect x="158" y="158" width="40" height="34" rx="4"/>
+          </g>
+          <g fill="#fff" stroke="#64748b" font-size="9">
+            <rect x="36" y="62" width="14" height="12"/><rect x="104" y="62" width="14" height="12"/><rect x="172" y="62" width="14" height="12"/>
+            <rect x="36" y="128" width="14" height="12"/><rect x="104" y="128" width="14" height="12"/><rect x="172" y="128" width="14" height="12"/>
+          </g>
+          <!-- mesh links -->
+          <g class="axis">
+            <line x1="62" y1="43" x2="90" y2="43"/><line x1="130" y1="43" x2="158" y2="43"/>
+            <line x1="62" y1="109" x2="90" y2="109"/><line x1="130" y1="109" x2="158" y2="109"/>
+            <line x1="62" y1="175" x2="90" y2="175"/><line x1="130" y1="175" x2="158" y2="175"/>
+            <line x1="43" y1="60" x2="43" y2="92"/><line x1="111" y1="60" x2="111" y2="92"/><line x1="179" y1="60" x2="179" y2="92"/>
+            <line x1="43" y1="126" x2="43" y2="158"/><line x1="111" y1="126" x2="111" y2="158"/><line x1="179" y1="126" x2="179" y2="158"/>
+          </g>
+        </g>
+        <text x="110" y="44" text-anchor="middle" class="lbl" style="font-size:9px">core+L1/L2</text>
+      </svg>
+    </div>
+    <div>
+      <p class="small">Each cache tile is connected <strong>directly to its core</strong>, and <strong>indirectly</strong> to others through a NoC of routers and links.</p>
+      <div class="callout ok"><span class="lbl">+</span>Scalable — add tiles and routers.</div>
+      <div class="callout warn"><span class="lbl">−</span><strong>Non-uniform latency</strong>; high worst-case latency to far tiles.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Distributed design choice -->
+<section data-background-color="#ffffff">
+  <h2>Few Large Tiles vs. Many Small Tiles</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 280 160" class="chart">
+        <line class="axis" x1="45" y1="20" x2="45" y2="130"/>
+        <line class="axis" x1="45" y1="130" x2="260" y2="130"/>
+        <text x="150" y="152" text-anchor="middle" class="lbl">tile size →</text>
+        <text x="18" y="78" text-anchor="middle" class="lbl" transform="rotate(-90 18 78)">access time</text>
+        <!-- U-shaped curve -->
+        <path class="trend" d="M60,40 C100,110 160,118 160,118 C200,112 230,55 250,38"/>
+        <circle cx="160" cy="118" r="5" fill="#CC0000"/>
+        <text x="135" y="110" class="note" style="fill:#CC0000">optimum</text>
+        <text x="70" y="40" class="note">many small</text>
+        <text x="190" y="40" class="note">few large</text>
+      </svg>
+    </div>
+    <div>
+      <ul>
+        <li><strong>Many small tiles:</strong> each tile is fast, but more hops to reach the right one</li>
+        <li><strong>Few large tiles:</strong> fewer hops, but each tile is slow to access</li>
+        <li>The two effects trade off — there is an <strong>optimum tile size</strong></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- Hybrid -->
+<section data-background-color="#ffffff">
+  <h2>Hybrid Organization</h2>
+  <div class="cols">
+    <div>
+      <h3>United + distributed L2</h3>
+      <p class="small">Cluster cores around a shared local L2, link clusters by NoC.</p>
+      <div class="callout ok"><span class="lbl">+</span>Local L2 fast; remote L2 not too far; <strong>scales better</strong> than fully united.</div>
+    </div>
+    <div>
+      <h3>Add a level (distributed L2 + united L3)</h3>
+      <p class="small">Private/fast L2 per cluster, big shared L3 behind it.</p>
+      <div class="callout ok"><span class="lbl">+</span>Local L2 fast; L3 accessed <strong>infrequently</strong>.</div>
+      <div class="callout warn"><span class="lbl">−</span>L3 slow; multi-level complexity.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Exercise: distributed access times -->
+<section data-background-color="#f6f8fb">
+  <h2>Exercise: Distributed Access Times</h2>
+  <div class="callout"><span class="lbl">Q</span>Shared distributed caches. Estimate <strong>min, max, and avg</strong> access time. Design A = 2×2 tiles (12-cycle tile access); Design B = 3×3 tiles (8-cycle tile access). Routing/link = <strong>5 cycles/hop</strong>; a request needs a reply.</div>
+  <div class="cols">
+    <div class="fragment"><div class="callout"><span class="lbl">Design A (2×2)</span>
+      <ul class="tiny">
+        <li><strong>Min</strong> = 12 (local tile)</li>
+        <li><strong>Max</strong> = 12 + (2-hop req + 2-hop reply) = 12 + 4×5 = <strong>32</strong></li>
+        <li><strong>Avg</strong> ≈ (√4+1)/3 = 1 hop each way → 12 + 2×5 = <strong>22</strong></li>
+      </ul></div></div>
+    <div class="fragment"><div class="callout"><span class="lbl">Design B (3×3)</span>
+      <ul class="tiny">
+        <li><strong>Min</strong> = 8 (local tile)</li>
+        <li><strong>Max</strong> = 8 + (4-hop req + 4-hop reply) = 8 + 8×5 = <strong>48</strong></li>
+        <li><strong>Avg</strong> ≈ (√9+1)/3 = 4/3 hop each way → 12 + (8/3)×5 ≈ <strong>21.3</strong></li>
+      </ul></div></div>
+  </div>
+  <p class="src">More, smaller tiles lower the average (lower tile-access time) but raise the worst case (more hops).</p>
+</section>
+
+<!-- Logical organization -->
+<section data-background-color="#ffffff">
+  <h2>Logical Cache Organization</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Two combinations are intuitive and need no further discussion:</p>
+      <ul class="small">
+        <li><strong>Private on distributed</strong> — each core owns its local tile</li>
+        <li><strong>Shared on united</strong> — one logical cache, uniform access</li>
+      </ul>
+      <p><strong>The hard case: shared on distributed.</strong> Where does an address map? How do you look a block up?</p>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">New concept: distance locality</span>How <strong>far</strong> is data that lives at the <em>same</em> cache level? In a distributed cache, two L2 blocks can be 0 hops or many hops away.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Shared distributed approach 1 -->
+<section data-background-color="#ffffff">
+  <h2>Shared Distributed: Tile Associativity</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 280 170" class="chart">
+        <!-- direct mapped: addr -> hash -> one tile -->
+        <rect x="14" y="30" width="40" height="20" fill="#dbeafe" stroke="#3b82f6"/><text x="34" y="44" text-anchor="middle" class="lbl">addr</text>
+        <rect x="60" y="28" width="44" height="24" fill="#fde68a" stroke="#f59e0b"/><text x="82" y="44" text-anchor="middle" class="lbl">hash</text>
+        <line x1="54" y1="40" x2="60" y2="40" class="axis"/>
+        <g fill="#fff" stroke="#64748b"><rect x="118" y="22" width="20" height="60"/></g>
+        <rect x="118" y="42" width="20" height="14" fill="#fee2e2" stroke="#CC0000"/>
+        <line x1="104" y1="40" x2="118" y2="49" class="axis"/>
+        <text x="128" y="98" text-anchor="middle" class="note">1-tile assoc</text>
+        <text x="128" y="112" text-anchor="middle" class="note">(direct mapped)</text>
+        <!-- full assoc: addr spread over all tiles -->
+        <rect x="170" y="30" width="36" height="20" fill="#dbeafe" stroke="#3b82f6"/><text x="188" y="44" text-anchor="middle" class="lbl">addr</text>
+        <g fill="#fff" stroke="#64748b">
+          <rect x="216" y="34" width="12" height="14"/><rect x="230" y="34" width="12" height="14"/><rect x="244" y="34" width="12" height="14"/><rect x="258" y="34" width="12" height="14"/>
+        </g>
+        <line x1="206" y1="41" x2="216" y2="41" class="axis"/>
+        <text x="240" y="62" text-anchor="middle" class="note">full-tile assoc</text>
+        <text x="240" y="76" text-anchor="middle" class="note">(any tile)</text>
+      </svg>
+    </div>
+    <div>
+      <p class="small"><strong>Approach 1:</strong> treat the set of tiles like ways of a cache.</p>
+      <div class="callout"><span class="lbl">Direct-mapped tiles</span>Easy lookup, but data is <strong>likely far away</strong> — poor distance locality.</div>
+      <div class="callout warn"><span class="lbl">Fully-associative tiles</span>Better distance locality, but you must <strong>look up all tiles</strong>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Shared distributed approach 2 -->
+<section data-background-color="#ffffff">
+  <h2>Shared Distributed: Partitioned Shared</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 220 170" class="chart" style="max-width:260px">
+        <!-- two groups of 4 tiles -->
+        <rect x="14" y="24" width="90" height="100" rx="8" fill="#eef2ff" stroke="#6366f1" stroke-dasharray="4 3"/>
+        <rect x="116" y="24" width="90" height="100" rx="8" fill="#f0fdf4" stroke="#22c55e" stroke-dasharray="4 3"/>
+        <g fill="#dbeafe" stroke="#3b82f6">
+          <rect x="26" y="36" width="30" height="30" rx="4"/><rect x="62" y="36" width="30" height="30" rx="4"/>
+          <rect x="26" y="78" width="30" height="30" rx="4"/><rect x="62" y="78" width="30" height="30" rx="4"/>
+          <rect x="128" y="36" width="30" height="30" rx="4"/><rect x="164" y="36" width="30" height="30" rx="4"/>
+          <rect x="128" y="78" width="30" height="30" rx="4"/><rect x="164" y="78" width="30" height="30" rx="4"/>
+        </g>
+        <text x="59" y="140" text-anchor="middle" class="note">group 0 (shared)</text>
+        <text x="161" y="140" text-anchor="middle" class="note">group 1 (shared)</text>
+        <text x="110" y="156" text-anchor="middle" class="note">private across groups</text>
+      </svg>
+    </div>
+    <div>
+      <p class="small"><strong>Approach 2:</strong> partition tiles into groups — <strong>shared within a group, private across groups</strong>.</p>
+      <div class="callout ok"><span class="lbl">+</span>Limited (bounded) distance locality.</div>
+      <div class="callout ok"><span class="lbl">+</span>Less fragmentation than fully private.</div>
+      <div class="callout warn"><span class="lbl">−</span>Now <strong>thread scheduling</strong> matters — put threads near their group.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Exercise: private vs shared AAT -->
+<section data-background-color="#f6f8fb">
+  <h2>Exercise: Private vs. Shared AAT</h2>
+  <div class="callout"><span class="lbl">Q</span>Miss rates: local tile <strong>20%</strong>, combined tiles <strong>7%</strong>. A request travels a full ring loop; at each router forward it immediately and start a tag lookup; the hitting cache returns the reply. Miss penalty = <strong>200 cycles</strong>. Compute AAT for private vs. shared.</div>
+  <div class="cols">
+    <div class="fragment"><div class="callout"><span class="lbl">Private</span>
+      <ul class="tiny">
+        <li>Access time = 10</li>
+        <li>Miss rate = 20%</li>
+        <li>\(AAT = 10 + 0.20 \times 200 = \) <strong>50 cycles</strong></li>
+      </ul></div></div>
+    <div class="fragment"><div class="callout"><span class="lbl">Shared</span>
+      <ul class="tiny">
+        <li>Access time = 4×3 + 10 = 22 (ring traversal + tile)</li>
+        <li>Miss rate = 7%</li>
+        <li>\(AAT = 22 + 0.07 \times 200 = \) <strong>36 cycles</strong></li>
+      </ul></div></div>
+  </div>
+  <div class="callout takeaway fragment"><span class="lbl">Lesson</span>Shared pays more <em>per access</em> (distance) but its lower miss rate (less fragmentation) wins overall here.</div>
+</section>
+
+<!-- Comparison summary -->
+<section data-background-color="#ffffff">
+  <h2>Private vs. Shared vs. Hybrid</h2>
+  <table>
+    <tr><th>Organization</th><th>Distance locality</th><th>Fragmentation</th><th>Fix</th></tr>
+    <tr><td><strong>Shared</strong></td><td class="hi">worst</td><td>best</td><td>Victim Replication</td></tr>
+    <tr><td><strong>Private</strong></td><td>best</td><td class="hi">worst</td><td>Capacity Sharing</td></tr>
+    <tr><td><strong>Hybrid</strong></td><td colspan="2">customizable middle ground</td><td>tune partition size</td></tr>
+  </table>
+  <div class="callout takeaway"><span class="lbl">The tension, in one line</span>
+    Shared = data far but cache used efficiently; Private = data near but cache fragmented. The next two techniques attack each weakness.</div>
+</section>
+
+<!-- Address to tile mapping -->
+<section data-background-color="#ffffff">
+  <h2>Address-to-Tile Mapping (Hashing)</h2>
+  <div class="cols">
+    <div>
+      <p class="small">The hash determines how addresses are <strong>interleaved across tiles</strong>. A good one should:</p>
+      <ul class="small">
+        <li><strong>Spread</strong> addresses evenly over tiles</li>
+        <li>Not hurt <strong>set utilization</strong> within a tile</li>
+      </ul>
+      <div class="callout warn"><span class="lbl">Bad hashes</span>Block or page interleaving on the wrong bits can leave <strong>some sets unused</strong>.</div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Using upper bits</span>Blocks are <strong>not spread</strong> over tiles — a contiguous region all lands on one tile.</div>
+      <div class="callout ok"><span class="lbl">Bit randomization</span>XOR-style mixing of address bits spreads blocks across tiles <em>and</em> keeps sets busy.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Exercise: min associativity -->
+<section data-background-color="#f6f8fb">
+  <h2>Exercise: Minimum Associativity</h2>
+  <div class="callout"><span class="lbl">Q</span>64 tiles in a 2D mesh. Each L2 tile = <strong>512 KB</strong>, block = <strong>128 B</strong>. Addresses mapped to tiles by <strong>page interleaving</strong>, page = <strong>4 KB</strong>. What minimum set-associativity ensures <em>all</em> sets in each tile are used?</div>
+  <div class="cols">
+    <div class="fragment">
+      <ul class="small">
+        <li>Block offset: \(\log_2 128 = \mathbf{7}\) bits</li>
+        <li>Page offset: \(\log_2 4\text{KB} = \mathbf{12}\) bits</li>
+        <li>To use all sets, the <strong>tile index must not overlap the set index</strong>: \(7 + x \le 12 \Rightarrow x \le 5\)</li>
+        <li>So at most \(2^5 = \mathbf{32}\) sets per tile</li>
+      </ul>
+    </div>
+    <div class="fragment">
+      <div class="eq small">\( A = \dfrac{size}{block \times sets} = \dfrac{512\text{KB}}{128 \times 32} = 128 \)</div>
+      <div class="callout takeaway"><span class="lbl">Answer</span>Each tile must be at least <strong>128-way associative</strong> for full set utilization under page interleaving.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Victim replication -->
+<section data-background-color="#ffffff">
+  <h2>Victim Replication: Better Distance Locality</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Improves distance locality of <strong>shared</strong> distributed caches. Idea: use the <strong>local tile as a victim cache</strong>.</p>
+      <ul class="small">
+        <li>A remote block fetched into local L1/L2 — when evicted, place it in the <strong>local L3 tile</strong></li>
+        <li>On an L1/L2 miss, <strong>check the local L3 first</strong>; hit → restore to L1/L2; miss → query the <strong>home tile</strong> (where the hash maps it)</li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Coherence cost</span>An external request to L1/L2 must <strong>also be forwarded to the local L3 tile</strong>, since a replica may live there.</div>
+      <div class="callout"><span class="lbl">Net effect</span>Frequently-used remote data ends up <em>near</em> the core that uses it, shrinking effective distance.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Capacity sharing -->
+<section data-background-color="#ffffff">
+  <h2>Capacity Sharing: Less Fragmentation</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Reduces fragmentation in <strong>private</strong> caches. Idea: use <strong>remote caches to hold victims</strong> of the local cache.</p>
+      <ul class="small">
+        <li>On a local miss, the block may be found in a <strong>remote cache</strong></li>
+        <li>A core short on space "borrows" capacity from a core with room to spare</li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Open questions</span>
+        <ul class="tiny" style="margin:.3em 0 0 .9em">
+          <li>What if the remote cache holds <strong>more valuable</strong> blocks? Must find one with <em>excess</em> capacity.</li>
+          <li><strong>Replace into</strong> the remote cache or <strong>place into</strong> it? (evict vs. coexist)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- IBM Power7 -->
+<section data-background-color="#ffffff">
+  <h2>Case Study: IBM Power7 Caches</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 260 160" class="chart" style="max-width:320px">
+        <rect x="6" y="6" width="248" height="148" rx="10" fill="#0f172a"/>
+        <text x="130" y="22" text-anchor="middle" style="fill:#fff;font-weight:700;font-size:12px">Power7 die — 8 cores</text>
+        <!-- 8 core+L2 blocks around 8 L3 tiles -->
+        <g fill="#3b82f6">
+          <rect x="18" y="32" width="50" height="22" rx="3"/><rect x="72" y="32" width="50" height="22" rx="3"/><rect x="138" y="32" width="50" height="22" rx="3"/><rect x="192" y="32" width="50" height="22" rx="3"/>
+        </g>
+        <g fill="#22c55e">
+          <rect x="18" y="60" width="50" height="40" rx="3"/><rect x="72" y="60" width="50" height="40" rx="3"/><rect x="138" y="60" width="50" height="40" rx="3"/><rect x="192" y="60" width="50" height="40" rx="3"/>
+        </g>
+        <text x="130" y="84" text-anchor="middle" style="fill:#052e16;font-weight:700;font-size:10px">8 L3 tiles · 4MB eDRAM each</text>
+        <g fill="#3b82f6">
+          <rect x="18" y="106" width="50" height="22" rx="3"/><rect x="72" y="106" width="50" height="22" rx="3"/><rect x="138" y="106" width="50" height="22" rx="3"/><rect x="192" y="106" width="50" height="22" rx="3"/>
+        </g>
+        <text x="130" y="146" text-anchor="middle" style="fill:#cbd5e1;font-size:9px">core + private L1/L2 (blue)</text>
+      </svg>
+    </div>
+    <div>
+      <ul class="small">
+        <li><strong>1.2B</strong> transistors, large 567 mm² die</li>
+        <li><strong>8 cores × 4 threads</strong>, private L1/L2</li>
+        <li>L3 <strong>physically distributed</strong>: 8 tiles × 4 MB eDRAM</li>
+        <li>Latency <strong>6 ns local</strong>, <strong>30 ns remote</strong></li>
+        <li>L2 <strong>inclusive</strong>, L3 <strong>NINE</strong>; a new block fills L1, L2, and L3</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- Power7 fill/eviction -->
+<section data-background-color="#ffffff">
+  <h2>Power7 Fill / Eviction Paths</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 240 170" class="chart" style="max-width:300px">
+        <rect x="40" y="14" width="80" height="26" rx="5" fill="#fee2e2" stroke="#CC0000"/><text x="80" y="31" text-anchor="middle" class="lbl">L1</text>
+        <rect x="40" y="58" width="80" height="26" rx="5" fill="#fde68a" stroke="#f59e0b"/><text x="80" y="75" text-anchor="middle" class="lbl">L2</text>
+        <rect x="40" y="102" width="80" height="26" rx="5" fill="#dcfce7" stroke="#22c55e"/><text x="80" y="119" text-anchor="middle" class="lbl">local L3</text>
+        <rect x="150" y="102" width="80" height="26" rx="5" fill="#dcfce7" stroke="#22c55e" stroke-dasharray="4 3"/><text x="190" y="119" text-anchor="middle" class="lbl">remote L3</text>
+        <line x1="80" y1="40" x2="80" y2="58" class="axis"/><text x="86" y="52" class="note">silent</text>
+        <line x1="80" y1="84" x2="80" y2="102" class="axis"/><text x="86" y="96" class="note">1st type</text>
+        <line x1="120" y1="115" x2="150" y2="115" class="axis"/><text x="118" y="142" class="note">2nd type</text>
+      </svg>
+    </div>
+    <div>
+      <ul class="small">
+        <li><strong>L1 eviction</strong> is silent (data also in L2)</li>
+        <li><strong>L2 eviction</strong> may fill the local L3 — <strong>1st type</strong></li>
+        <li><strong>L3 eviction</strong> may fill a <strong>remote L3</strong> — <strong>2nd type</strong> (capacity sharing!)</li>
+      </ul>
+      <div class="callout"><span class="lbl">Local policy</span>Prefer evicting <strong>2nd-type</strong> over 1st-type; when a 1st-type block reaches LRU, <strong>convert it to 2nd-type</strong> (push to a remote tile rather than drop it).</div>
+    </div>
+  </div>
+</section>
+
+<!-- Review 5.3 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 5.3 — Review</h2>
+  <div class="qa">
+    <p class="q">1. Distinguish physical from logical cache organization.</p>
+    <div class="fragment"><div class="a"><strong>Physical</strong> = how cores connect to cache parts (united / distributed / hybrid). <strong>Logical</strong> = who may fill a part (private / shared). They are independent axes.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. Shared distributed caches have the worst what, and how is it fixed?</p>
+    <div class="fragment"><div class="a">Worst <strong>distance locality</strong> (data far away). Fixed by <strong>victim replication</strong> — keep evicted remote blocks in the local tile.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Private caches have the worst what, and how is it fixed?</p>
+    <div class="fragment"><div class="a">Worst <strong>fragmentation</strong> (wasted capacity). Fixed by <strong>capacity sharing</strong> — spill victims into remote caches with free space.</div></div>
+  </div>
+</section>
+
+<!-- Chapter summary -->
+<section data-background-color="#ffffff">
+  <h2>Chapter 5 — Big Picture</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">5.1 ABCs</span>A cache is sets × ways; address = tag/index/offset; pick associativity, replacement (pseudo-LRU), and write policy.</div>
+    <div class="callout"><span class="lbl">5.2 More</span>Inclusion vs. NINE vs. exclusion, split/multi-banked, VIPT, the 3 C's, AMAT, and prefetching.</div>
+    <div class="callout"><span class="lbl">5.3 Multicore</span>United/distributed/hybrid × private/shared; hashing, victim replication, capacity sharing.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">One sentence</span>
+    <strong>Caches exploit locality; in a multicore the cache is scattered across the die, so every choice trades the distance to data against wasted capacity.</strong> Chapter 6 builds coherence on top of these organizations.</div>
+  <p class="center muted small">Next up → <strong>Chapter 6:</strong> keeping all those cached copies consistent — cache coherence.</p>
+</section>
+
+</div>
+
+<!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 5 — Memory Hierarchy Organization</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.04,
+    minScale: 0.2, maxScale: 1.6,
+    center: false,                 // top-align content so the NC State header bar sits at the slide top
+    hash: true, slideNumber: 'c/t', history: true,
+    transition: 'slide', transitionSpeed: 'fast',
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      {left:'\\(', right:'\\)', display:false},
+      {left:'$$', right:'$$', display:true}
+    ]},
+  });
+</script>
+</body>
+</html>

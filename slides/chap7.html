@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSC/ECE 506 · Chapter 7 — Bus-Based Cache Coherence</title>
+
+<!-- reveal.js core (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<!-- code highlighting + math -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+<!-- fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<!-- course theme -->
+<link rel="stylesheet" href="assets/theme.css?v=4">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============================ TITLE ============================ -->
+<section class="title-slide" data-background-color="#ffffff">
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <h1>Chapter 7</h1>
+  <div class="sub">Bus-Based Coherent Multiprocessors — Cache Coherence</div>
+  <div class="meta">
+    Fall Semester · Based on Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em><br>
+    <span class="muted">Use ← → to navigate · <strong>S</strong> for speaker notes · <strong>F</strong> fullscreen · <strong>ESC</strong> overview</span>
+  </div>
+  <aside class="notes">
+    Chapter 7 is the heart of shared-memory multiprocessing: how do we keep multiple private caches
+    consistent when they cache the same memory line? We build up from the bus itself, to snooping,
+    to the family of invalidation protocols (write-through, MSI, MESI, MOESI), and finally the
+    Dragon update protocol and performance/design issues.
+  </aside>
+</section>
+
+<!-- Roadmap -->
+<section data-background-color="#ffffff">
+  <h2>Chapter Roadmap</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Module 7.1</span><strong>Bus-Based Multiprocessor</strong><br>
+      <span class="small">The bus interconnect, transactions, arbitration, and how <em>snoopers</em> are added to provide coherence.</span></div>
+    <div class="callout"><span class="lbl">Module 7.2</span><strong>Write-Through &amp; MSI</strong><br>
+      <span class="small">The coherence problem; write-through coherence; the canonical <strong>MSI</strong> write-back invalidation protocol.</span></div>
+    <div class="callout"><span class="lbl">Module 7.3</span><strong>MESI &amp; MOESI</strong><br>
+      <span class="small">Adding the <strong>Exclusive</strong> state to spare sequential programs, and the <strong>Owned</strong> state for dirty sharing.</span></div>
+  </div>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Module 7.4</span><strong>Dragon Update Protocol &amp; Performance</strong><br>
+      <span class="small">Write-<em>update</em> instead of invalidate; coherence misses (true vs. false sharing); multi-level coherence.</span></div>
+    <div class="callout takeaway"><span class="lbl">The thread that ties it together</span>
+      Private caches + one shared memory = the <strong>coherence problem</strong>. Every protocol here is one answer to: <em>how do writes propagate, and how are writes serialized?</em></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 7.1 — BUS-BASED MULTIPROCESSOR
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 7.1</div>
+  <div class="mod-title">Intro to Bus-Based Multiprocessor</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Describe a <strong>bus</strong> interconnect and its transactions, timing, and arbitration</li>
+      <li>Explain the trade-offs of <strong>shared cache</strong>, <strong>SMP</strong>, and <strong>distributed memory</strong></li>
+      <li>Say what a <strong>snooper</strong> is and where it sits, and state the two coherence requirements</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Shared memory organizations -->
+<section data-background-color="#ffffff">
+  <h2>Shared-Memory Multiprocessor Organizations</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">Shared cache</span><span class="small">One copy of data → <em>no coherence problem</em>, but contention, interference, and pressure on bandwidth/size. Restricted to a few cores.</span></div>
+      <div class="callout"><span class="lbl">SMP — symmetric multiprocessor</span><span class="small"><strong>Focus of this chapter.</strong> Private caches, shared memory, simplest interconnect = the <strong>bus</strong> (a ring is also possible).</span></div>
+      <div class="callout"><span class="lbl">Distributed memory</span><span class="small">Most scalable; deferred to Chapter 11.</span></div>
+      <p class="tiny muted">These organizations are not exclusive — real systems combine them.</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 250 230" class="chart" style="max-width:300px">
+        <!-- cores -->
+        <rect x="20" y="14" width="44" height="28" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="42" y="32" text-anchor="middle" class="lbl">P0</text>
+        <rect x="103" y="14" width="44" height="28" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="125" y="32" text-anchor="middle" class="lbl">P1</text>
+        <rect x="186" y="14" width="44" height="28" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="208" y="32" text-anchor="middle" class="lbl">P2</text>
+        <!-- private caches -->
+        <rect x="20" y="54" width="44" height="24" rx="4" fill="#fef3c7" stroke="#f59e0b"/><text x="42" y="70" text-anchor="middle" class="lbl">$</text>
+        <rect x="103" y="54" width="44" height="24" rx="4" fill="#fef3c7" stroke="#f59e0b"/><text x="125" y="70" text-anchor="middle" class="lbl">$</text>
+        <rect x="186" y="54" width="44" height="24" rx="4" fill="#fef3c7" stroke="#f59e0b"/><text x="208" y="70" text-anchor="middle" class="lbl">$</text>
+        <line x1="42" y1="42" x2="42" y2="54" class="axis"/><line x1="125" y1="42" x2="125" y2="54" class="axis"/><line x1="208" y1="42" x2="208" y2="54" class="axis"/>
+        <line x1="42" y1="78" x2="42" y2="120" class="axis"/><line x1="125" y1="78" x2="125" y2="120" class="axis"/><line x1="208" y1="78" x2="208" y2="120" class="axis"/>
+        <!-- bus -->
+        <rect x="14" y="120" width="222" height="16" rx="3" fill="#0f172a"/><text x="125" y="132" text-anchor="middle" style="fill:#fff;font-size:10px;font-weight:700">BUS</text>
+        <!-- memory -->
+        <line x1="125" y1="136" x2="125" y2="168" class="axis"/>
+        <rect x="80" y="168" width="90" height="30" rx="6" fill="#dcfce7" stroke="#22c55e"/><text x="125" y="187" text-anchor="middle" class="lbl">Main Memory</text>
+        <text x="125" y="218" text-anchor="middle" class="note">SMP: private caches + shared memory over a bus</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- The bus -->
+<section data-background-color="#ffffff">
+  <h2>The Bus: the Simplest Interconnect</h2>
+  <div class="cols">
+    <div>
+      <p class="small">A set of <strong>parallel wires</strong> shared among multiple devices, with lines for <strong>command</strong>, <strong>address</strong>, and <strong>data</strong> (which may be multiplexed onto the same wires).</p>
+      <ul class="small">
+        <li><strong>Bus master</strong> — a device that can inject data</li>
+        <li><strong>Slave</strong> — responds to a master</li>
+        <li><strong>Arbiter</strong> — decides which device gets the bus</li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">Advantages</span>Simple, low cost (often already present); versatile — new devices plug in easily; cost does <em>not</em> scale with system size.</div>
+      <div class="callout warn"><span class="lbl">Disadvantages</span>A shared <strong>communication bottleneck</strong>; <strong>not scalable</strong> — bus speed is limited by length and device count.</div>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">Memory bus vs. I/O bus</span>A <strong>memory bus</strong> knows all its devices at design time → short, fast, <em>synchronous</em> (one shared clock, known skew). An <strong>I/O bus</strong> must be standardized for unknown devices → longer, slower, often <em>asynchronous</em>.</div>
+</section>
+
+<!-- Bus transactions -->
+<section data-background-color="#ffffff">
+  <h2>Bus Transactions &amp; Timing</h2>
+  <div class="cols">
+    <div>
+      <p class="small">A uniprocessor bus transaction has <strong>three phases</strong>:</p>
+      <ol class="small">
+        <li><strong>Arbitration</strong> — win the bus</li>
+        <li><strong>Command / address</strong> — broadcast</li>
+        <li><strong>Data transfer</strong></li>
+      </ol>
+      <ul class="small">
+        <li><strong>Read</strong>: command + address, then wait for data</li>
+        <li><strong>Write</strong>: command + address + data</li>
+      </ul>
+      <p class="tiny muted">All devices observe the address; one device is responsible for responding.</p>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Synchronous</span><span class="small">All devices share one clock; timing is pre-determined. The bus must be <em>short</em> or run slow (clock-skew limit).</span></div>
+      <div class="callout"><span class="lbl">Asynchronous</span><span class="small">Independent clocks; timing established by a <strong>handshaking</strong> protocol. More flexible, slower.</span></div>
+      <div class="callout takeaway"><span class="lbl">Builds on the uniprocessor</span>Bus-based MPs reuse two uniprocessor fundamentals: <strong>bus transactions</strong> and the <strong>per-line cache state machine</strong>. Coherence <em>extends</em> both.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Design choices -->
+<section data-background-color="#ffffff">
+  <h2>Bus Design Choices</h2>
+  <table>
+    <tr><th>Choice</th><th>Options &amp; trade-off</th></tr>
+    <tr><td>Address/data lines</td><td><strong>Separate</strong> (expensive) vs. <strong>multiplexed</strong> (cheaper, longer latency)</td></tr>
+    <tr><td>Data line width</td><td>Wider → more pins (matters for off-chip buses)</td></tr>
+    <tr><td>Transfer size</td><td><strong>Single word</strong> (simple) vs. <strong>multiple words</strong> (less overhead)</td></tr>
+    <tr><td>Prioritization</td><td><strong>Critical-word-first</strong>: send the requested word first</td></tr>
+    <tr><td>Bus masters</td><td><strong>One</strong> → no arbitration; <strong>multiple</strong> → need arbitration + priority</td></tr>
+    <tr><td class="hi">Sync vs. async</td><td class="hi">Sync = simple/fast/short; typically <strong>sync for memory bus, async for I/O bus</strong></td></tr>
+  </table>
+  <div class="callout"><span class="lbl">Why it matters for MPs</span>A multiprocessor has <em>many</em> bus masters (all the CPUs), so arbitration and master/slave logic are unavoidable.</div>
+</section>
+
+<!-- Atomic vs split transaction -->
+<section data-background-color="#ffffff">
+  <h2>Timing: Atomic vs. Split-Transaction Bus</h2>
+  <div class="cols">
+    <div class="center">
+      <svg viewBox="0 0 300 200" class="chart" style="max-width:330px">
+        <text x="150" y="14" text-anchor="middle" class="note" style="font-weight:700">Atomic — bus held the whole time</text>
+        <!-- transaction 1 -->
+        <rect x="20" y="26" width="40" height="20" rx="3" fill="#dbeafe" stroke="#3b82f6"/><text x="40" y="40" text-anchor="middle" class="tiny">Req</text>
+        <rect x="60" y="26" width="80" height="20" fill="#fee2e2" stroke="#ef4444"/><text x="100" y="40" text-anchor="middle" class="tiny">MemAccess</text>
+        <rect x="140" y="26" width="40" height="20" rx="3" fill="#dcfce7" stroke="#22c55e"/><text x="160" y="40" text-anchor="middle" class="tiny">Reply</text>
+        <!-- transaction 2 -->
+        <rect x="180" y="26" width="40" height="20" rx="3" fill="#dbeafe" stroke="#3b82f6"/><text x="200" y="40" text-anchor="middle" class="tiny">Req</text>
+        <rect x="220" y="26" width="60" height="20" fill="#fee2e2" stroke="#ef4444"/><text x="250" y="40" text-anchor="middle" class="tiny">MemAcc</text>
+        <text x="150" y="68" text-anchor="middle" class="tiny" style="fill:#dc2626">bus idle during memory access — wasted</text>
+
+        <text x="150" y="100" text-anchor="middle" class="note" style="font-weight:700">Split-Transaction — request &amp; reply decoupled</text>
+        <rect x="20" y="112" width="40" height="18" rx="3" fill="#dbeafe" stroke="#3b82f6"/><text x="40" y="125" text-anchor="middle" class="tiny">Req A</text>
+        <rect x="62" y="112" width="40" height="18" rx="3" fill="#dbeafe" stroke="#3b82f6"/><text x="82" y="125" text-anchor="middle" class="tiny">Req B</text>
+        <rect x="20" y="134" width="120" height="16" fill="#fee2e2" stroke="#ef4444"/><text x="80" y="146" text-anchor="middle" class="tiny">MemAccess A</text>
+        <rect x="62" y="152" width="120" height="16" fill="#fee2e2" stroke="#ef4444"/><text x="122" y="164" text-anchor="middle" class="tiny">MemAccess B</text>
+        <rect x="140" y="134" width="40" height="18" rx="3" fill="#dcfce7" stroke="#22c55e"/><text x="160" y="147" text-anchor="middle" class="tiny">Reply A</text>
+        <rect x="182" y="152" width="40" height="18" rx="3" fill="#dcfce7" stroke="#22c55e"/><text x="202" y="165" text-anchor="middle" class="tiny">Reply B</text>
+        <text x="150" y="188" text-anchor="middle" class="tiny" style="fill:#15803d">bus reused while memory works — overlapped</text>
+      </svg>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Split-transaction</span><span class="small">Decouple request from reply. Transactions must be <strong>tagged</strong>; a <strong>pending-transactions buffer</strong> tracks them; requires arbitration.</span></div>
+      <div class="callout ok"><span class="lbl">Adv</span>Higher bandwidth; tolerates higher memory latency.</div>
+      <div class="callout warn"><span class="lbl">Disadv</span>More complex → higher per-transaction latency.</div>
+      <p class="tiny muted">Split transactions get more attractive as memory-access latency grows.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Arbitration -->
+<section data-background-color="#ffffff">
+  <h2>Bus Arbitration</h2>
+  <p class="small">Deciding which master gets the bus — needed whenever there are multiple masters (multiple CPUs, split-transaction).</p>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Daisy chain</span><span class="small">A grant line runs from highest- to lowest-priority device.</span></div>
+      <div class="callout"><span class="lbl">Centralized</span><span class="small">Each device has a request line; an arbiter grants the bus (e.g. PCI).</span></div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Distributed self-selection</span><span class="small">Each device inspects the bus and decides whether to proceed.</span></div>
+      <div class="callout"><span class="lbl">Distributed w/ collision detection</span><span class="small">Optimistically transmit; back off and retry on a collision (e.g. Ethernet).</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Providing cache coherence -->
+<section data-background-color="#ffffff">
+  <h2>Providing Cache Coherence</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Processor-side</span><span class="small">Add a <strong>snooper</strong> to each node to watch all bus transactions. Cache controllers react by changing line states.</span></div>
+      <div class="callout"><span class="lbl">Memory-side</span><span class="small">The <strong>memory controller (MC)</strong> also snoops, deciding whether to read the line from memory and return it.</span></div>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Two correctness requirements</span>
+        <strong>1. Write propagation</strong> — a snooped write must reach other copies, either by <em>update</em> (write the new value into the copy) or <em>invalidate</em> (kill the copy so the next read re-fetches).<br><br>
+        <strong>2. Write serialization</strong> — the bus provides a single <em>global order</em> of writes; every snooper reacts in that bus order.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Snooper architecture -->
+<section data-background-color="#ffffff">
+  <h2>Where Snoopers Sit — Coherence Controller</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 270 230" class="chart" style="max-width:320px">
+        <!-- cores + cache + snooper -->
+        <g>
+          <rect x="22" y="12" width="44" height="24" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="44" y="29" text-anchor="middle" class="lbl">P0</text>
+          <rect x="113" y="12" width="44" height="24" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="135" y="29" text-anchor="middle" class="lbl">P1</text>
+          <rect x="204" y="12" width="44" height="24" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="226" y="29" text-anchor="middle" class="lbl">P2</text>
+          <rect x="18" y="48" width="52" height="24" rx="4" fill="#fef3c7" stroke="#f59e0b"/><text x="44" y="64" text-anchor="middle" class="lbl">cache</text>
+          <rect x="109" y="48" width="52" height="24" rx="4" fill="#fef3c7" stroke="#f59e0b"/><text x="135" y="64" text-anchor="middle" class="lbl">cache</text>
+          <rect x="200" y="48" width="52" height="24" rx="4" fill="#fef3c7" stroke="#f59e0b"/><text x="226" y="64" text-anchor="middle" class="lbl">cache</text>
+          <rect x="18" y="78" width="52" height="18" rx="3" fill="#fde68a" stroke="#CC0000" stroke-width="1.5"/><text x="44" y="91" text-anchor="middle" class="tiny" style="fill:#CC0000;font-weight:700">snoop</text>
+          <rect x="109" y="78" width="52" height="18" rx="3" fill="#fde68a" stroke="#CC0000" stroke-width="1.5"/><text x="135" y="91" text-anchor="middle" class="tiny" style="fill:#CC0000;font-weight:700">snoop</text>
+          <rect x="200" y="78" width="52" height="18" rx="3" fill="#fde68a" stroke="#CC0000" stroke-width="1.5"/><text x="226" y="91" text-anchor="middle" class="tiny" style="fill:#CC0000;font-weight:700">snoop</text>
+        </g>
+        <line x1="44" y1="36" x2="44" y2="48" class="axis"/><line x1="135" y1="36" x2="135" y2="48" class="axis"/><line x1="226" y1="36" x2="226" y2="48" class="axis"/>
+        <line x1="44" y1="96" x2="44" y2="120" class="axis"/><line x1="135" y1="96" x2="135" y2="120" class="axis"/><line x1="226" y1="96" x2="226" y2="120" class="axis"/>
+        <rect x="14" y="120" width="242" height="16" rx="3" fill="#0f172a"/><text x="135" y="132" text-anchor="middle" style="fill:#fff;font-size:10px;font-weight:700">BUS</text>
+        <line x1="135" y1="136" x2="135" y2="160" class="axis"/>
+        <rect x="92" y="160" width="86" height="20" rx="4" fill="#fde68a" stroke="#CC0000" stroke-width="1.5"/><text x="135" y="174" text-anchor="middle" class="tiny" style="fill:#CC0000;font-weight:700">MC + snoop</text>
+        <rect x="92" y="184" width="86" height="26" rx="6" fill="#dcfce7" stroke="#22c55e"/><text x="135" y="201" text-anchor="middle" class="lbl">Memory</text>
+        <line x1="135" y1="180" x2="135" y2="184" class="axis"/>
+      </svg>
+      <div class="src">A snooper at every cache and at the memory controller.</div>
+    </div>
+    <div>
+      <p class="small">A <strong>coherence controller</strong> is added to each node:</p>
+      <ul class="small">
+        <li>The <strong>snooper</strong> watches <em>all</em> bus transactions</li>
+        <li>If a transaction is relevant, it takes an action</li>
+        <li>A <strong>finite state machine (FSM)</strong> computes the line's new state</li>
+        <li>An <strong>outstanding-transaction table</strong> tracks pending (not-yet-completed) transactions</li>
+      </ul>
+      <div class="callout small"><span class="lbl">In short</span>Coherence = snoopers + an extended per-line FSM on top of the ordinary cache.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Review 7.1 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 7.1 — Review</h2>
+  <div class="qa">
+    <p class="q">1. What is a bus, and what properties make it attractive for a small-scale multiprocessor?</p>
+    <div class="fragment"><div class="a">A set of long shared wires with arbitration. It is simple, cheap, and extendable — you can plug in more processors as needed. But clock skew limits its scalability.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. What components are needed to build a bus-based multiprocessor?</p>
+    <div class="fragment"><div class="a">Snoopers (at each processor <em>and</em> at memory), plus modifications to the cache controller, tag array, and its FSM — additional states and state transitions for coherence.</div></div>
+  </div>
+  <p class="src">Click / press → to reveal each answer.</p>
+</section>
+
+<!-- ==================================================================
+     MODULE 7.2 — WRITE-THROUGH & MSI
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 7.2</div>
+  <div class="mod-title">Write-Through Coherence &amp; the MSI Protocol</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>State the <strong>coherence problem</strong> and the write-through coherence protocol</li>
+      <li>Read and draw the <strong>MSI</strong> state-transition diagram (processor- and bus-initiated)</li>
+      <li>Trace an access sequence through MSI and explain <em>invalidation</em> and <em>intervention</em></li>
+    </ul>
+  </div>
+</section>
+
+<!-- The coherence problem -->
+<section data-background-color="#ffffff">
+  <h2>The Coherence Problem</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 260 180" class="chart" style="max-width:300px">
+        <rect x="18" y="14" width="44" height="22" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="40" y="29" text-anchor="middle" class="lbl">P0</text>
+        <rect x="200" y="14" width="44" height="22" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="222" y="29" text-anchor="middle" class="lbl">P1</text>
+        <rect x="14" y="48" width="52" height="26" rx="4" fill="#fee2e2" stroke="#ef4444"/><text x="40" y="65" text-anchor="middle" class="tiny">X = <tspan font-weight="700">2</tspan></text>
+        <rect x="196" y="48" width="52" height="26" rx="4" fill="#fef3c7" stroke="#f59e0b"/><text x="222" y="65" text-anchor="middle" class="tiny">X = <tspan font-weight="700">1</tspan></text>
+        <line x1="40" y1="36" x2="40" y2="48" class="axis"/><line x1="222" y1="36" x2="222" y2="48" class="axis"/>
+        <line x1="40" y1="74" x2="40" y2="100" class="axis"/><line x1="222" y1="74" x2="222" y2="100" class="axis"/>
+        <rect x="14" y="100" width="234" height="14" rx="3" fill="#0f172a"/><text x="131" y="111" text-anchor="middle" style="fill:#fff;font-size:9px;font-weight:700">BUS</text>
+        <line x1="131" y1="114" x2="131" y2="134" class="axis"/>
+        <rect x="96" y="134" width="70" height="24" rx="5" fill="#dcfce7" stroke="#22c55e"/><text x="131" y="150" text-anchor="middle" class="tiny">Mem X=1</text>
+        <text x="131" y="174" text-anchor="middle" class="note" style="fill:#dc2626">P0 wrote X=2; P1 still reads stale X=1!</text>
+      </svg>
+    </div>
+    <div>
+      <p>With <strong>private caches</strong> over <strong>shared memory</strong>, the same line can sit in several caches. A write by one core makes the others <strong>stale</strong>.</p>
+      <div class="callout warn"><span class="lbl">The problem</span>Coherence is violated when a read can return a value <em>older</em> than the most recent write to that location.</div>
+      <p class="small">A coherence protocol enforces <strong>write propagation</strong> + <strong>write serialization</strong> using the snoopers from 7.1.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Write-through protocol -->
+<section data-background-color="#ffffff">
+  <h2>Coherence for Write-Through Caches</h2>
+  <div class="cols">
+    <div>
+      <p class="small">The simplest protocol. <strong>Assumptions:</strong> write <em>no-allocate</em>, write <em>invalidate</em>.</p>
+      <table>
+        <tr><th>Kind</th><th>Events</th></tr>
+        <tr><td>Processor</td><td><code class="inline">PrRd</code>, <code class="inline">PrWr</code></td></tr>
+        <tr><td>Snooped bus</td><td><code class="inline">BusRd</code>, <code class="inline">BusWr</code></td></tr>
+        <tr><td>Cache state</td><td><strong>Valid</strong>, <strong>Invalid</strong></td></tr>
+      </table>
+      <p class="small">Because writes go through to memory <em>and</em> the bus, a write <strong>invalidates all other caches</strong>.</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 220" class="chart" style="max-width:280px">
+        <!-- V state -->
+        <circle cx="120" cy="50" r="34" fill="#dcfce7" stroke="#22c55e" stroke-width="2.5"/><text x="120" y="56" text-anchor="middle" style="font-weight:800;font-size:18px;fill:#15803d">V</text>
+        <!-- I state -->
+        <circle cx="120" cy="170" r="34" fill="#fee2e2" stroke="#ef4444" stroke-width="2.5"/><text x="120" y="176" text-anchor="middle" style="font-weight:800;font-size:18px;fill:#b91c1c">I</text>
+        <!-- I->V on PrRd/BusRd -->
+        <path d="M95,148 C55,118 55,82 95,62" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#a7)"/>
+        <text x="36" y="110" text-anchor="middle" class="tiny" style="fill:#2563eb">PrRd /</text><text x="36" y="121" text-anchor="middle" class="tiny" style="fill:#2563eb">BusRd</text>
+        <!-- V->I on BusWr -->
+        <path d="M145,62 C185,82 185,118 145,148" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#a7)"/>
+        <text x="205" y="110" text-anchor="middle" class="tiny" style="fill:#CC0000">BusWr /</text><text x="205" y="121" text-anchor="middle" class="tiny" style="fill:#CC0000">(snoop)</text>
+        <!-- V self loop PrRd, PrWr/BusWr -->
+        <path d="M150,32 C190,8 200,55 150,46" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a7)"/>
+        <text x="120" y="12" text-anchor="middle" class="tiny">PrRd/- · PrWr/BusWr</text>
+        <defs><marker id="a7" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#475569"/></marker></defs>
+      </svg>
+      <div class="src">Write-through, write-invalidate: only Valid / Invalid.</div>
+    </div>
+  </div>
+  <aside class="notes">Modified line exists as V in only one cache; a clean line may be V in several. Invalid = invalidated, or simply not present.</aside>
+</section>
+
+<!-- Write-through problem -->
+<section data-background-color="#ffffff">
+  <h2>Problem with Write-Through</h2>
+  <div class="cols">
+    <div>
+      <div class="callout warn"><span class="lbl">High bus bandwidth</span><strong>Every write</strong> causes a write propagation onto the bus — even repeated writes to the same line by the same core.</div>
+      <p class="small">On a shared bus this saturates quickly as cores are added.</p>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">The fix → write-back</span>Use <strong>write-back caches</strong>: write hits stop at the cache, eliminating most bus write transactions. We only go to the bus when sharing actually requires it.</div>
+      <p class="small">That idea is the foundation of the <strong>MSI</strong> protocol — next.</p>
+    </div>
+  </div>
+</section>
+
+<!-- MSI basics -->
+<section data-background-color="#ffffff">
+  <h2>Basic MSI Write-Back Invalidation Protocol</h2>
+  <div class="cols">
+    <div>
+      <h3>Three states</h3>
+      <ul class="small">
+        <li><strong>Invalid (I)</strong> — not present / killed</li>
+        <li><strong>Shared (S)</strong> — ≥1 copy, memory is up-to-date</li>
+        <li><strong>Modified (M)</strong> — the <em>only</em> copy, dirty</li>
+      </ul>
+      <h3>Processor events</h3>
+      <p class="small"><code class="inline">PrRd</code> (read), <code class="inline">PrWr</code> (write)</p>
+    </div>
+    <div>
+      <h3>Bus transactions</h3>
+      <ul class="small">
+        <li><code class="inline">BusRd</code> — request a copy, <em>no</em> intent to modify</li>
+        <li><code class="inline">BusRdX</code> — request a copy <em>with</em> intent to modify (replaces BusWr)</li>
+        <li><code class="inline">Flush</code> — write the line out to memory / bus</li>
+      </ul>
+      <div class="callout small"><span class="lbl">Two key verbs</span><strong>Invalidation:</strong> Any → I. &nbsp; <strong>Intervention:</strong> M → S (a peer's read forces the owner to share + flush).</div>
+    </div>
+  </div>
+</section>
+
+<!-- MSI processor-initiated diagram -->
+<section data-background-color="#ffffff">
+  <h2>MSI — Processor-Initiated Transitions</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 320 260" class="chart" style="max-width:380px">
+        <defs><marker id="am" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker></defs>
+        <!-- States: M top, S left, I bottom -->
+        <circle cx="160" cy="40" r="32" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="160" y="47" text-anchor="middle" style="font-weight:800;font-size:18px;fill:#b91c1c">M</text>
+        <circle cx="55" cy="200" r="32" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="55" y="207" text-anchor="middle" style="font-weight:800;font-size:18px;fill:#1d4ed8">S</text>
+        <circle cx="265" cy="200" r="32" fill="#f1f5f9" stroke="#64748b" stroke-width="2.5"/><text x="265" y="207" text-anchor="middle" style="font-weight:800;font-size:18px;fill:#475569">I</text>
+        <!-- I -> S : PrRd/BusRd -->
+        <path d="M235,184 C170,150 120,150 78,178" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#am)"/>
+        <text x="160" y="150" text-anchor="middle" class="tiny" style="fill:#2563eb">PrRd / BusRd</text>
+        <!-- I -> M : PrWr/BusRdX -->
+        <path d="M252,172 C230,110 210,75 182,58" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#am)"/>
+        <text x="252" y="118" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr /</text><text x="252" y="129" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX</text>
+        <!-- S -> M : PrWr/BusRdX(BusUpgr) -->
+        <path d="M78,178 C110,120 130,82 142,62" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#am)"/>
+        <text x="78" y="112" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr /</text><text x="78" y="123" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX</text>
+        <!-- S self loop PrRd -->
+        <path d="M28,182 C-6,158 4,222 32,218" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#am)"/>
+        <text x="20" y="245" text-anchor="middle" class="tiny">PrRd/-</text>
+        <!-- M self loop PrRd,PrWr -->
+        <path d="M188,30 C228,4 240,52 190,48" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#am)"/>
+        <text x="160" y="10" text-anchor="middle" class="tiny">PrRd/- · PrWr/-</text>
+      </svg>
+      <div class="src">Solid = state; label = <em>event / bus action</em>.</div>
+    </div>
+    <div>
+      <ul class="small">
+        <li><strong>I → S</strong> on <code class="inline">PrRd</code> → issue <code class="inline">BusRd</code></li>
+        <li><strong>I → M</strong> on <code class="inline">PrWr</code> → issue <code class="inline">BusRdX</code></li>
+        <li><strong>S → M</strong> on <code class="inline">PrWr</code> → issue <code class="inline">BusRdX</code> (or the cheaper <code class="inline">BusUpgr</code>)</li>
+        <li><strong>S → S</strong> on <code class="inline">PrRd</code>: hit, no bus</li>
+        <li><strong>M → M</strong>: read/write hits, no bus</li>
+      </ul>
+      <div class="callout small"><span class="lbl">Cost of MSI</span>A read-then-write to a private line costs <strong>two</strong> bus transactions (BusRd then BusRdX/BusUpgr) — the weakness MESI fixes.</div>
+    </div>
+  </div>
+</section>
+
+<!-- MSI bus-initiated diagram -->
+<section data-background-color="#ffffff">
+  <h2>MSI — Bus-Initiated (Snooped) Transitions</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 320 260" class="chart" style="max-width:380px">
+        <defs><marker id="amb" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker></defs>
+        <circle cx="160" cy="40" r="32" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="160" y="47" text-anchor="middle" style="font-weight:800;font-size:18px;fill:#b91c1c">M</text>
+        <circle cx="55" cy="200" r="32" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="55" y="207" text-anchor="middle" style="font-weight:800;font-size:18px;fill:#1d4ed8">S</text>
+        <circle cx="265" cy="200" r="32" fill="#f1f5f9" stroke="#64748b" stroke-width="2.5"/><text x="265" y="207" text-anchor="middle" style="font-weight:800;font-size:18px;fill:#475569">I</text>
+        <!-- M -> S : BusRd / Flush (intervention) -->
+        <path d="M138,62 C108,100 85,140 68,172" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#amb)"/>
+        <text x="70" y="110" text-anchor="middle" class="tiny" style="fill:#16a34a">BusRd /</text><text x="70" y="121" text-anchor="middle" class="tiny" style="fill:#16a34a">Flush</text>
+        <!-- M -> I : BusRdX / Flush -->
+        <path d="M182,58 C212,95 235,140 252,172" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#amb)"/>
+        <text x="248" y="110" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX /</text><text x="248" y="121" text-anchor="middle" class="tiny" style="fill:#CC0000">Flush</text>
+        <!-- S -> I : BusRdX -->
+        <path d="M85,210 C150,232 210,232 240,214" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#amb)"/>
+        <text x="160" y="246" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX / -</text>
+        <!-- S self loop BusRd -->
+        <path d="M28,182 C-6,158 4,222 32,218" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#amb)"/>
+        <text x="14" y="248" text-anchor="middle" class="tiny">BusRd/-</text>
+      </svg>
+      <div class="src">Snooped transactions; M supplies data via Flush.</div>
+    </div>
+    <div>
+      <ul class="small">
+        <li><strong>M → S</strong> on snooped <code class="inline">BusRd</code> → <strong>Flush</strong> (intervention: a peer wants to read; downgrade and supply data)</li>
+        <li><strong>M → I</strong> on snooped <code class="inline">BusRdX</code> → <strong>Flush</strong> (peer wants to write; give up the line)</li>
+        <li><strong>S → I</strong> on snooped <code class="inline">BusRdX</code> (invalidate)</li>
+        <li><strong>S → S</strong> on snooped <code class="inline">BusRd</code>: stay shared</li>
+      </ul>
+      <div class="callout small"><span class="lbl">Memory's role</span>If a Flush happens, the MC can <strong>cancel its read</strong> — the dirty owner supplies the data (and memory is updated too).</div>
+    </div>
+  </div>
+</section>
+
+<!-- MSI walkthrough 1 -->
+<section data-background-color="#ffffff">
+  <h2>MSI Walkthrough — P3 Reads X</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 300 210" class="chart" style="max-width:360px">
+        <!-- P1 holds M, P3 reads -->
+        <rect x="14" y="12" width="44" height="22" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="36" y="27" text-anchor="middle" class="lbl">P1</text>
+        <rect x="232" y="12" width="44" height="22" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="254" y="27" text-anchor="middle" class="lbl">P3</text>
+        <rect x="10" y="46" width="56" height="26" rx="4" fill="#fee2e2" stroke="#CC0000"/><text x="38" y="63" text-anchor="middle" class="tiny">X=2 · <tspan font-weight="700" fill="#b91c1c">M</tspan></text>
+        <rect x="228" y="46" width="56" height="26" rx="4" fill="#f1f5f9" stroke="#64748b"/><text x="256" y="63" text-anchor="middle" class="tiny">—</text>
+        <line x1="36" y1="34" x2="36" y2="46" class="axis"/><line x1="254" y1="34" x2="254" y2="46" class="axis"/>
+        <line x1="38" y1="72" x2="38" y2="96" class="axis"/><line x1="256" y1="72" x2="256" y2="96" class="axis"/>
+        <rect x="10" y="96" width="276" height="14" rx="3" fill="#0f172a"/><text x="148" y="107" text-anchor="middle" style="fill:#fff;font-size:9px;font-weight:700">BUS</text>
+        <text x="200" y="92" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRd (rd &amp;X)</text>
+        <line x1="148" y1="110" x2="148" y2="132" class="axis"/>
+        <rect x="112" y="132" width="72" height="24" rx="5" fill="#dcfce7" stroke="#22c55e"/><text x="148" y="148" text-anchor="middle" class="tiny">Mem X=1</text>
+        <text x="148" y="178" text-anchor="middle" class="note" style="fill:#16a34a">P1 Flushes X=2 → MC cancels its read</text>
+        <text x="148" y="196" text-anchor="middle" class="note">Result: P1 M→S, P3 →S, memory updated to 2</text>
+      </svg>
+    </div>
+    <div>
+      <p class="small">P1 holds X dirty in <strong>M</strong> (X=2); memory still has X=1. P3 issues <code class="inline">PrRd</code>:</p>
+      <ol class="small">
+        <li>P3 puts <code class="inline">BusRd</code> on the bus</li>
+        <li>P1 snoops it: <strong>intervention</strong> — <code class="inline">Flush</code> X=2, transition <strong>M → S</strong></li>
+        <li>The MC sees the Flush and <strong>cancels its memory read</strong>; memory is updated to X=2</li>
+        <li>P3 receives X=2 and enters <strong>S</strong></li>
+      </ol>
+      <div class="callout small"><span class="lbl">Cache-to-cache</span>The dirty owner — not memory — supplies the freshest data.</div>
+    </div>
+  </div>
+</section>
+
+<!-- MSI example table -->
+<section data-background-color="#ffffff">
+  <h2>MSI Worked Example</h2>
+  <table class="small">
+    <tr><th>Action</th><th>P1</th><th>P2</th><th>P3</th><th>Bus</th><th>Supplier</th><th>Cost</th></tr>
+    <tr><td>R1</td><td class="hi">S</td><td>–</td><td>–</td><td>BusRd</td><td>Mem</td><td>40</td></tr>
+    <tr><td>W1</td><td class="hi">M</td><td>–</td><td>–</td><td>BusRdX</td><td>Mem</td><td>40</td></tr>
+    <tr><td>R3</td><td>S</td><td>–</td><td class="hi">S</td><td>BusRd, Flush</td><td>P1.$</td><td>20</td></tr>
+    <tr><td>W3</td><td>I</td><td>–</td><td class="hi">M</td><td>BusRdX</td><td>Mem</td><td>40</td></tr>
+    <tr><td>R1</td><td class="hi">S</td><td>–</td><td>S</td><td>BusRd, Flush</td><td>P3.$</td><td>20</td></tr>
+    <tr><td>R3</td><td>S</td><td>–</td><td class="hi">S</td><td>–</td><td>–</td><td>1</td></tr>
+    <tr><td>R2</td><td>S</td><td class="hi">S</td><td>S</td><td>BusRd</td><td>Mem</td><td>40</td></tr>
+  </table>
+  <div class="callout small"><span class="lbl">Cost model</span>Hit, no bus = <strong>1</strong> cycle · bus txn, data from peer cache = <strong>20</strong> · bus txn, data from memory = <strong>40</strong>.</div>
+</section>
+
+<!-- MSI Q&A -->
+<section data-background-color="#ffffff">
+  <h2>MSI — Subtle Points</h2>
+  <div class="qa">
+    <p class="q">What does the memory controller do?</p>
+    <div class="fragment"><div class="a">On snooped <strong>BusRd</strong> or <strong>BusRdX</strong> → read and supply data (unless a cache Flushes first). On snooped <strong>Flush</strong> → update main memory.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">On a BusRdX, if the block is M, why Flush it — we're about to overwrite it anyway?</p>
+    <div class="fragment"><div class="a">Writes may target <em>different words</em> within the block, so we must fetch the latest copy first. Also, BusRdX signals intent to write, but a read of the block may still follow.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">Writing to a block already Shared — what's more efficient than BusRdX?</p>
+    <div class="fragment"><div class="a"><strong>BusUpgr</strong>: the cache already has valid data, so it only needs to invalidate peers — no data transfer required.</div></div>
+  </div>
+</section>
+
+<!-- Review 7.2 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 7.2 — Review</h2>
+  <div class="qa">
+    <p class="q">1. Contrast the two protocols in this module: write-through and MSI.</p>
+    <div class="fragment"><div class="a"><strong>Write-through</strong> coherence is for write-through caches; <strong>MSI</strong> is for write-back caches (write hits stay in the cache, cutting bus traffic).</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. When is a written value propagated?</p>
+    <div class="fragment"><div class="a">Step 1: a write <em>invalidates</em> other cached copies. Step 2: a later read by a peer misses and reloads the new value — from memory (write-through) or from the peer cache that wrote it (MSI).</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 7.3 — MESI & MOESI
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 7.3</div>
+  <div class="mod-title">MESI and MOESI Protocols</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Explain why MSI penalizes sequential programs, and how the <strong>Exclusive</strong> state fixes it</li>
+      <li>Read the <strong>MESI</strong> diagram and the role of the <code class="inline">C</code> ("copy exists") bus signal</li>
+      <li>Explain <strong>dirty sharing</strong> and the <strong>Owned</strong> state in <strong>MOESI</strong></li>
+    </ul>
+  </div>
+</section>
+
+<!-- MESI motivation -->
+<section data-background-color="#ffffff">
+  <h2>MESI — Adding the Exclusive State</h2>
+  <div class="cols">
+    <div>
+      <div class="callout warn"><span class="lbl">MSI's flaw</span>A read-then-write sequence costs <strong>2 bus transactions</strong> — even when <em>no one else shares</em> the line (e.g. a sequential program). <code class="inline">BusRd</code> (I→S) then <code class="inline">BusRdX</code>/<code class="inline">BusUpgr</code> (S→M). Penalizing sequential code is unacceptable.</div>
+    </div>
+    <div>
+      <p class="small">Add a fourth state. The four MESI states:</p>
+      <ul class="small">
+        <li><strong>M</strong> odified — dirty, sole copy</li>
+        <li><strong>E</strong> xclusive — <em>only</em> this cache has a <strong>clean</strong> copy (matches memory)</li>
+        <li><strong>S</strong> hared — two or more caches may have copies</li>
+        <li><strong>I</strong> nvalid</li>
+      </ul>
+      <div class="callout small"><span class="lbl">I → E or I → S?</span>Decide with a wired-OR bus signal <code class="inline">C</code> = "copy exists," asserted by any cache that has the line in response to a <code class="inline">BusRd</code>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- MESI processor-initiated diagram -->
+<section data-background-color="#ffffff">
+  <h2>MESI — Processor-Initiated Transitions</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 340 270" class="chart" style="max-width:400px">
+        <defs><marker id="ap" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker></defs>
+        <!-- M top-left, E top-right, S bottom-left, I bottom-right -->
+        <circle cx="80" cy="48" r="30" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="80" y="55" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#b91c1c">M</text>
+        <circle cx="260" cy="48" r="30" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.5"/><text x="260" y="55" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#a16207">E</text>
+        <circle cx="80" cy="215" r="30" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="80" y="222" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#1d4ed8">S</text>
+        <circle cx="260" cy="215" r="30" fill="#f1f5f9" stroke="#64748b" stroke-width="2.5"/><text x="260" y="222" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#475569">I</text>
+        <!-- I -> E : PrRd / BusRd(!C) -->
+        <path d="M236,200 C200,160 200,95 234,68" fill="none" stroke="#ca8a04" stroke-width="2" marker-end="url(#ap)"/>
+        <text x="190" y="135" text-anchor="middle" class="tiny" style="fill:#a16207">PrRd / BusRd(!C)</text>
+        <!-- I -> S : PrRd / BusRd(C) -->
+        <path d="M232,210 C170,196 130,205 110,212" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#ap)"/>
+        <text x="170" y="240" text-anchor="middle" class="tiny" style="fill:#2563eb">PrRd / BusRd(C)</text>
+        <!-- I -> M : PrWr / BusRdX -->
+        <path d="M240,192 C160,120 120,90 96,72" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#ap)"/>
+        <text x="200" y="100" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr / BusRdX</text>
+        <!-- E -> M : PrWr / - -->
+        <path d="M232,42 C180,30 140,32 108,42" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#ap)"/>
+        <text x="170" y="20" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr / -</text>
+        <!-- S -> M : PrWr / BusUpgr -->
+        <path d="M80,185 C80,140 80,110 80,80" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#ap)"/>
+        <text x="80" y="135" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr /</text><text x="80" y="147" text-anchor="middle" class="tiny" style="fill:#CC0000">BusUpgr</text>
+        <!-- self loops: M PrRd/PrWr -->
+        <path d="M58,32 C24,8 30,58 56,52" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#ap)"/>
+        <text x="36" y="18" text-anchor="middle" class="tiny">PrRd/PrWr</text>
+        <!-- E PrRd -->
+        <path d="M282,32 C316,8 322,58 286,52" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#ap)"/>
+        <text x="300" y="18" text-anchor="middle" class="tiny">PrRd/-</text>
+        <!-- S PrRd -->
+        <path d="M58,231 C24,255 30,205 56,210" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#ap)"/>
+        <text x="34" y="258" text-anchor="middle" class="tiny">PrRd/-</text>
+      </svg>
+    </div>
+    <div>
+      <ul class="small">
+        <li><strong>I → E</strong> on <code class="inline">PrRd</code> when <code class="inline">C</code> not asserted (<em>no other copy</em>)</li>
+        <li><strong>I → S</strong> on <code class="inline">PrRd</code> when <code class="inline">C</code> asserted (someone shares)</li>
+        <li><strong>E → M</strong> on <code class="inline">PrWr</code>: <em>silent</em>, no bus transaction — the payoff</li>
+        <li><strong>S → M</strong> on <code class="inline">PrWr</code> → <code class="inline">BusUpgr</code></li>
+        <li><strong>I → M</strong> on <code class="inline">PrWr</code> → <code class="inline">BusRdX</code></li>
+      </ul>
+      <div class="callout small"><span class="lbl">The win</span>Read-then-write to a private line: <code class="inline">BusRd</code> (I→E), then E→M for <strong>free</strong>. One transaction, not two.</div>
+    </div>
+  </div>
+</section>
+
+<!-- MESI bus-initiated diagram -->
+<section data-background-color="#ffffff">
+  <h2>MESI — Bus-Initiated (Snooped) Transitions</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 340 270" class="chart" style="max-width:400px">
+        <defs><marker id="apb" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker></defs>
+        <circle cx="80" cy="48" r="30" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="80" y="55" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#b91c1c">M</text>
+        <circle cx="260" cy="48" r="30" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.5"/><text x="260" y="55" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#a16207">E</text>
+        <circle cx="80" cy="215" r="30" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="80" y="222" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#1d4ed8">S</text>
+        <circle cx="260" cy="215" r="30" fill="#f1f5f9" stroke="#64748b" stroke-width="2.5"/><text x="260" y="222" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#475569">I</text>
+        <!-- M -> S : BusRd / Flush(Opt) -->
+        <path d="M80,78 C80,120 80,150 80,185" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#apb)"/>
+        <text x="80" y="130" text-anchor="middle" class="tiny" style="fill:#16a34a">BusRd /</text><text x="80" y="142" text-anchor="middle" class="tiny" style="fill:#16a34a">Flush</text>
+        <!-- M -> I : BusRdX / Flush -->
+        <path d="M102,62 C170,108 210,160 242,196" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#apb)"/>
+        <text x="205" y="120" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX / Flush</text>
+        <!-- E -> S : BusRd / FlushOpt -->
+        <path d="M238,68 C170,120 130,165 100,196" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#apb)"/>
+        <text x="150" y="115" text-anchor="middle" class="tiny" style="fill:#16a34a">BusRd / FlushOpt</text>
+        <!-- E -> I : BusRdX / FlushOpt -->
+        <path d="M260,78 C260,120 260,150 260,185" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#apb)"/>
+        <text x="260" y="130" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX /</text><text x="260" y="142" text-anchor="middle" class="tiny" style="fill:#CC0000">FlushOpt</text>
+        <!-- S -> I : BusRdX/BusUpgr -->
+        <path d="M104,228 C150,248 200,248 236,230" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#apb)"/>
+        <text x="170" y="262" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX / BusUpgr</text>
+        <!-- S self loop BusRd -->
+        <path d="M58,231 C24,255 30,205 56,210" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#apb)"/>
+        <text x="32" y="258" text-anchor="middle" class="tiny">BusRd/-</text>
+      </svg>
+    </div>
+    <div>
+      <ul class="small">
+        <li><strong>M → S</strong> / <strong>E → S</strong> on snooped <code class="inline">BusRd</code> (a peer reads; downgrade)</li>
+        <li><strong>M → I</strong> / <strong>E → I</strong> / <strong>S → I</strong> on snooped <code class="inline">BusRdX</code> or <code class="inline">BusUpgr</code> (invalidate)</li>
+        <li>M must <strong>Flush</strong> (it's the only valid copy); E/S may use the optional <strong>FlushOpt</strong></li>
+      </ul>
+      <div class="callout small"><span class="lbl">Flush vs. FlushOpt</span><strong>Flush</strong> is mandatory (correctness). <strong>FlushOpt</strong> is optional — only for performance, betting that a peer cache is faster than memory. That premise is not always true.</div>
+    </div>
+  </div>
+</section>
+
+<!-- MESI example table -->
+<section data-background-color="#ffffff">
+  <h2>Illinois MESI — Worked Example</h2>
+  <table class="small">
+    <tr><th>Action</th><th>P1</th><th>P2</th><th>P3</th><th>Bus</th><th>Supplier</th><th>Cost</th></tr>
+    <tr><td>R1</td><td class="hi">E</td><td>–</td><td>–</td><td>BusRd</td><td>Mem</td><td>40</td></tr>
+    <tr><td>W1</td><td class="hi">M</td><td>–</td><td>–</td><td>–</td><td>–</td><td>1</td></tr>
+    <tr><td>R3</td><td>S</td><td>–</td><td class="hi">S</td><td>BusRd, Flush</td><td>P1.$</td><td>20</td></tr>
+    <tr><td>W3</td><td>I</td><td>–</td><td class="hi">M</td><td>BusUpgr</td><td>–</td><td>20</td></tr>
+    <tr><td>R1</td><td class="hi">S</td><td>–</td><td>S</td><td>BusRd, Flush</td><td>P3.$</td><td>20</td></tr>
+    <tr><td>R3</td><td>S</td><td>–</td><td class="hi">S</td><td>–</td><td>–</td><td>1</td></tr>
+    <tr><td>R2</td><td>S</td><td class="hi">S</td><td>S</td><td>BusRd, FlushOpt</td><td>P1/P3.$</td><td>20</td></tr>
+  </table>
+  <div class="callout small"><span class="lbl">Compare to MSI</span>R1→W1 now costs <strong>40 + 1</strong> (E lets the write be silent) instead of <strong>40 + 40</strong>. The Exclusive state saved a whole bus transaction.</div>
+</section>
+
+<!-- MESI implementation choices -->
+<section data-background-color="#ffffff">
+  <h2>Implementation Choice: Who Supplies Data?</h2>
+  <div class="cols">
+    <div>
+      <p class="small">On a miss to a line that is not in M, should <strong>memory</strong> or a <strong>peer cache</strong> supply the data?</p>
+      <ul class="small">
+        <li>Original <strong>Illinois MESI</strong>: a <em>cache</em> supplies it (FlushOpt), assuming cache &lt; memory latency</li>
+        <li>Not necessarily true; adds complexity</li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Complications</span><span class="small">How does memory know <em>not</em> to supply (must wait for caches)? Which cache supplies when several are valid (a selection algorithm)?</span></div>
+      <div class="callout ok"><span class="lbl">When it pays off</span><span class="small">Distributed memory: a <em>nearby</em> cache can be cheaper than distant memory — e.g. SMP nodes in Stanford DASH.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- MOESI motivation -->
+<section data-background-color="#ffffff">
+  <h2>MOESI — Allowing Dirty Sharing</h2>
+  <div class="cols">
+    <div>
+      <div class="callout warn"><span class="lbl">MESI's flaw</span>No <strong>dirty sharing</strong>: a shared block must be clean. So whenever a dirty block is read by a peer, MESI <strong>writes it back</strong> to memory — generating lots of memory traffic.</div>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">MOESI's fix</span>Allow a <strong>dirty block to be shared</strong>. One cache is designated the <strong>Owner (O)</strong> and is responsible for eventually writing it back. Others can evict silently.</div>
+      <p class="small">Used in <strong>AMD</strong> processors since the K7 (Athlon).</p>
+    </div>
+  </div>
+  <div class="callout small"><span class="lbl">Owner's job</span>When a read/write to the block is snooped, other (Shared) caches do nothing — the <strong>Owner supplies the block</strong> and carries the write-back responsibility.</div>
+</section>
+
+<!-- MOESI state diagram -->
+<section data-background-color="#ffffff">
+  <h2>MOESI — Five States</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 340 280" class="chart" style="max-width:400px">
+        <defs><marker id="ao" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker></defs>
+        <!-- M top, O center, E top-right, S bottom-left, I bottom-right -->
+        <circle cx="80" cy="46" r="28" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="80" y="53" text-anchor="middle" style="font-weight:800;font-size:15px;fill:#b91c1c">M</text>
+        <circle cx="270" cy="46" r="28" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.5"/><text x="270" y="53" text-anchor="middle" style="font-weight:800;font-size:15px;fill:#a16207">E</text>
+        <circle cx="175" cy="140" r="28" fill="#ffedd5" stroke="#ea580c" stroke-width="2.5"/><text x="175" y="147" text-anchor="middle" style="font-weight:800;font-size:15px;fill:#c2410c">O</text>
+        <circle cx="80" cy="234" r="28" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="80" y="241" text-anchor="middle" style="font-weight:800;font-size:15px;fill:#1d4ed8">S</text>
+        <circle cx="270" cy="234" r="28" fill="#f1f5f9" stroke="#64748b" stroke-width="2.5"/><text x="270" y="241" text-anchor="middle" style="font-weight:800;font-size:15px;fill:#475569">I</text>
+        <!-- I -> E (PrRd !C) -->
+        <path d="M270,206 C270,160 270,110 270,76" fill="none" stroke="#ca8a04" stroke-width="1.8" marker-end="url(#ao)"/>
+        <text x="298" y="150" text-anchor="middle" class="tiny" style="fill:#a16207">PrRd(!C)</text>
+        <!-- I -> S (PrRd C) -->
+        <path d="M244,238 C190,246 140,244 108,238" fill="none" stroke="#2563eb" stroke-width="1.8" marker-end="url(#ao)"/>
+        <text x="175" y="268" text-anchor="middle" class="tiny" style="fill:#2563eb">PrRd(C)</text>
+        <!-- I -> M (PrWr BusRdX) -->
+        <path d="M250,216 C170,150 120,90 96,68" fill="none" stroke="#CC0000" stroke-width="1.8" marker-end="url(#ao)"/>
+        <text x="208" y="135" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr/BusRdX</text>
+        <!-- E -> M (PrWr) -->
+        <path d="M244,42 C190,32 140,34 108,42" fill="none" stroke="#CC0000" stroke-width="1.8" marker-end="url(#ao)"/>
+        <text x="175" y="22" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr/-</text>
+        <!-- M -> O (BusRd / Flush, becomes owner of dirty shared) -->
+        <path d="M96,68 C120,95 140,112 158,122" fill="none" stroke="#16a34a" stroke-width="1.8" marker-end="url(#ao)"/>
+        <text x="100" y="108" text-anchor="middle" class="tiny" style="fill:#16a34a">BusRd/Flush</text>
+        <!-- S -> M (PrWr / BusUpgr) -->
+        <path d="M80,206 C80,160 80,110 80,76" fill="none" stroke="#CC0000" stroke-width="1.8" marker-end="url(#ao)"/>
+        <text x="50" y="150" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr/</text><text x="50" y="162" text-anchor="middle" class="tiny" style="fill:#CC0000">BusUpgr</text>
+        <!-- O -> S possible on losing ownership; O supplies on BusRd self -->
+        <path d="M152,158 C120,182 102,202 92,212" fill="none" stroke="#16a34a" stroke-width="1.8" marker-end="url(#ao)"/>
+        <text x="150" y="200" text-anchor="middle" class="tiny" style="fill:#16a34a">BusRd/Flush</text>
+      </svg>
+      <div class="src">O = dirty + shared; the owner supplies data and owes the write-back.</div>
+    </div>
+    <div>
+      <ul class="small">
+        <li><strong>E / I → M</strong> like MESI</li>
+        <li><strong>M → O</strong> on snooped <code class="inline">BusRd</code>: stay dirty but become the <strong>shared owner</strong> (memory <em>not</em> updated)</li>
+        <li>Peer enters <strong>S</strong> holding a dirty value — legal in MOESI</li>
+        <li><strong>O</strong> supplies data on snooped reads and remains responsible for write-back</li>
+      </ul>
+      <div class="callout small"><span class="lbl">Eviction rule</span>An <strong>S</strong> copy of a dirty block can be dropped silently. The <strong>O</strong> copy must be <em>written back</em> on eviction — unlike MSI/MESI where write-back happens only from M.</div>
+    </div>
+  </div>
+</section>
+
+<!-- MOESI walkthrough -->
+<section data-background-color="#ffffff">
+  <h2>MOESI Walkthrough — Dirty Sharing</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 300 200" class="chart" style="max-width:360px">
+        <rect x="14" y="12" width="44" height="22" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="36" y="27" text-anchor="middle" class="lbl">P1</text>
+        <rect x="232" y="12" width="44" height="22" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="254" y="27" text-anchor="middle" class="lbl">P3</text>
+        <rect x="8" y="46" width="60" height="26" rx="4" fill="#ffedd5" stroke="#ea580c"/><text x="38" y="63" text-anchor="middle" class="tiny">X=2 · <tspan font-weight="700" fill="#c2410c">O</tspan></text>
+        <rect x="226" y="46" width="60" height="26" rx="4" fill="#dbeafe" stroke="#2563eb"/><text x="256" y="63" text-anchor="middle" class="tiny">X=2 · <tspan font-weight="700" fill="#1d4ed8">S</tspan></text>
+        <line x1="36" y1="34" x2="36" y2="46" class="axis"/><line x1="254" y1="34" x2="254" y2="46" class="axis"/>
+        <line x1="38" y1="72" x2="38" y2="96" class="axis"/><line x1="256" y1="72" x2="256" y2="96" class="axis"/>
+        <rect x="10" y="96" width="276" height="14" rx="3" fill="#0f172a"/><text x="148" y="107" text-anchor="middle" style="fill:#fff;font-size:9px;font-weight:700">BUS</text>
+        <line x1="148" y1="110" x2="148" y2="132" class="axis"/>
+        <rect x="112" y="132" width="72" height="24" rx="5" fill="#dcfce7" stroke="#22c55e"/><text x="148" y="148" text-anchor="middle" class="tiny">Mem X=1 (stale)</text>
+        <text x="148" y="178" text-anchor="middle" class="note" style="fill:#c2410c">Memory not updated — P1 owns X=2 dirty</text>
+      </svg>
+    </div>
+    <div>
+      <p class="small">P1 had X in <strong>M</strong> (X=2). P3 reads X:</p>
+      <ol class="small">
+        <li>P1 Flushes X=2 to P3 but stays <strong>dirty</strong>, becoming the <strong>Owner</strong> (M→O)</li>
+        <li>P3 enters <strong>S</strong> with the dirty value</li>
+        <li><strong>Memory is NOT updated</strong> — that's the dirty-sharing win</li>
+      </ol>
+      <div class="callout small"><span class="lbl">On eviction</span>If P1 (Owner) evicts → must write X=2 back. If P3 (Shared) evicts → silent drop.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Review 7.3 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 7.3 — Review</h2>
+  <div class="qa">
+    <p class="q">1. How does MESI improve on MSI?</p>
+    <div class="fragment"><div class="a">A block that is read then written incurs only <strong>one</strong> bus transaction (not two), thanks to the <strong>Exclusive</strong> state — E → M is silent.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. What assumption underlies cache-to-cache transfer in MESI?</p>
+    <div class="fragment"><div class="a">That a <strong>peer cache can supply the block faster</strong> than outer memory. Not always true — hence FlushOpt is optional.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. How does MOESI improve on MESI?</p>
+    <div class="fragment"><div class="a"><strong>Dirty sharing</strong>: a dirty block may be shared as long as one cache keeps it in the <strong>Owner</strong> state, reducing Flushes to main memory.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 7.4 — DRAGON & PERFORMANCE
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 7.4</div>
+  <div class="mod-title">Dragon Update Protocol &amp; Coherence Performance</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Contrast write-<strong>update</strong> (Dragon) with write-<strong>invalidate</strong> protocols</li>
+      <li>Read the Dragon state diagram (E, Sc, Sm, M) and the <code class="inline">BusUpd</code> transaction</li>
+      <li>Define <strong>coherence misses</strong> — true vs. false sharing — and multi-level coherence</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Dragon basics -->
+<section data-background-color="#ffffff">
+  <h2>Dragon — a Write-Update Protocol</h2>
+  <div class="cols">
+    <div>
+      <p class="small"><strong>Four states</strong> (and no Invalid — if present it's valid; absent = "not present"):</p>
+      <ul class="small">
+        <li><strong>E</strong> (exclusive-clean): I and memory have it</li>
+        <li><strong>Sc</strong> (shared-clean): I + others, maybe memory; I'm <em>not</em> owner</li>
+        <li><strong>Sm</strong> (shared-modified): I + others, <em>not</em> memory; I'm the <strong>owner</strong></li>
+        <li><strong>M</strong> (modified): only I, dirty</li>
+      </ul>
+      <p class="tiny muted">At most one cache holds Sm; Sc and Sm coexist across caches.</p>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">New events</span><span class="small"><code class="inline">PrRdMiss</code>, <code class="inline">PrWrMiss</code> — actions when the block is not present.</span></div>
+      <div class="callout"><span class="lbl">New bus transaction</span><span class="small"><code class="inline">BusUpd</code> — broadcasts the <em>single word written</em> on the bus and <strong>updates</strong> other caches (instead of invalidating them).</span></div>
+      <div class="callout small"><span class="lbl">On replacement</span>Sc can be dropped silently; <strong>Sm must Flush</strong> (it's the owner).</div>
+    </div>
+  </div>
+</section>
+
+<!-- Dragon processor-initiated -->
+<section data-background-color="#ffffff">
+  <h2>Dragon — Processor-Initiated Transitions</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 340 280" class="chart" style="max-width:400px">
+        <defs><marker id="ad" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker></defs>
+        <!-- E top-left, M top-right, Sc bottom-left, Sm bottom-right -->
+        <circle cx="80" cy="50" r="30" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.5"/><text x="80" y="57" text-anchor="middle" style="font-weight:800;font-size:15px;fill:#a16207">E</text>
+        <circle cx="260" cy="50" r="30" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="260" y="57" text-anchor="middle" style="font-weight:800;font-size:15px;fill:#b91c1c">M</text>
+        <circle cx="80" cy="228" r="30" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="80" y="235" text-anchor="middle" style="font-weight:800;font-size:13px;fill:#1d4ed8">Sc</text>
+        <circle cx="260" cy="228" r="30" fill="#ffedd5" stroke="#ea580c" stroke-width="2.5"/><text x="260" y="235" text-anchor="middle" style="font-weight:800;font-size:13px;fill:#c2410c">Sm</text>
+        <!-- E -> M : PrWr/- -->
+        <path d="M110,50 C150,42 200,42 230,50" fill="none" stroke="#CC0000" stroke-width="1.8" marker-end="url(#ad)"/>
+        <text x="170" y="30" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr/-</text>
+        <!-- E -> Sc : PrRdMiss? Actually read by other -> handled bus side; here E->Sc on read with C? keep PrRd/- self -->
+        <!-- Sc -> Sm : PrWr/BusUpd(!C) -->
+        <path d="M110,228 C150,236 200,236 230,228" fill="none" stroke="#ea580c" stroke-width="1.8" marker-end="url(#ad)"/>
+        <text x="170" y="258" text-anchor="middle" class="tiny" style="fill:#ea580c">PrWr/BusUpd</text>
+        <!-- Sm -> M : PrWr/BusUpd(!C) (becomes sole) -->
+        <path d="M260,198 C260,160 260,110 260,82" fill="none" stroke="#CC0000" stroke-width="1.8" marker-end="url(#ad)"/>
+        <text x="296" y="145" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr/</text><text x="296" y="157" text-anchor="middle" class="tiny" style="fill:#CC0000">BusUpd(!C)</text>
+        <!-- Sc -> E : PrWr...; show I->E read miss entering: use PrRdMiss/BusRd(!C) from outside into E -->
+        <path d="M44,70 C18,100 18,180 50,212" fill="none" stroke="#ca8a04" stroke-width="1.8" marker-end="url(#ad)"/>
+        <text x="8" y="145" text-anchor="middle" class="tiny" style="fill:#a16207">PrRd/-</text>
+        <!-- self loops -->
+        <path d="M58,32 C26,8 30,58 56,52" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#ad)"/>
+        <text x="34" y="16" text-anchor="middle" class="tiny">PrRd/-</text>
+        <path d="M282,34 C314,10 318,60 286,54" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#ad)"/>
+        <text x="300" y="18" text-anchor="middle" class="tiny">PrRd/PrWr</text>
+        <path d="M52,238 C20,260 26,210 54,212" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#ad)"/>
+        <text x="30" y="262" text-anchor="middle" class="tiny">PrRd/-</text>
+      </svg>
+      <div class="src">No Invalid state. Writes broadcast a word via BusUpd.</div>
+    </div>
+    <div>
+      <ul class="small">
+        <li><strong>PrRdMiss</strong> → <code class="inline">BusRd</code>: enter <strong>E</strong> if no copy (<code class="inline">!C</code>), else <strong>Sc</strong></li>
+        <li><strong>PrWrMiss</strong> → <code class="inline">BusRd; BusUpd</code> → <strong>Sm</strong> if shared, else <strong>M</strong></li>
+        <li><strong>E → M</strong> on <code class="inline">PrWr</code>: silent</li>
+        <li><strong>Sc → Sm</strong> / <strong>Sm → Sm</strong> on <code class="inline">PrWr</code> → <code class="inline">BusUpd(C)</code> when others share</li>
+        <li>When <code class="inline">BusUpd(!C)</code> (no one shares) → go to <strong>M</strong></li>
+      </ul>
+      <div class="callout small"><span class="lbl">Key difference</span>A write <strong>updates</strong> peers in place — peers never get invalidated, so subsequent peer reads still <em>hit</em>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Dragon bus-initiated -->
+<section data-background-color="#ffffff">
+  <h2>Dragon — Bus-Initiated (Snooped) Transitions</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 340 280" class="chart" style="max-width:400px">
+        <defs><marker id="adb" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker></defs>
+        <circle cx="80" cy="50" r="30" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.5"/><text x="80" y="57" text-anchor="middle" style="font-weight:800;font-size:15px;fill:#a16207">E</text>
+        <circle cx="260" cy="50" r="30" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="260" y="57" text-anchor="middle" style="font-weight:800;font-size:15px;fill:#b91c1c">M</text>
+        <circle cx="80" cy="228" r="30" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="80" y="235" text-anchor="middle" style="font-weight:800;font-size:13px;fill:#1d4ed8">Sc</text>
+        <circle cx="260" cy="228" r="30" fill="#ffedd5" stroke="#ea580c" stroke-width="2.5"/><text x="260" y="235" text-anchor="middle" style="font-weight:800;font-size:13px;fill:#c2410c">Sm</text>
+        <!-- E -> Sc : BusRd/- -->
+        <path d="M70,78 C58,120 58,170 70,200" fill="none" stroke="#2563eb" stroke-width="1.8" marker-end="url(#adb)"/>
+        <text x="40" y="145" text-anchor="middle" class="tiny" style="fill:#2563eb">BusRd/-</text>
+        <!-- M -> Sm : BusRd/Flush -->
+        <path d="M260,80 C260,120 260,170 260,198" fill="none" stroke="#16a34a" stroke-width="1.8" marker-end="url(#adb)"/>
+        <text x="298" y="145" text-anchor="middle" class="tiny" style="fill:#16a34a">BusRd/Flush</text>
+        <!-- Sm -> Sm : BusUpd/Update (self) -->
+        <path d="M282,212 C314,188 318,238 286,232" fill="none" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#adb)"/>
+        <text x="300" y="200" text-anchor="middle" class="tiny" style="fill:#7c3aed">BusUpd/Upd</text>
+        <!-- Sm -> Sc : BusUpd/Update (loses owner when peer writes) -->
+        <path d="M230,236 C190,246 130,246 108,236" fill="none" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#adb)"/>
+        <text x="170" y="266" text-anchor="middle" class="tiny" style="fill:#7c3aed">BusUpd/Update</text>
+        <!-- Sm -> Sm BusRd/Flush self handled; Sm supplies data -->
+        <path d="M232,222 C195,210 150,180 120,150" fill="none" stroke="#16a34a" stroke-width="1.8" marker-end="url(#adb)"/>
+        <text x="195" y="170" text-anchor="middle" class="tiny" style="fill:#16a34a">BusRd/Flush</text>
+        <!-- Sc -> Sc BusRd/-, BusUpd/Update self loop -->
+        <path d="M52,238 C20,260 26,210 54,212" fill="none" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#adb)"/>
+        <text x="30" y="262" text-anchor="middle" class="tiny" style="fill:#7c3aed">BusUpd/Upd</text>
+      </svg>
+      <div class="src">BusUpd updates copies in place; owner (Sm/M) supplies via Flush.</div>
+    </div>
+    <div>
+      <ul class="small">
+        <li><strong>E → Sc</strong> / <strong>M → Sm</strong> on snooped <code class="inline">BusRd</code> (a peer read arrives; M Flushes and becomes owner)</li>
+        <li><strong>BusUpd / Update</strong>: any sharer applies the written word in place — no invalidation</li>
+        <li>A peer's write (<code class="inline">BusUpd</code>) makes the current <strong>Sm → Sc</strong> (ownership moves)</li>
+        <li><strong>Sm</strong> supplies data on snooped reads (cache-to-cache)</li>
+      </ul>
+      <div class="callout small"><span class="lbl">Contrast</span>vs. MSI/MESI a peer write here is a <strong>BusUpd</strong> (no invalidate) — what would have been a coherence <em>miss</em> becomes a hit.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Dragon example -->
+<section data-background-color="#ffffff">
+  <h2>Dragon — Worked Example</h2>
+  <table class="small">
+    <tr><th>Action</th><th>P1</th><th>P2</th><th>P3</th><th>Bus</th><th>Data from</th><th>Cost</th></tr>
+    <tr><td>R1</td><td class="hi">E</td><td>–</td><td>–</td><td>BusRd</td><td>Mem</td><td>40</td></tr>
+    <tr><td>W1</td><td class="hi">M</td><td>–</td><td>–</td><td>–</td><td>–</td><td>1</td></tr>
+    <tr><td>R3</td><td class="hi">Sm</td><td>–</td><td>Sc</td><td>BusRd</td><td>P1.$</td><td>20</td></tr>
+    <tr><td>W3</td><td>Sc</td><td>–</td><td class="hi">Sm</td><td>BusUpd</td><td>–</td><td>20</td></tr>
+    <tr><td>R1</td><td class="hi">Sc</td><td>–</td><td>Sm</td><td>–</td><td>–</td><td>1</td></tr>
+    <tr><td>R3</td><td>Sc</td><td>–</td><td class="hi">Sm</td><td>–</td><td>–</td><td>1</td></tr>
+    <tr><td>R2</td><td>Sc</td><td class="hi">Sc</td><td>Sm</td><td>BusRd</td><td>P3.$</td><td>20</td></tr>
+  </table>
+  <div class="callout small"><span class="lbl">Watch R1 after W3</span>Because W3 was a <strong>BusUpd</strong> (update, not invalidate), P1's copy is still valid — the later R1 is a <strong>1-cycle hit</strong>, where MSI/MESI would have taken a miss.</div>
+</section>
+
+<!-- Dragon implementation choices -->
+<section data-background-color="#ffffff">
+  <h2>Dragon — Implementation Choices</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Eliminate Sm?</span><span class="small">If <code class="inline">BusUpd</code> also updated memory (e.g. DEC Firefly) you wouldn't need Sm. Dragon assumes DRAM is too slow to update on every word.</span></div>
+      <div class="callout"><span class="lbl">Broadcast Sc eviction?</span><span class="small">Would let the last copy return to <strong>E</strong> (skip future updates). But the eviction transaction isn't on the critical path while a later update may be.</span></div>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Don't update locally too early</span><span class="small">A write hit must not update the local copy <em>before</em> the controller reaches the bus — doing so can break <strong>write serialization</strong>.</span></div>
+      <p class="small muted">Coherence/consistency concerns mirror the write-through case.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Coherence misses -->
+<section data-background-color="#ffffff">
+  <h2>Cache Coherence Performance — Coherence Misses</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Coherence miss</span>A miss on a block that was <strong>invalidated</strong> by a coherence event. Affects only <em>invalidation-based</em> protocols (Dragon's update protocol has none).</div>
+      <p class="small">Update-based protocols trade these away but increase <strong>conflict</strong> and <strong>capacity</strong> misses instead (they keep more lines alive).</p>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">True sharing</span><span class="small">Multiple threads genuinely share the <em>same</em> data item (byte/word). Inherent to the algorithm.</span></div>
+      <div class="callout warn"><span class="lbl">False sharing</span><span class="small">Threads touch <em>different</em> items that happen to live in the <em>same cache block</em>. An artifact of block granularity — fixable by padding/layout.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Cache parameter impact -->
+<section data-background-color="#ffffff">
+  <h2>Impact of Cache Parameters</h2>
+  <table>
+    <tr><th>Parameter</th><th>True-sharing misses</th><th>False-sharing misses</th></tr>
+    <tr><td>Larger cache size</td><td class="hi">increased</td><td class="hi">increased</td></tr>
+    <tr><td>Larger block size</td><td>decreased</td><td class="hi">increased</td></tr>
+    <tr><td>Larger associativity</td><td>unclear</td><td>unclear</td></tr>
+  </table>
+  <div class="callout"><span class="lbl">Reading the table</span>A bigger cache keeps more shared lines resident, so <em>more</em> sharing misses survive (fewer are masked by eviction). A bigger block helps <strong>true</strong> sharing (more useful data per fetch) but <strong>hurts false</strong> sharing (more unrelated items collide in one block).</div>
+</section>
+
+<!-- Prefetching -->
+<section data-background-color="#ffffff">
+  <h2>Prefetching &amp; Coherence Misses</h2>
+  <p class="small">Prefetching to a <strong>dirty</strong> block forces a <em>downgrade</em> at the owner, with several risks:</p>
+  <ul class="small">
+    <li>The prefetched block may <strong>evict a more useful block</strong> (inherent prefetch risk)</li>
+    <li>The prefetched block may be <strong>invalidated before it's used</strong></li>
+    <li>A subsequent <strong>write by the owner is delayed</strong> — it must re-invalidate copies first</li>
+  </ul>
+  <div class="callout warn"><span class="lbl">Timeliness matters more</span>In a multiprocessor, mistimed prefetching can hurt <strong>both</strong> the prefetching cache <em>and</em> the supplying cache — so prefetch timeliness matters far more than in a uniprocessor.</div>
+</section>
+
+<!-- Multi-level coherence -->
+<section data-background-color="#ffffff">
+  <h2>Multi-Level Cache Coherence</h2>
+  <div class="cols">
+    <div>
+      <h3>Downstream propagation</h3>
+      <ul class="small">
+        <li>If L2 caches are coherent, writes at <strong>L1 must reach L2</strong> — via write-through L1 <em>or</em> explicit write-notification with write-back L1</li>
+        <li>L2 may need to <strong>lump E/M together</strong> — it can't be sure of the L1 sub-state</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Upstream propagation</h3>
+      <ul class="small">
+        <li>An invalidation/intervention at <strong>L2 must propagate up to L1</strong> (if L1 may hold the block)</li>
+        <li>The <strong>inclusion property</strong> helps: if the block isn't in L2, no need to back-invalidate L1</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout small"><span class="lbl">Snoop filtering</span>Snoop filters (textbook §7.4.3) cut needless upstream snoops — a per-block presence summary lets a cache ignore irrelevant bus traffic.</div>
+</section>
+
+<!-- Review 7.4 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 7.4 — Review</h2>
+  <div class="qa">
+    <p class="q">1. How does Dragon differ from MSI / MESI / MOESI?</p>
+    <div class="fragment"><div class="a">Dragon uses <strong>write update</strong>: a written value is <em>immediately propagated</em> to peer caches (BusUpd), rather than invalidating them.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. What is a coherence miss, and what are its two types?</p>
+    <div class="fragment"><div class="a">A miss caused by a block being <strong>invalidated when a peer wrote it</strong> (only in invalidation protocols). Two types: <strong>true sharing</strong> (real read/write sharing) and <strong>false sharing</strong> (different bytes/words co-located in one block).</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. How is a write value propagated in multi-level caches?</p>
+    <div class="fragment"><div class="a">First <strong>downstream</strong> (write-through or write-notification to L2), then <strong>upstream</strong> (invalidate any caches that may hold the block).</div></div>
+  </div>
+</section>
+
+<!-- Chapter summary -->
+<section data-background-color="#ffffff">
+  <h2>Chapter 7 — Big Picture</h2>
+  <table class="small">
+    <tr><th>Protocol</th><th>States</th><th>Write policy</th><th>Key idea</th></tr>
+    <tr><td>Write-through</td><td>V, I</td><td>invalidate</td><td>simplest; high bus traffic</td></tr>
+    <tr><td>MSI</td><td>M, S, I</td><td>invalidate</td><td>write-back; read+write = 2 txns</td></tr>
+    <tr><td class="hi">MESI</td><td class="hi">M, E, S, I</td><td class="hi">invalidate</td><td class="hi">E spares sequential programs</td></tr>
+    <tr><td>MOESI</td><td>M, O, E, S, I</td><td>invalidate</td><td>dirty sharing via Owner (AMD)</td></tr>
+    <tr><td>Dragon</td><td>E, Sc, Sm, M</td><td><strong>update</strong></td><td>no coherence misses; more traffic</td></tr>
+  </table>
+  <div class="callout takeaway"><span class="lbl">One sentence</span>
+    Every snooping protocol enforces <strong>write propagation + write serialization</strong>; they differ only in how many states they track and whether a write <em>invalidates</em> or <em>updates</em> peers — trading bus traffic against miss rate.</div>
+  <p class="center muted small">These bus protocols don't scale past a few dozen cores → <strong>directory-based coherence</strong> for larger systems comes later.</p>
+</section>
+
+</div>
+
+<!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 7 — Bus-Based Cache Coherence</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.04,
+    minScale: 0.2, maxScale: 1.6,
+    center: false,                 // top-align content so the NC State header bar sits at the slide top
+    hash: true, slideNumber: 'c/t', history: true,
+    transition: 'slide', transitionSpeed: 'fast',
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      {left:'\\(', right:'\\)', display:false},
+      {left:'$$', right:'$$', display:true}
+    ]},
+  });
+</script>
+</body>
+</html>

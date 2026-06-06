@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSC/ECE 506 · Chapter 4 — Parallel Programming for Linked Data Structures</title>
+
+<!-- reveal.js core (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<!-- code highlighting + math -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+<!-- fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<!-- course theme -->
+<link rel="stylesheet" href="assets/theme.css?v=4">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============================ TITLE ============================ -->
+<section class="title-slide" data-background-color="#ffffff">
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <h1>Chapter 4</h1>
+  <div class="sub">Parallel Programming for Linked Data Structures</div>
+  <div class="meta">
+    Fall Semester · Based on Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em><br>
+    <span class="muted">Use ← → to navigate · <strong>S</strong> for speaker notes · <strong>F</strong> fullscreen · <strong>ESC</strong> overview</span>
+  </div>
+  <aside class="notes">
+    Chapter 4 is the pointer-chasing counterpart to the loop-based parallelism of the earlier
+    chapters. Linked data structures (lists, trees, graphs, hash tables) defeat ordinary loop
+    parallelization because following pointers creates a loop-carried dependence. We study three
+    angles: (4.1) why LDS resist parallelism and what serializability means for correct concurrent
+    operations, and (4.2) the lock-based strategies — among-readers, global lock, and fine-grain
+    locking — together with the three hazards fine-grain locking introduces.
+  </aside>
+</section>
+
+<!-- Roadmap -->
+<section data-background-color="#ffffff">
+  <h2>Chapter Roadmap</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Module 4.1</span><strong>LDS &amp; the Parallelism Problem</strong><br>
+      <span class="small">What linked structures are, why pointer chasing blocks loop parallelism, and what <em>serializability</em> requires of concurrent operations.</span></div>
+    <div class="callout"><span class="lbl">Module 4.2</span><strong>Locking Strategies</strong><br>
+      <span class="small">Among-readers, global lock, and fine-grain locking — plus the deadlock / dangling-traversal / deallocation hazards and richer lock types.</span></div>
+    <div class="callout"><span class="lbl">Through-line</span><strong>Concurrency vs. Complexity</strong><br>
+      <span class="small">Every step toward more parallelism costs programming effort. The art is buying the most concurrency for the least complexity.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The thread that ties it together</span>
+    Loops gave us cheap data parallelism; <strong>pointers take it away</strong>. To parallelize linked structures we shift from <em>loops</em> to <em>primitives</em>, and from "is it independent?" to "<strong>is it serializable?</strong>"</div>
+</section>
+
+<!-- ==================================================================
+     MODULE 4.1 — LDS & THE PARALLELISM PROBLEM
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 4.1</div>
+  <div class="mod-title">Linked Data Structures &amp; the Parallelism Problem</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Define a <strong>linked data structure</strong> and list its trade-offs</li>
+      <li>Explain why <strong>pointer chasing</strong> creates a loop-carried dependence</li>
+      <li>Apply <strong>traversal-vs-compute</strong> and <strong>structure-specific</strong> parallelization</li>
+      <li>State the <strong>serializability</strong> criterion for correct concurrent LDS operations</li>
+    </ul>
+  </div>
+</section>
+
+<!-- What is an LDS -->
+<section data-background-color="#ffffff">
+  <h2>Linked Data Structures (LDS)</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">Definition</span>
+        Data structures that rely on <strong>pointers to link the nodes</strong> that make up the structure.</div>
+      <p class="small">Examples everywhere in systems code:</p>
+      <ul class="small">
+        <li><strong>Linked lists</strong> — singly/doubly linked, skip lists, stacks, queues, circular queues</li>
+        <li><strong>Trees</strong> — binary search trees, red-black trees, B-trees</li>
+        <li><strong>Graphs</strong> · <strong>hash tables</strong> · and many more</li>
+      </ul>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 220 220" class="chart" style="max-width:260px">
+        <!-- linked list -->
+        <text x="10" y="20" class="note">List</text>
+        <g fill="#dbeafe" stroke="#3b82f6">
+          <rect x="10" y="28" width="34" height="20" rx="4"/>
+          <rect x="70" y="28" width="34" height="20" rx="4"/>
+          <rect x="130" y="28" width="34" height="20" rx="4"/>
+        </g>
+        <g class="axis"><line x1="44" y1="38" x2="68" y2="38"/><line x1="104" y1="38" x2="128" y2="38"/></g>
+        <!-- tree -->
+        <text x="10" y="84" class="note">Tree</text>
+        <g fill="#dcfce7" stroke="#22c55e">
+          <circle cx="110" cy="100" r="11"/>
+          <circle cx="80" cy="135" r="11"/><circle cx="140" cy="135" r="11"/>
+          <circle cx="60" cy="168" r="11"/><circle cx="100" cy="168" r="11"/>
+        </g>
+        <g class="axis"><line x1="103" y1="109" x2="87" y2="127"/><line x1="117" y1="109" x2="133" y2="127"/>
+          <line x1="73" y1="144" x2="65" y2="159"/><line x1="87" y1="144" x2="95" y2="159"/></g>
+        <!-- graph -->
+        <text x="10" y="196" class="note">Graph</text>
+        <g fill="#fef3c7" stroke="#f59e0b">
+          <circle cx="70" cy="200" r="9"/><circle cx="120" cy="195" r="9"/><circle cx="150" cy="210" r="9"/>
+        </g>
+        <g class="axis"><line x1="79" y1="199" x2="111" y2="196"/><line x1="128" y1="199" x2="142" y2="205"/><line x1="78" y1="204" x2="142" y2="209"/></g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Advantages & disadvantages -->
+<section data-background-color="#ffffff">
+  <h2>Why Use (or Avoid) an LDS?</h2>
+  <div class="cols">
+    <div class="callout ok"><span class="lbl">Advantages</span>
+      <ul class="small" style="margin:.3em 0 0 .9em">
+        <li><strong>Dynamic size</strong> — add/remove nodes as needed</li>
+        <li>No need to pre-allocate a maximum size</li>
+        <li>A node can be relocated/removed <strong>without disturbing other nodes' storage</strong></li>
+      </ul>
+    </div>
+    <div class="callout warn"><span class="lbl">Disadvantages</span>
+      <ul class="small" style="margin:.3em 0 0 .9em">
+        <li><strong>Sequential traversal</strong> dictated by the chain of pointers</li>
+        <li>Poor <strong>spatial locality</strong> — nodes need not be contiguous</li>
+        <li>Requires explicit memory <strong>allocation / deallocation</strong></li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The catch for parallelism</span>
+    The very thing that makes an LDS flexible — <strong>following pointers</strong> — is what makes it hard to parallelize.</div>
+</section>
+
+<!-- Declaration -->
+<section data-background-color="#ffffff">
+  <h2>Example: Linked-List Declaration</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">Node and list types</div>
+      <pre><code class="language-c" data-trim>
+typedef struct tagIntListNode {
+  int key;    /* unique for each node */
+  int data;
+  struct tagIntListNode *next;
+} IntListNode;
+typedef IntListNode *pIntListNode;
+
+typedef struct {
+  pIntListNode head;
+} IntList;
+typedef IntList *pIntList;
+</code></pre>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 230 140" class="chart" style="max-width:280px">
+        <g fill="#fff" stroke="#CC0000" stroke-width="1.5">
+          <rect x="20" y="40" width="48" height="34"/>
+          <rect x="68" y="40" width="48" height="34"/>
+          <rect x="116" y="40" width="40" height="34"/>
+        </g>
+        <text x="44" y="32" text-anchor="middle" class="lbl">key</text>
+        <text x="92" y="32" text-anchor="middle" class="lbl">data</text>
+        <text x="136" y="32" text-anchor="middle" class="lbl">next</text>
+        <path d="M136,74 L136,104" stroke="#CC0000" stroke-width="1.5" marker-end="url(#ar)"/>
+        <text x="136" y="124" text-anchor="middle" class="note">to next node</text>
+        <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="#CC0000"/></marker></defs>
+      </svg>
+      <div class="src"><code class="inline">pIntList</code> tracks the <strong>head</strong> (address of the first node).</div>
+    </div>
+  </div>
+</section>
+
+<!-- Traversal / loop-carried dependence -->
+<section data-background-color="#ffffff">
+  <h2>Traversal Creates a Loop-Carried Dependence</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">Sequential traversal</div>
+      <pre><code class="language-c" data-trim>
+p = pList->head;
+while (p != NULL) {
+  compute(p);       // the work
+  p = p->next;      // the traversal
+}
+</code></pre>
+      <ul class="small">
+        <li>The address of the next node is <strong>unknown until we dereference</strong> <code class="inline">p-&gt;next</code></li>
+        <li>Each iteration <em>depends on</em> the previous one → a <strong>loop-carried dependence</strong></li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Consequence</span>
+        We <strong>cannot</strong> hand the loop to <code class="inline">#pragma omp parallel for</code> — iterations are not independent.</div>
+      <p class="small muted">Compare to Chapter-1 loop parallelism: there, <code class="inline">a[i]</code> was computed from an index we already knew. Here the index <em>is</em> the result of the previous iteration.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Challenges -->
+<section data-background-color="#ffffff">
+  <h2>Challenges in LDS Parallelization</h2>
+  <p>Loop-carried dependence rules out loop-level parallelization. We must look at <strong>other venues</strong>:</p>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Venue 1</span><strong>Traversal vs. computation</strong><br>
+      <span class="small">Keep traversal sequential; run the per-node <code class="inline">compute()</code> work in parallel.</span></div>
+    <div class="callout"><span class="lbl">Venue 2</span><strong>Structure-specific</strong><br>
+      <span class="small">Exploit a node's multiple pointers (e.g. left/right subtrees of a tree).</span></div>
+    <div class="callout"><span class="lbl">Venue 3</span><strong>Algorithm-level</strong><br>
+      <span class="small">View the LDS as primitives (insert/delete/search) and parallelize the primitives. → Module 4.2</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Shift of mindset</span>
+    We stop asking "are loop iterations independent?" and start asking "<strong>which operations can safely overlap?</strong>"</div>
+</section>
+
+<!-- Traversal wrt computation -->
+<section data-background-color="#ffffff">
+  <h2>Venue 1 — Parallelize Compute, Not Traversal</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 360 200" class="chart">
+        <!-- traversal spine -->
+        <text x="20" y="20" class="note">traversal (sequential)</text>
+        <g fill="#fde2e2" stroke="#CC0000">
+          <rect x="20" y="30" width="70" height="26" rx="5"/>
+          <rect x="20" y="70" width="70" height="26" rx="5"/>
+          <rect x="20" y="110" width="70" height="26" rx="5"/>
+          <rect x="20" y="150" width="70" height="26" rx="5"/>
+        </g>
+        <text x="55" y="47" text-anchor="middle" class="lbl">p=p-&gt;next</text>
+        <text x="55" y="87" text-anchor="middle" class="lbl">p=p-&gt;next</text>
+        <text x="55" y="127" text-anchor="middle" class="lbl">p=p-&gt;next</text>
+        <text x="55" y="167" text-anchor="middle" class="lbl">p=p-&gt;next</text>
+        <g class="axis"><line x1="55" y1="56" x2="55" y2="70"/><line x1="55" y1="96" x2="55" y2="110"/><line x1="55" y1="136" x2="55" y2="150"/></g>
+        <!-- spawned tasks -->
+        <text x="240" y="20" class="note">compute() tasks (parallel)</text>
+        <g fill="#dbeafe" stroke="#3b82f6">
+          <rect x="150" y="30" width="120" height="22" rx="5"/>
+          <rect x="170" y="70" width="120" height="22" rx="5"/>
+          <rect x="150" y="110" width="120" height="22" rx="5"/>
+          <rect x="170" y="150" width="120" height="22" rx="5"/>
+        </g>
+        <text x="210" y="46" text-anchor="middle" class="lbl">Task 0: compute(p)</text>
+        <text x="230" y="86" text-anchor="middle" class="lbl">Task 1: compute(p)</text>
+        <text x="210" y="126" text-anchor="middle" class="lbl">Task 2: compute(p)</text>
+        <text x="230" y="166" text-anchor="middle" class="lbl">Task 3: compute(p)</text>
+        <g class="axis"><line x1="90" y1="43" x2="150" y2="41"/><line x1="90" y1="83" x2="170" y2="81"/>
+          <line x1="90" y1="123" x2="150" y2="121"/><line x1="90" y1="163" x2="170" y2="161"/></g>
+      </svg>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Idea</span>
+        One thread walks the list. At each node it <strong>spawns a task</strong> to do <code class="inline">compute(p)</code>.</div>
+      <ul class="small">
+        <li>Traversal stays sequential…</li>
+        <li>…but the <code class="inline">compute(p)</code> work runs in <strong>parallel</strong> across tasks</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- OpenMP tasks implementation -->
+<section data-background-color="#ffffff">
+  <h2>Venue 1 — OpenMP Implementation</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">single producer + tasks</div>
+      <pre><code class="language-c" data-trim>
+#pragma omp parallel
+{
+  #pragma omp single
+  {
+    p = head;
+    while (p != NULL) {
+      #pragma omp task firstprivate(p)
+      {
+        compute(p);   // runs on some thread
+      }
+      p = p->next;    // traversal continues
+    }
+  }
+}
+</code></pre>
+    </div>
+    <div>
+      <ul class="small">
+        <li><code class="inline">omp single</code> — one thread does the traversal</li>
+        <li><code class="inline">omp task</code> — each node's work becomes a unit of work for the team</li>
+        <li><code class="inline">firstprivate(p)</code> — each task captures <em>its own</em> node pointer</li>
+      </ul>
+      <div class="callout"><span class="lbl">Why <code class="inline">firstprivate</code>?</span>
+        <code class="inline">p</code> changes on the next loop iteration; the task must keep the value it had <strong>when spawned</strong>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Analysis venue 1 -->
+<section data-background-color="#ffffff">
+  <h2>Venue 1 — When Is It Worth It?</h2>
+  <div class="cols">
+    <div class="callout ok"><span class="lbl">Speedup when…</span>
+      <ul class="small" style="margin:.3em 0 0 .9em">
+        <li>Task size <strong>≫</strong> thread spawn &amp; management overhead</li>
+        <li>Task size <strong>≫</strong> per-node traversal time</li>
+      </ul>
+    </div>
+    <div class="callout warn"><span class="lbl">Otherwise not worth it</span>
+      <span class="small">If task size ≈ traversal time, the traversal thread is itself a bottleneck — <strong>max speedup ≈ 2×</strong>.</span></div>
+  </div>
+  <div class="callout"><span class="lbl">Rule of thumb</span>
+    Bigger per-node work amortizes the sequential traversal. Tiny <code class="inline">compute()</code> bodies don't pay for the task machinery.</div>
+</section>
+
+<!-- Structure-specific: tree -->
+<section data-background-color="#ffffff">
+  <h2>Venue 2 — Structure-Specific: Binary Tree</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Sequential recursive search</div>
+      <pre><code class="language-c" data-trim>
+int search_tree(pNode p, int key) {
+  int out_left, out_right;
+  if (p == NULL)  return 0;
+  if (p->key == key) return 1;
+  out_left  = search_tree(p->left,  key);
+  out_right = search_tree(p->right, key);
+  return (out_left | out_right);
+}
+</code></pre>
+    </div>
+    <div>
+      <p class="small">A tree node has <strong>two child pointers</strong>. The left and right subtree searches are <strong>independent</strong> — nothing in one depends on the other.</p>
+      <div class="callout"><span class="lbl">Opportunity</span>
+        Search the left and right subtrees <strong>in parallel</strong>, then combine.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Tree-specific parallel code -->
+<section data-background-color="#ffffff">
+  <h2>Venue 2 — Parallel Tree Search</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">tasks per subtree</div>
+      <pre><code class="language-c" data-trim>
+int search_tree(pNode p, int key) {
+  int out_left, out_right;
+  if (p == NULL)  return 0;
+  if (p->key == key) return 1;
+
+  #pragma omp task shared(out_left)
+  out_left  = search_tree(p->left,  key);
+
+  #pragma omp task shared(out_right)
+  out_right = search_tree(p->right, key);
+
+  #pragma omp taskwait
+  return (out_left | out_right);
+}
+/* called once inside omp single */
+</code></pre>
+    </div>
+    <div>
+      <ul class="small">
+        <li>One <code class="inline">omp task</code> for the <strong>left</strong> subtree</li>
+        <li>One <code class="inline">omp task</code> for the <strong>right</strong> subtree</li>
+        <li><code class="inline">omp taskwait</code> — wait for both before combining</li>
+      </ul>
+      <div class="callout"><span class="lbl">Recursion fans out</span>
+        Each recursive level can spawn more tasks, so parallelism grows down the tree.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Analysis venue 2 -->
+<section data-background-color="#ffffff">
+  <h2>Venue 2 — Analysis</h2>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Applicability</span>
+      Only works where a node has <strong>multiple outgoing pointers</strong> (out-degree &gt; 1) — trees, graphs. A plain linked list (out-degree 1) gets nothing here.</div>
+    <div class="callout warn"><span class="lbl">Speedup is unpredictable</span>
+      Depends on whether the generated tasks are <strong>large enough</strong> to overcome task fetch/spawn overhead, and on tree balance.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Venues 1 &amp; 2 in one line</span>
+    Both find parallelism in the <em>shape</em> of the computation. For general read/write workloads on a shared list we need the <strong>algorithm-level</strong> approach — Module 4.2.</div>
+</section>
+
+<!-- General approach: primitives -->
+<section data-background-color="#ffffff">
+  <h2>Venue 3 — LDS as Data Structure + Primitives</h2>
+  <div class="cols">
+    <div>
+      <p class="small">View the structure as a set of <strong>operations (primitives)</strong>:</p>
+      <ul class="small">
+        <li><strong>List:</strong> insert, delete, search, merge two lists…</li>
+        <li><strong>Tree:</strong> insert/delete, DFS, BFS, rebalance…</li>
+      </ul>
+      <p class="small">Then parallelize the <em>execution of primitives</em> with respect to one another.</p>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Pairs to reason about</span>
+        <ul class="small" style="margin:.3em 0 0 .9em">
+          <li>Insertion vs. Insertion</li>
+          <li>Insertion vs. Deletion</li>
+          <li>Insertion vs. Search</li>
+          <li>Deletion vs. Search · Deletion vs. Deletion · …</li>
+        </ul></div>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">New correctness question</span>
+    When two primitives overlap, what outcomes are <strong>acceptable</strong>? That is the question of <strong>serializability</strong>.</div>
+</section>
+
+<!-- Insertion / deletion code -->
+<section data-background-color="#ffffff">
+  <h2>The Two Primitives Up Close</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Sorted insert</div>
+      <pre><code class="language-c" data-trim>
+void Insert(pIntList pList, int key) {
+  pIntListNode prev = NULL, p, newNode;
+  newNode = IntListNode_Create(key);
+  /* find where to insert */
+  p = pList->head;
+  while (p != NULL && p->key < newNode->key) {
+    prev = p;
+    p = p->next;
+  }
+  newNode->next = p;            /* link forward  */
+  if (prev != NULL) prev->next = newNode;
+  else pList->head = newNode;   /* new head      */
+}
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label">Delete by key</div>
+      <pre><code class="language-c" data-trim>
+void Delete(pIntList pList, int key) {
+  pIntListNode prev = NULL, p;
+  p = pList->head;
+  while (p != NULL && p->key != key) {
+    prev = p;
+    p = p->next;
+  }
+  if (p == NULL) return;        /* not found */
+  if (prev == NULL) pList->head = p->next;
+  else prev->next = p->next;    /* unlink    */
+  free(p);
+}
+</code></pre>
+    </div>
+  </div>
+  <p class="src">Each is a <strong>traversal</strong> (find the spot) followed by a <strong>modification</strong> (relink pointers). That split drives Module 4.2.</p>
+</section>
+
+<!-- Serializability definition -->
+<section data-background-color="#ffffff">
+  <h2>Correctness Criterion: Serializability</h2>
+  <div class="callout"><span class="lbl">Serializability</span>
+    A parallel execution of a group of operations is <strong>serializable</strong> if there exists <em>some sequential</em> execution of those operations that produces an <strong>identical result</strong>.</div>
+  <div class="cols">
+    <div>
+      <p class="small">Run an insert and a delete in parallel. The outcome must equal either:</p>
+      <ul class="small">
+        <li>insert <em>then</em> delete, <strong>or</strong></li>
+        <li>delete <em>then</em> insert.</li>
+      </ul>
+      <p class="small"><strong>Nothing else</strong> counts as correct.</p>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Why this matters</span>
+        Serializability lets us reason about concurrency as if operations ran one-at-a-time — even though they actually overlap.</div>
+      <p class="small muted">Running example: a simple sorted list where each node holds a unique integer key.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Two insertions race -->
+<section data-background-color="#ffffff">
+  <h2>Serializability: Two Insertions</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 300 170" class="chart">
+        <g fill="#fff" stroke="#334155" stroke-width="1.5">
+          <rect x="20" y="60" width="44" height="28"/>
+          <rect x="120" y="20" width="44" height="28"/>
+          <rect x="120" y="100" width="44" height="28"/>
+          <rect x="220" y="60" width="44" height="28"/>
+        </g>
+        <text x="42" y="79" text-anchor="middle" class="lbl">3</text>
+        <text x="142" y="39" text-anchor="middle" class="lbl">4</text>
+        <text x="142" y="119" text-anchor="middle" class="lbl">5</text>
+        <text x="242" y="79" text-anchor="middle" class="lbl">6</text>
+        <g class="axis">
+          <line x1="64" y1="74" x2="118" y2="38"/>
+          <line x1="64" y1="74" x2="118" y2="114"/>
+        </g>
+        <text x="150" y="158" text-anchor="middle" class="note" style="fill:#CC0000">both link off node 3 → one insert is lost</text>
+      </svg>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">Serializable outcomes</span>
+        insert 4 then 5, or insert 5 then 4 — <strong>either way both 4 and 5 end up in the list.</strong></div>
+      <div class="callout warn"><span class="lbl">Incorrect race</span>
+        Both threads read node 3's <code class="inline">next</code>, both set <code class="inline">3-&gt;next</code> to their own node → <strong>node 4 is lost.</strong></div>
+    </div>
+  </div>
+</section>
+
+<!-- Insertion vs deletion / search summary -->
+<section data-background-color="#ffffff">
+  <h2>More Primitive Pairs</h2>
+  <table>
+    <tr><th>Pair</th><th>Serializable outcome</th><th>Incorrect race</th></tr>
+    <tr><td><strong>Insert vs. Delete</strong></td><td>insert 4 / delete 5 in either order → 4 in, 5 out</td><td class="hi">node 4 never inserted (lost)</td></tr>
+    <tr><td><strong>Insert vs. Search</strong></td><td>insert 5 / search 6 either order → 5 in, 6 found</td><td class="hi">6 maybe found, maybe not — <em>and the list is broken</em></td></tr>
+    <tr><td><strong>Delete vs. Search</strong></td><td>delete 5 / search 5 either order → 5 deleted; found-or-not both OK</td><td>(naturally serializable: 5 may be found or not)</td></tr>
+  </table>
+  <div class="callout"><span class="lbl">Note the asymmetry</span>
+    Delete-vs-Search is harmless because <em>either</em> answer matches a valid serial order. The dangerous cases are the ones where a race can <strong>corrupt the structure</strong>.</div>
+</section>
+
+<!-- Main observations -->
+<section data-background-color="#ffffff">
+  <h2>Main Observations</h2>
+  <div class="callout warn"><span class="lbl">Conflict condition</span>
+    Two operations on a <strong>common node</strong> where <strong>at least one writes</strong> can produce a non-serializable outcome.</div>
+  <ul class="small">
+    <li>Under <em>some</em> circumstances a serializable outcome may still occur despite such a conflict (e.g. delete-vs-search).</li>
+    <li>Conflicts can also occur between an LDS operation and <strong>memory management</strong> — allocation / deallocation (<code class="inline">free</code>).</li>
+  </ul>
+  <div class="callout takeaway"><span class="lbl">Looks familiar?</span>
+    "Common location + at least one write" is exactly a <strong>data race</strong>. The fix is the same family of tools: <strong>locks</strong> — Module 4.2.</div>
+</section>
+
+<!-- Review 4.1 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 4.1 — Review</h2>
+  <div class="qa">
+    <p class="q">1. Why can't we use <code class="inline">#pragma omp parallel for</code> to walk a linked list?</p>
+    <div class="fragment"><div class="a">Following <code class="inline">p = p-&gt;next</code> is a <strong>loop-carried dependence</strong> — the next address is unknown until the current node is dereferenced, so iterations aren't independent.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. When does the structure-specific (tree) approach apply?</p>
+    <div class="fragment"><div class="a">Only when a node has <strong>out-degree &gt; 1</strong> (multiple child pointers), so independent subtrees can be searched in parallel.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. State the serializability criterion.</p>
+    <div class="fragment"><div class="a">A parallel execution is correct if it produces a result <strong>identical to some sequential</strong> ordering of the same operations.</div></div>
+  </div>
+  <p class="src">Click / press → to reveal each answer.</p>
+</section>
+
+<!-- ==================================================================
+     MODULE 4.2 — LOCKING STRATEGIES
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 4.2</div>
+  <div class="mod-title">Parallelization &amp; Locking Strategies</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Compare <strong>among-readers</strong>, <strong>global-lock</strong>, and <strong>fine-grain</strong> locking</li>
+      <li>Reason about <strong>lock granularity</strong> trade-offs</li>
+      <li>Diagnose and fix the three fine-grain hazards: <strong>deadlock</strong>, <strong>dangling traversal</strong>, <strong>deallocation</strong></li>
+      <li>Use richer lock types (read/write, <strong>NoDelete</strong>) to recover concurrency</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Three strategies overview -->
+<section data-background-color="#ffffff">
+  <h2>Three Parallelization Strategies</h2>
+  <div class="cols c3">
+    <div class="callout ok"><span class="lbl">Among readers</span>
+      <span class="small">Read-only ops go in parallel; writers serialize. Very simple — but only helps if there are many readers.</span></div>
+    <div class="callout"><span class="lbl">Global lock</span>
+      <span class="small">Parallel traversal, then a <em>critical section</em> for the modification. Relatively simple; must re-validate after acquiring the lock.</span></div>
+    <div class="callout warn"><span class="lbl">Fine-grain lock</span>
+      <span class="small">One lock per node; lock only the nodes you touch. Highest concurrency — but deadlock, GC, and traversal hazards appear.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The spectrum</span>
+    Left to right: <strong>more concurrency, more complexity.</strong> Pick the cheapest strategy that delivers the concurrency you actually need.</div>
+</section>
+
+<!-- Among readers -->
+<section data-background-color="#ffffff">
+  <h2>Strategy 1 — Parallelization Among Readers</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small"><strong>Idea:</strong> operations that don't modify the list run in parallel; operations that modify it run sequentially.</p>
+      <ul class="small">
+        <li>A read-only operation acquires a <strong>read lock</strong></li>
+        <li>A write operation acquires a <strong>write lock</strong></li>
+      </ul>
+      <p class="small">Enforced with a <strong>lock compatibility table</strong>: a request is granted only if compatible with the lock already held.</p>
+    </div>
+    <div>
+      <table>
+        <tr><th>Held ↓ / Requested →</th><th>Read</th><th>Write</th></tr>
+        <tr><td><strong>Read lock</strong></td><td class="hi">Yes</td><td>No</td></tr>
+        <tr><td><strong>Write lock</strong></td><td>No</td><td>No</td></tr>
+      </table>
+      <div class="src">Only Read + Read is compatible — many readers, one writer at a time.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Among readers example code -->
+<section data-background-color="#ffffff">
+  <h2>Strategy 1 — Example</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Reader: search</div>
+      <pre><code class="language-c" data-trim>
+int IntList_Search(pIntList l, int x) {
+  acq_read_lock(l);
+  /* ... traverse, read only ... */
+  rel_read_lock(l);
+}
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label">Writer: insert</div>
+      <pre><code class="language-c" data-trim>
+void IntList_Insert(pIntList l, node *p) {
+  acq_write_lock(l);
+  /* ... modify the list ... */
+  rel_write_lock(l);
+}
+</code></pre>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">When it shines</span>
+    Read-mostly structures (lookups ≫ updates). Only <strong>one</strong> read/write lock guards the whole LDS — trivial to get right.</div>
+</section>
+
+<!-- Granularity trade-offs -->
+<section data-background-color="#ffffff">
+  <h2>Lock-Granularity Trade-Offs</h2>
+  <div class="cols">
+    <div class="callout ok"><span class="lbl">Coarse (1 lock for the whole LDS)</span>
+      <ul class="small" style="margin:.3em 0 0 .9em">
+        <li><strong>+</strong> Easy to program</li>
+        <li><strong>+</strong> No deadlock / livelock possible</li>
+        <li><strong>−</strong> Low concurrency</li>
+      </ul>
+    </div>
+    <div class="callout warn"><span class="lbl">Fine (1 lock per node / field)</span>
+      <ul class="small" style="margin:.3em 0 0 .9em">
+        <li><strong>+</strong> High concurrency</li>
+        <li><strong>−</strong> Harder to program; lock overhead</li>
+        <li>Often necessary for irregular (non-matrix) structures</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">A lock can guard…</span>
+    the whole structure, a single node, or even a single field within a node. Finer = more concurrency, more bookkeeping.</div>
+</section>
+
+<!-- Global lock approach -->
+<section data-background-color="#ffffff">
+  <h2>Strategy 2 — Global Lock Approach</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">Every operation has <strong>two logical steps</strong>:</p>
+      <ul class="small">
+        <li><strong>Traversal</strong> — find the insert spot / target / searched node</li>
+        <li><strong>Modification</strong> — relink pointers</li>
+      </ul>
+      <p class="small"><strong>Idea:</strong> do the traversal <strong>in parallel</strong>, but the modification inside a <strong>critical section</strong>.</p>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Pitfall</span>
+        Between traversal and entering the critical section, the list <strong>may have changed</strong>. The traversal's assumptions must be <strong>re-validated</strong>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Global lock code -->
+<section data-background-color="#ffffff">
+  <h2>Strategy 2 — Validate After Locking</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">insert with re-validation</div>
+      <pre><code class="language-c" data-trim>
+void IntList_Insert(pIntList l, node *p) {
+  /* perform traversal in parallel */
+  ...
+  acq_write_lock(l);
+  /* check validity:
+     are the nodes still there?
+     is the link still valid?      */
+  if (!still_valid) {
+    /* repeat the traversal */
+  }
+  /* if valid: modify the list */
+  ...
+  rel_write_lock(l);
+}
+</code></pre>
+    </div>
+    <div>
+      <ul class="small">
+        <li>Traversal runs <strong>without</strong> the lock → parallelism</li>
+        <li>Acquire lock, then <strong>re-check</strong> the nodes/links you depend on</li>
+        <li>If they changed, <strong>re-traverse</strong>; else commit the modification</li>
+      </ul>
+      <div class="callout"><span class="lbl">Trade-off</span>
+        More concurrent than one global write lock, but you pay for validation and possible re-traversal.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Fine grain intro -->
+<section data-background-color="#ffffff">
+  <h2>Strategy 3 — Fine-Grain Locking</h2>
+  <div class="cols">
+    <div>
+      <p>Associate a <strong>lock with each node</strong>. An operation locks only the nodes it needs.</p>
+      <p class="small">Read and write operations run in parallel <em>except</em> where they conflict on specific nodes.</p>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Key principles — what to lock</span>
+        <ul class="small" style="margin:.3em 0 0 .9em">
+          <li>Nodes that will be <strong>modified</strong></li>
+          <li>Nodes that are read and <strong>must remain unchanged</strong> for correctness</li>
+        </ul></div>
+    </div>
+  </div>
+  <div class="callout warn"><span class="lbl">Three new hazards</span>
+    Fine-grain locking buys concurrency but introduces <strong>deadlock</strong>, <strong>dangling traversal</strong>, and <strong>memory-deallocation</strong> bugs. We tackle each.</div>
+</section>
+
+<!-- Example 1: two deletions -->
+<section data-background-color="#ffffff">
+  <h2>Example 1 — Two Simultaneous Deletions</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 320 150" class="chart">
+        <g fill="#fff" stroke="#334155" stroke-width="1.5">
+          <rect x="10" y="55" width="56" height="30"/><rect x="56" y="55" width="14" height="30" fill="#3b82f6"/>
+          <rect x="100" y="55" width="56" height="30"/><rect x="146" y="55" width="14" height="30" fill="#3b82f6"/>
+          <rect x="190" y="55" width="56" height="30"/><rect x="236" y="55" width="14" height="30" fill="#3b82f6"/>
+          <rect x="280" y="55" width="34" height="30"/>
+        </g>
+        <text x="35" y="100" text-anchor="middle" class="lbl">U</text>
+        <text x="125" y="100" text-anchor="middle" class="lbl">V</text>
+        <text x="215" y="100" text-anchor="middle" class="lbl">X</text>
+        <text x="295" y="100" text-anchor="middle" class="lbl">Y</text>
+        <!-- delete arcs -->
+        <path d="M63,55 C90,20 170,20 197,52" fill="none" stroke="#CC0000" stroke-width="1.5" marker-end="url(#ar2)"/>
+        <path d="M153,85 C180,118 260,118 287,88" fill="none" stroke="#CC0000" stroke-width="1.5" marker-end="url(#ar2)"/>
+        <text x="130" y="18" text-anchor="middle" class="note" style="fill:#CC0000">P1 deletes V</text>
+        <text x="220" y="138" text-anchor="middle" class="note" style="fill:#CC0000">P2 deletes X</text>
+        <defs><marker id="ar2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="#CC0000"/></marker></defs>
+      </svg>
+      <div class="src">Without synchronization, deletion of X can fail.</div>
+    </div>
+    <div>
+      <p class="small">Which nodes must each thread lock?</p>
+      <ul class="small">
+        <li><strong>P1</strong> modifies U and V → lock <strong>U, V</strong>; depends on X surviving → lock <strong>X</strong></li>
+        <li><strong>P2</strong> modifies V and X → lock <strong>V, X</strong>; depends on Y surviving → lock <strong>Y</strong></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- Conflict table ex1 -->
+<section data-background-color="#ffffff">
+  <h2>Example 1 — Conflict Table</h2>
+  <div class="cols w-64">
+    <div>
+      <table>
+        <tr><th>Node</th><th>Locked by P1</th><th>Locked by P2</th></tr>
+        <tr><td>U</td><td>Yes</td><td></td></tr>
+        <tr><td>V</td><td class="hi">Yes</td><td class="hi">Yes</td></tr>
+        <tr><td>X</td><td class="hi">Yes</td><td class="hi">Yes</td></tr>
+        <tr><td>Y</td><td></td><td>Yes</td></tr>
+      </table>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Conflict at V and X</span>
+        Both threads need V and X. Only one acquires them first and completes; the other <strong>waits</strong>, then proceeds.</div>
+      <p class="small muted">Correct serialization — but acquiring two shared locks in two orders is exactly how deadlock sneaks in. Next slide.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Hazard 1: deadlock -->
+<section data-background-color="#ffffff">
+  <h2>Hazard 1 — Deadlock</h2>
+  <p class="small">If lock-acquisition order is uncoordinated, the two deletions can deadlock:</p>
+  <table>
+    <tr><th>P1</th><th>P2</th></tr>
+    <tr><td>Lock(V) ✓</td><td></td></tr>
+    <tr><td></td><td>Lock(X) ✓</td></tr>
+    <tr><td class="hi">Lock(X) — waits for P2…</td><td class="hi">Lock(V) — waits for P1…</td></tr>
+    <tr><td>… still waiting</td><td>… still waiting</td></tr>
+    <tr><td><strong>Deadlocked</strong></td><td><strong>Deadlocked</strong></td></tr>
+  </table>
+  <div class="callout warn"><span class="lbl">Cause</span>
+    A <strong>cycle</strong> in the "waits-for" graph: P1 holds V wants X; P2 holds X wants V.</div>
+</section>
+
+<!-- Example 2: deletion vs insertion -->
+<section data-background-color="#ffffff">
+  <h2>Example 2 — Deletion vs. Insertion</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 300 170" class="chart">
+        <g fill="#fff" stroke="#334155" stroke-width="1.5">
+          <rect x="10" y="40" width="50" height="28"/><rect x="50" y="40" width="12" height="28" fill="#3b82f6"/>
+          <rect x="95" y="40" width="50" height="28"/><rect x="135" y="40" width="12" height="28" fill="#3b82f6"/>
+          <rect x="180" y="40" width="50" height="28"/>
+          <rect x="95" y="110" width="50" height="28"/><rect x="135" y="110" width="12" height="28" fill="#3b82f6"/>
+        </g>
+        <text x="35" y="84" text-anchor="middle" class="lbl">U</text>
+        <text x="120" y="84" text-anchor="middle" class="lbl">V</text>
+        <text x="205" y="84" text-anchor="middle" class="lbl">Y</text>
+        <text x="120" y="154" text-anchor="middle" class="lbl">X</text>
+        <path d="M59,40 C90,12 150,12 182,38" fill="none" stroke="#CC0000" stroke-width="1.5" marker-end="url(#ar3)"/>
+        <path d="M147,124 C175,118 195,90 200,70" fill="none" stroke="#1d4ed8" stroke-width="1.5" marker-end="url(#ar3b)"/>
+        <text x="120" y="10" text-anchor="middle" class="note" style="fill:#CC0000">P1 deletes V</text>
+        <text x="120" y="168" text-anchor="middle" class="note" style="fill:#1d4ed8">P2 inserts X between V and Y</text>
+        <defs>
+          <marker id="ar3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#CC0000"/></marker>
+          <marker id="ar3b" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#1d4ed8"/></marker>
+        </defs>
+      </svg>
+      <div class="src">Without sync, the inserted X may disappear.</div>
+    </div>
+    <div>
+      <ul class="small">
+        <li><strong>P1</strong> modifies U, V → lock <strong>U, V</strong>; depends on Y → lock <strong>Y</strong></li>
+        <li><strong>P2</strong> modifies V → lock <strong>V</strong>; depends on Y → lock <strong>Y</strong></li>
+      </ul>
+      <table>
+        <tr><th>Node</th><th>P1</th><th>P2</th></tr>
+        <tr><td>U</td><td>Yes</td><td></td></tr>
+        <tr><td>V</td><td class="hi">Yes</td><td class="hi">Yes</td></tr>
+        <tr><td>Y</td><td>Yes</td><td>Yes</td></tr>
+      </table>
+      <p class="small">Conflict at <strong>V</strong> → P1 and P2 serialize.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Hazard 2 dangling traversal -->
+<section data-background-color="#ffffff">
+  <h2>Hazard 2 — Dangling Traversal</h2>
+  <p class="small">P1 deletes node X while P2 traverses the list searching for Y:</p>
+  <table>
+    <tr><th>P1 (delete X)</th><th>P2 (search Y)</th></tr>
+    <tr><td>Lock(V), Lock(X), Lock(Y)</td><td>Visiting node V</td></tr>
+    <tr><td><code class="inline">V-&gt;next = Y</code></td><td>Next node ← <code class="inline">V-&gt;next</code></td></tr>
+    <tr><td class="hi"><code class="inline">X-&gt;next = NULL</code></td><td>Visiting node X</td></tr>
+    <tr><td></td><td class="hi">Next node ← <code class="inline">X-&gt;next</code> (now NULL!)</td></tr>
+    <tr><td></td><td><strong>Reports "Y not found"</strong> — wrongly</td></tr>
+  </table>
+  <div class="callout warn"><span class="lbl">Why</span>
+    P2 had already stepped <em>onto</em> X before P1 unlinked it. X's <code class="inline">next</code> no longer leads to Y, so the search falls off the list.</div>
+</section>
+
+<!-- Hazard 3 memory deallocation -->
+<section data-background-color="#ffffff">
+  <h2>Hazard 3 — Memory Deallocation</h2>
+  <p class="small">Same race, but now P1 actually <code class="inline">free()</code>s X:</p>
+  <table>
+    <tr><th>P1 (delete X)</th><th>P2 (search Y)</th></tr>
+    <tr><td>Lock(V), Lock(X), Lock(Y)</td><td>Visiting node V</td></tr>
+    <tr><td><code class="inline">V-&gt;next = Y</code></td><td>Next node ← <code class="inline">V-&gt;next</code></td></tr>
+    <tr><td class="hi"><code class="inline">free(X)</code></td><td>Visiting node X</td></tr>
+    <tr><td></td><td class="hi">Next node ← <code class="inline">X-&gt;next</code></td></tr>
+    <tr><td></td><td><strong>Segmentation fault</strong> — X is freed memory</td></tr>
+  </table>
+  <div class="callout warn"><span class="lbl">Why</span>
+    P2 dereferences a pointer into memory that P1 has already returned to the allocator. Even correct linking can't save a traversal that lands on a freed node.</div>
+</section>
+
+<!-- Dealing with deadlock -->
+<section data-background-color="#ffffff">
+  <h2>Dealing with Deadlock</h2>
+  <div class="cols">
+    <div>
+      <p>Deadlock comes from <strong>cycles</strong> in lock acquisition. Break cycles by imposing a <strong>global order</strong> on nodes and always locking <strong>low → high</strong>.</p>
+      <div class="callout takeaway"><span class="lbl">Rule</span>
+        If every thread acquires locks in the same total order, no cycle can form.</div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">What order?</span>
+        <ul class="small" style="margin:.3em 0 0 .9em">
+          <li><strong>Non-cyclic LDS</strong> (list, tree): follow the structure — e.g. lock leftmost / parent first</li>
+          <li><strong>Cyclic LDS</strong> (graphs): order by <strong>address</strong> — lock lowest address first</li>
+        </ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- Dealing with dangling traversal & deallocation -->
+<section data-background-color="#ffffff">
+  <h2>Dealing with Dangling Traversal &amp; Deallocation</h2>
+  <div class="cols">
+    <div>
+      <h3>Dangling traversal</h3>
+      <ul class="small">
+        <li><strong>Option 1 (trick):</strong> when deleting, <em>don't modify</em> the deleted node's pointers</li>
+        <li><strong>Option 2 (locking):</strong> require traversal to <em>lock</em> each node as it visits</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Memory deallocation</h3>
+      <ul class="small">
+        <li><strong>Option 1 (trick):</strong> don't <code class="inline">free</code> on delete — set <code class="inline">node-&gt;deleted = 1</code> and let <strong>garbage collection</strong> reclaim later</li>
+        <li><strong>Option 2 (locking):</strong> traversal locks each visited node</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">Option 1 vs. Option 2</span>
+    Option 2 (traversal locking) is more <strong>elegant</strong> and uniform, but it <strong>slows down traversal</strong>. The best choice depends on code complexity.</div>
+</section>
+
+<!-- Further concurrency read/write -->
+<section data-background-color="#ffffff">
+  <h2>Recovering Concurrency — Read vs. Write Locks</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">A single lock type forces <em>every</em> dependence to serialize. Distinguish intent:</p>
+      <ul class="small">
+        <li><strong>Write lock</strong> — to modify a node</li>
+        <li><strong>Read lock</strong> — to read a node that must stay unchanged</li>
+      </ul>
+      <p class="small">Two readers of the same node no longer block each other.</p>
+    </div>
+    <div>
+      <table>
+        <tr><th>Held ↓ / Req →</th><th>Read</th><th>Write</th></tr>
+        <tr><td><strong>Read</strong></td><td class="hi">Yes</td><td>No</td></tr>
+        <tr><td><strong>Write</strong></td><td>No</td><td>No</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- Two deletions with R/W locks -->
+<section data-background-color="#ffffff">
+  <h2>Example 1 Revisited — Read/Write Locks</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">Two deletions, now with typed locks:</p>
+      <ul class="small">
+        <li><strong>P1</strong>: write-lock U, V; read-lock X</li>
+        <li><strong>P2</strong>: write-lock V, X; read-lock Y</li>
+      </ul>
+      <table>
+        <tr><th>Node</th><th>P1</th><th>P2</th></tr>
+        <tr><td>U</td><td>Write</td><td></td></tr>
+        <tr><td>V</td><td class="hi">Write</td><td class="hi">Write</td></tr>
+        <tr><td>X</td><td>Read</td><td class="hi">Write</td></tr>
+        <tr><td>Y</td><td></td><td>Read</td></tr>
+      </table>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Conflict at V and X</span>
+        V: write vs. write. X: read vs. write. Either is incompatible → P1 and P2 still serialize (correct).</div>
+      <p class="small muted">Read/write helps elsewhere (two readers), but where one side writes a shared node, serialization is unavoidable — and correct.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Insertion between Y and Z: unnecessary conflict -->
+<section data-background-color="#ffffff">
+  <h2>Example 3 — An <em>Unnecessary</em> Conflict</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">P1 deletes V; P2 inserts X between Y and Z. With read/write locks:</p>
+      <ul class="small">
+        <li><strong>P1</strong>: write U, V; read-lock Y (must survive)</li>
+        <li><strong>P2</strong>: write Y; read-lock Z</li>
+      </ul>
+      <table>
+        <tr><th>Node</th><th>P1</th><th>P2</th></tr>
+        <tr><td>U,V</td><td>Write</td><td></td></tr>
+        <tr><td>Y</td><td class="hi">Read</td><td class="hi">Write</td></tr>
+        <tr><td>Z</td><td></td><td>Read</td></tr>
+      </table>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Conflict at Y — but is it needed?</span>
+        P1 only needs Y to <strong>not be deleted</strong>; it does <em>not</em> read Y's contents. P2 only changes Y's <code class="inline">next</code>. They could safely run together — yet read/write locks force them to serialize.</div>
+      <p class="small">Read/write is too coarse: "read" conflates "I read the value" with "I just need it to exist."</p>
+    </div>
+  </div>
+</section>
+
+<!-- New lock types -->
+<section data-background-color="#ffffff">
+  <h2>Defining New Lock Types</h2>
+  <div class="cols w-64">
+    <div>
+      <table>
+        <tr><th>Held ↓ / Req →</th><th>Write</th><th>Read</th><th>Delete</th><th>NoDel</th></tr>
+        <tr><td><strong>Write</strong></td><td>✗</td><td>✗</td><td>✗</td><td class="hi">✓</td></tr>
+        <tr><td><strong>Read</strong></td><td>✗</td><td>✓</td><td>✗</td><td>✓</td></tr>
+        <tr><td><strong>Delete</strong></td><td>✗</td><td>✗</td><td>✗</td><td>✗</td></tr>
+        <tr><td><strong>NoDelete</strong></td><td class="hi">✓</td><td>✓</td><td>✗</td><td>✓</td></tr>
+      </table>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Delete lock</span>
+        Required to <strong>deallocate</strong> a node.</div>
+      <div class="callout"><span class="lbl">NoDelete lock</span>
+        For an op whose correctness needs the node <strong>not deleted</strong>, but does <em>not</em> read its contents.</div>
+      <p class="small">Note: Write and NoDelete are <strong>compatible</strong> — a writer can change a node while another op merely pins it alive.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Example 3 resolved with NoDelete -->
+<section data-background-color="#ffffff">
+  <h2>Example 3 Resolved — NoDelete Lock</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">Same scenario, now P1 uses a <strong>NoDelete</strong> lock on Y instead of a read lock:</p>
+      <ul class="small">
+        <li><strong>P1</strong>: write U, V; <strong>NoDelete</strong> Y</li>
+        <li><strong>P2</strong>: write Y; <strong>NoDelete</strong> Z</li>
+      </ul>
+      <table>
+        <tr><th>Node</th><th>P1</th><th>P2</th></tr>
+        <tr><td>U,V</td><td>Write</td><td></td></tr>
+        <tr><td>Y</td><td class="hi">NoDel</td><td class="hi">Write</td></tr>
+        <tr><td>Z</td><td></td><td>NoDel</td></tr>
+      </table>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">Outcome</span>
+        Write on Y and NoDelete on Y are <strong>compatible</strong> → P1 and P2 run <strong>simultaneously</strong>. The false conflict is gone.</div>
+      <div class="callout takeaway"><span class="lbl">Lesson</span>
+        More lock types = more expressible intent = more concurrency — at the cost of more programming complexity.</div>
+    </div>
+  </div>
+</section>
+
+<!-- traversal locking code -->
+<section data-background-color="#ffffff">
+  <h2>Hand-Over-Hand Traversal Locking</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">read-locked search (lock coupling)</div>
+      <pre><code class="language-c" data-trim>
+prev = NULL;
+read_lock(pList->head);
+p = pList->head;
+while (p != NULL) {
+  if (p->key == key) {
+    printf("Found node\n");
+    unlock(p);
+    break;
+  } else {
+    prev = p;
+    p = p->next;
+    if (p != NULL) read_lock(p);  /* grab next */
+    if (prev != NULL) unlock(prev); /* release prev */
+  }
+}
+</code></pre>
+    </div>
+    <div>
+      <p class="small">Also called <strong>lock coupling</strong>: never release a node's lock until you hold the next node's.</p>
+      <ul class="small">
+        <li>Traversal acquires a <strong>read lock</strong> on each visited node</li>
+        <li>Deletion needs a <strong>write lock</strong> on a node → it must wait for traversers to pass</li>
+      </ul>
+      <div class="callout"><span class="lbl">Fixes both hazards</span>
+        A node can't be unlinked or freed while a traverser holds its lock — no dangling traversal, no use-after-free.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Conclusions 1: opportunities -->
+<section data-background-color="#ffffff">
+  <h2>Conclusions — Parallelization Opportunities</h2>
+  <table>
+    <tr><th>Approach</th><th>Applicability / payoff</th></tr>
+    <tr><td><strong>Loop-level</strong></td><td class="hi">Non-existent — pointer chasing is a loop-carried dependence</td></tr>
+    <tr><td><strong>Traversal vs. compute</strong></td><td>Pays off when task size ≫ traversal &amp; thread-management overhead</td></tr>
+    <tr><td><strong>Structure-specific</strong></td><td>Only for nodes with out-degree &gt; 1; speedup depends on task size / balance</td></tr>
+    <tr><td><strong>Algorithm-level</strong></td><td>Generally applicable; strategies: among-readers, global lock, fine-grain</td></tr>
+  </table>
+  <div class="callout takeaway"><span class="lbl">Big picture</span>
+    For shared mutable structures, the <strong>algorithm-level</strong> (primitive-based) approach is the workhorse — and locking is how we make it correct.</div>
+</section>
+
+<!-- Conclusions 2: strategies -->
+<section data-background-color="#ffffff">
+  <h2>Conclusions — The Three Strategies</h2>
+  <div class="cols c3">
+    <div class="callout ok"><span class="lbl">Among readers</span>
+      <span class="small">Simplest. One read/write lock for the whole LDS. High speedup if mostly read, little written.</span></div>
+    <div class="callout"><span class="lbl">Global lock</span>
+      <span class="small">Parallel traversal + critical-section modification. Must re-validate assumptions after locking; re-traversal possible.</span></div>
+    <div class="callout warn"><span class="lbl">Fine-grain lock</span>
+      <span class="small">One lock per node; must identify exactly which nodes to lock. Handle deadlock, dangling traversal, deallocation.</span></div>
+  </div>
+  <div class="callout"><span class="lbl">More concurrency ⇄ more complexity</span>
+    Richer lock types (read/write, NoDelete) unlock more parallelism. OpenMP supports fine-grain locks but <strong>does not distinguish read vs. write locks</strong> — you build that yourself.</div>
+</section>
+
+<!-- Review 4.2 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 4.2 — Review</h2>
+  <div class="qa">
+    <p class="q">1. Name the three fine-grain locking hazards and one fix for each.</p>
+    <div class="fragment"><div class="a"><strong>Deadlock</strong> → global lock ordering (low→high). <strong>Dangling traversal</strong> → traversal locking (don't follow a node you don't hold). <strong>Deallocation</strong> → defer <code class="inline">free</code> / mark-and-GC, or traversal locking.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. Why isn't a plain read lock enough in the "insert between Y and Z" case?</p>
+    <div class="fragment"><div class="a">P1 only needs Y to <strong>survive</strong>, not its value; a read lock still conflicts with P2's write on Y. A <strong>NoDelete</strong> lock (compatible with Write) removes the false conflict.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. When is the among-readers strategy the right choice?</p>
+    <div class="fragment"><div class="a">When the structure is <strong>read-mostly</strong> — lookups vastly outnumber updates — so one read/write lock gives high concurrency with trivial code.</div></div>
+  </div>
+</section>
+
+<!-- Chapter summary -->
+<section data-background-color="#ffffff">
+  <h2>Chapter 4 — Big Picture</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">4.1 Problem</span>Pointer chasing kills loop parallelism. Correctness for concurrent ops = <strong>serializability</strong>.</div>
+    <div class="callout"><span class="lbl">4.2 Strategies</span>Among-readers → global lock → fine-grain: rising concurrency, rising complexity.</div>
+    <div class="callout"><span class="lbl">Hazards &amp; locks</span>Fine-grain adds deadlock / dangling / deallocation; richer lock types recover concurrency.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">One sentence</span>
+    <strong>Linked structures trade loop parallelism for operation parallelism — and the price of correctness is paid in locks, ordered and typed just precisely enough.</strong></div>
+  <p class="center muted small">Further reading → Herlihy &amp; Shavit, <em>The Art of Multiprocessor Programming</em>; Solihin, <em>Fundamentals of Parallel Multicore Architecture</em>.</p>
+</section>
+
+</div>
+
+<!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 4 — Parallel Programming for Linked Data Structures</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.04,
+    minScale: 0.2, maxScale: 1.6,
+    center: false,                 // top-align content so the NC State header bar sits at the slide top
+    hash: true, slideNumber: 'c/t', history: true,
+    transition: 'slide', transitionSpeed: 'fast',
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      {left:'\\(', right:'\\)', display:false},
+      {left:'$$', right:'$$', display:true}
+    ]},
+  });
+</script>
+</body>
+</html>

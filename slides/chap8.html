@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSC/ECE 506 · Chapter 8 — Hardware Support for Synchronization</title>
+
+<!-- reveal.js core (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<!-- code highlighting + math -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+<!-- fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<!-- course theme -->
+<link rel="stylesheet" href="assets/theme.css?v=4">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============================ TITLE ============================ -->
+<section class="title-slide" data-background-color="#ffffff">
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <h1>Chapter 8</h1>
+  <div class="sub">Hardware Support for Synchronization — Locks, Barriers &amp; Transactional Memory</div>
+  <div class="meta">
+    Fall Semester · Based on Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em><br>
+    <span class="muted">Use ← → to navigate · <strong>S</strong> for speaker notes · <strong>F</strong> fullscreen · <strong>ESC</strong> overview</span>
+  </div>
+  <aside class="notes">
+    Chapter 8 is about the machinery underneath every lock, barrier, and atomic section you have ever used.
+    Threads must cooperate, and cooperation requires synchronization. We build it as a stack: atomic
+    read-modify-write primitives in hardware, software locks and barriers above them, and transactional
+    memory as a higher-level alternative. Two modules: (8.1) simple lock implementations and the atomic
+    primitives behind them; (8.2) scalable locks, barriers, and transactional memory.
+  </aside>
+</section>
+
+<!-- Roadmap -->
+<section data-background-color="#ffffff">
+  <h2>Chapter Roadmap</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Module 8.1</span><strong>Simple Lock Implementation</strong><br>
+      <span class="small">Atomic RMW primitives (T&amp;S, fetch-and-op, exchange, CAS), how atomicity is guaranteed, and the test&amp;set / TTSL / LL/SC family.</span></div>
+    <div class="callout"><span class="lbl">Module 8.2</span><strong>Scalable Locks &amp; Barriers</strong><br>
+      <span class="small">Ticket lock and ABQL for fairness and traffic; centralized barriers with sense reversal.</span></div>
+    <div class="callout"><span class="lbl">Module 8.2 (cont.)</span><strong>Transactional Memory</strong><br>
+      <span class="small">Atomic blocks, isolation/serializability, and the hardware support that makes HTM possible.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The thread that ties it together</span>
+    Synchronization is a <strong>layered stack</strong>: a small amount of hardware atomicity is leveraged by
+    software into locks and barriers. The art is keeping that machinery <strong>cheap, scalable, and fair</strong>.</div>
+</section>
+
+<!-- ==================================================================
+     MODULE 8.1 — SIMPLE LOCK IMPLEMENTATION
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 8.1</div>
+  <div class="mod-title">Simple Lock Implementation</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Name the synchronization layers and the <strong>atomic RMW</strong> primitives</li>
+      <li>Explain how a coherence protocol <strong>guarantees atomicity</strong></li>
+      <li>Compare <strong>test&amp;set</strong>, <strong>TTSL</strong>, and <strong>LL/SC</strong> on latency, traffic, and fairness</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Synchronization -->
+<section data-background-color="#ffffff">
+  <h2>Synchronization</h2>
+  <blockquote style="font-size:1.1em;border-left:5px solid var(--wolf-red);padding:.4em 0 .4em 1em;margin:.4em 0;color:var(--ink-soft)">
+    "A parallel computer is a collection of processing elements that <strong>cooperate</strong> and <strong>communicate</strong> to solve large problems fast."
+  </blockquote>
+  <p>Cooperation needs <strong>synchronization</strong> to order operations for correctness.</p>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Lock</span>Ensures <strong>mutual exclusion</strong> — only one thread in a critical section at a time.</div>
+    <div class="callout"><span class="lbl">Event sync</span><strong>Point-to-point</strong> — one thread signals, another waits (producer/consumer).</div>
+    <div class="callout"><span class="lbl">Group sync</span><strong>Global barriers</strong> — all threads wait until everyone arrives.</div>
+  </div>
+  <aside class="notes">This chapter focuses mostly on locks and barriers. Event synchronization (flags / point-to-point) is the building block underneath barriers.</aside>
+</section>
+
+<!-- Typical modern implementation: the stack -->
+<section data-background-color="#ffffff">
+  <h2>Typical Modern Implementation: A Stack</h2>
+  <p class="small">Each level constructs synchronization on the level above it — hardware at the bottom, libraries at the top.</p>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 280 200" class="chart" style="max-width:340px">
+        <rect x="20" y="10" width="240" height="38" rx="8" fill="#fee2e2" stroke="#CC0000" stroke-width="2"/>
+        <text x="140" y="28" text-anchor="middle" class="lbl" style="font-weight:700">Level 4 · SW</text>
+        <text x="140" y="42" text-anchor="middle" class="tiny">Barriers · semaphores · monitors</text>
+        <rect x="20" y="56" width="240" height="38" rx="8" fill="#fde68a" stroke="#f59e0b" stroke-width="2"/>
+        <text x="140" y="74" text-anchor="middle" class="lbl" style="font-weight:700">Level 3 · SW</text>
+        <text x="140" y="88" text-anchor="middle" class="tiny">Lock primitives (libraries)</text>
+        <rect x="20" y="102" width="240" height="38" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+        <text x="140" y="120" text-anchor="middle" class="lbl" style="font-weight:700">Level 2 · HW</text>
+        <text x="140" y="134" text-anchor="middle" class="tiny">Atomic exchange · fetch&amp;inc · t&amp;s · CAS</text>
+        <rect x="20" y="148" width="240" height="38" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+        <text x="140" y="166" text-anchor="middle" class="lbl" style="font-weight:700">Level 1 · HW</text>
+        <text x="140" y="180" text-anchor="middle" class="tiny">LL/SC (not always needed)</text>
+      </svg>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">HW</span>Levels 1–2 give the <strong>atomicity</strong> that software cannot achieve alone.</div>
+      <div class="callout"><span class="lbl">SW</span>Levels 3–4 are <strong>library</strong> code built on the atomic primitives.</div>
+      <div class="callout takeaway"><span class="lbl">Key idea</span>Level <em>i</em> can build the synchronization of level <em>i</em>+1.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Performance criteria -->
+<section data-background-color="#ffffff">
+  <h2>Lock Performance Criteria</h2>
+  <p class="small">A lock is judged on more than just correctness — these four axes drive every design choice in this chapter.</p>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Uncontended latency</span>Time to acquire a lock when <strong>no one else</strong> is competing.</div>
+      <div class="callout"><span class="lbl">Traffic</span>Coherence traffic on (a) a failed attempt while held, (b) an attempt while free, (c) lock release.</div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Storage</span>Space needed, <strong>as a function of</strong> the number of threads / processors.</div>
+      <div class="callout"><span class="lbl">Fairness</span>Whether a thread is guaranteed to eventually acquire the lock relative to others.</div>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Tension</span>Low uncontended latency and low contended traffic often pull in <strong>opposite directions</strong>.</div>
+</section>
+
+<!-- First attempt at SW lock -->
+<section data-background-color="#ffffff">
+  <h2>First Attempt: A Pure-Software Lock</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">C — naive lock / unlock</div>
+      <pre><code class="language-c" data-trim>
+void lock(int *lockvar) {
+  while (*lockvar == 1) {};  // wait until released
+  *lockvar = 1;              // acquire lock
+}
+void unlock(int *lockvar) {
+  *lockvar = 0;
+}
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label">In machine language</div>
+      <pre><code class="language-x86asm" data-trim>
+lock:   ld  R1, &lockvar  ; R1 = MEM[&lockvar]
+        bnz R1, lock      ; loop if R1 != 0
+        sti &lockvar, #1  ; MEM[&lockvar] = 1
+        ret
+unlock: sti &lockvar, #0  ; MEM[&lockvar] = 0
+        ret
+</code></pre>
+    </div>
+  </div>
+  <div class="callout warn"><span class="lbl">The bug</span>The <code class="inline">ld</code>…<code class="inline">sti</code> sequence is <strong>not atomic</strong>. Two threads can both read 0, then both write 1, and both enter the critical section.</div>
+</section>
+
+<!-- atomicity requirement -->
+<section data-background-color="#ffffff">
+  <h2>What "Atomic" Must Mean</h2>
+  <p>We need the read-test-write to execute <strong>atomically</strong>. Atomicity implies two things:</p>
+  <div class="cols">
+    <div class="callout"><span class="lbl">All-or-nothing</span>The entire sequence appears to execute <strong>in its entirety</strong> — never partially observed.</div>
+    <div class="callout"><span class="lbl">Serialized</span>Multiple such sequences are <strong>serialized</strong> — they take effect one after another, never interleaved.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Implication</span>
+    Software alone cannot guarantee this on a shared-memory machine — we need a hardware
+    <strong>atomic read-modify-write (RMW)</strong> instruction.</div>
+</section>
+
+<!-- atomic instructions -->
+<section data-background-color="#ffffff">
+  <h2>Atomic Read-Modify-Write Instructions</h2>
+  <table>
+    <tr><th>Instruction</th><th>Semantics (executed atomically)</th></tr>
+    <tr><td><code class="inline">test-and-set Rx, M</code></td><td>Read <code class="inline">M</code>; if it matches a constant (e.g. 0), write <code class="inline">Rx</code> into <code class="inline">M</code>. Old value returned in <code class="inline">Rx</code>.</td></tr>
+    <tr><td><code class="inline">fetch-and-op M</code></td><td>Read <code class="inline">M</code>, apply op (inc, dec, add, sub…), store the new value back to <code class="inline">M</code>.</td></tr>
+    <tr><td><code class="inline">exchange Rx, M</code></td><td>Atomically swap the value in <code class="inline">M</code> with the value in register <code class="inline">Rx</code>.</td></tr>
+    <tr><td class="hi"><code class="inline">compare-and-swap Rx, Ry, M</code></td><td class="hi">Compare <code class="inline">M</code> with <code class="inline">Rx</code>; if equal, write <code class="inline">Ry</code> into <code class="inline">M</code> and copy <code class="inline">Rx</code> into <code class="inline">Ry</code>.</td></tr>
+  </table>
+  <div class="callout"><span class="lbl">Today</span>Real ISAs expose these as x86 <code class="inline">XCHG</code>/<code class="inline">LOCK CMPXCHG</code>, ARM/RISC-V <code class="inline">LL/SC</code>, and C/C++ <code class="inline">std::atomic</code> primitives.</div>
+</section>
+
+<!-- atomicity guaranteed -->
+<section data-background-color="#ffffff">
+  <h2>How Is Atomicity Guaranteed?</h2>
+  <p>Use the <strong>cache-coherence protocol</strong> to ensure one atomic instruction executes at a time. Three strategies:</p>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">1 · Reserve the bus</span>Hold the bus until done — no other atomic op can reach the bus. <span class="small muted">Simple; doesn't scale.</span></div>
+    <div class="callout"><span class="lbl">2 · Reserve the block</span>Obtain exclusive permission (e.g. <strong>M</strong> in MESI); reject/delay invalidations until done.</div>
+    <div class="callout"><span class="lbl">3 · Illusion of atomicity</span>Don't enforce it — <em>detect</em> a violation and retry. This is <strong>LL/SC</strong>.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Preview</span>Strategy 3 is the modern winner: cheap on the common path, and it degrades gracefully under contention.</div>
+</section>
+
+<!-- Simple test&set lock -->
+<section data-background-color="#ffffff">
+  <h2>Simple test&amp;set Lock</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">test&amp;set lock / unlock</div>
+      <pre><code class="language-x86asm" data-trim>
+lock:   t&s R1, &lockvar  ; R1 = MEM[&lockvar];
+                          ; if (R1==0) MEM[&lockvar]=1
+        bnz R1, lock      ; loop if R1 != 0
+        ret
+unlock: st  &lockvar, #0  ; MEM[&lockvar] = 0
+        ret
+</code></pre>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">lockvar</span><strong>1</strong> = lock already acquired<br><strong>0</strong> = lock is free</div>
+      <p class="small">The atomic <code class="inline">t&amp;s</code> reads the old value into <code class="inline">R1</code> and, if it was 0, sets it to 1 — all in one indivisible step. A thread succeeds iff it reads back 0.</p>
+    </div>
+  </div>
+  <aside class="notes">This is the textbook spin lock: every waiter hammers t&s in a tight loop. Correct, but as we will see, the traffic is terrible.</aside>
+</section>
+
+<!-- Illustration of t&s execution -->
+<section data-background-color="#ffffff">
+  <h2>test&amp;set Execution: Two Threads</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Thread 0 — succeeds first</div>
+      <pre><code class="language-x86asm" data-trim>
+t&s R1, &lockvar   ; successful
+bnz R1, lock
+  ... critical section ...
+st  &lockvar, #0   ; release
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label">Thread 1 — spins, then wins</div>
+      <pre><code class="language-x86asm" data-trim>
+t&s R1, &lockvar   ; failed
+bnz R1, lock
+t&s R1, &lockvar   ; failed
+bnz R1, lock
+t&s R1, &lockvar   ; successful (after T0 release)
+  ... critical section ...
+</code></pre>
+    </div>
+  </div>
+  <div class="callout warn"><span class="lbl">Note</span>Thread 1 issues a <strong>full atomic write</strong> on <em>every</em> failed attempt — each one is a coherence transaction. That is the source of the traffic problem.</div>
+</section>
+
+<!-- Interaction with cache coherence: t&s -->
+<section data-background-color="#ffffff">
+  <h2>test&amp;set: Interaction with Coherence</h2>
+  <p class="small">Three processors contend (MESI). Every <code class="inline">t&amp;s</code> — success <em>or</em> failure — issues a <strong>BusRdX</strong>.</p>
+  <table class="small">
+    <tr><th>Request</th><th>P1</th><th>P2</th><th>P3</th><th>Bus</th></tr>
+    <tr><td>t&amp;s1</td><td class="hi">M</td><td>–</td><td>–</td><td>BusRdX</td></tr>
+    <tr><td>t&amp;s2</td><td>I</td><td class="hi">M</td><td>–</td><td>BusRdX</td></tr>
+    <tr><td>t&amp;s3</td><td>I</td><td>I</td><td class="hi">M</td><td>BusRdX</td></tr>
+    <tr><td>t&amp;s2</td><td>I</td><td class="hi">M</td><td>I</td><td>BusRdX</td></tr>
+    <tr><td>unlock1</td><td class="hi">M</td><td>I</td><td>I</td><td>BusRdX</td></tr>
+    <tr><td>t&amp;s2 … t&amp;s3</td><td>I</td><td>M/I</td><td>I/M</td><td>BusRdX</td></tr>
+    <tr><td>unlock2 / unlock3</td><td>I</td><td>M/I</td><td>I/M</td><td>BusRdX</td></tr>
+  </table>
+  <div class="callout warn"><span class="lbl">Observation</span>Even threads that <strong>fail</strong> grab the block in Modified state, invalidating everyone else — a storm of useless ownership transfers.</div>
+</section>
+
+<!-- Drawbacks + backoff -->
+<section data-background-color="#ffffff">
+  <h2>Drawbacks &amp; the Back-off Fix</h2>
+  <div class="cols">
+    <div>
+      <div class="callout warn"><span class="lbl">Very high traffic</span>Many coherence transactions <em>even when the lock is not free</em>. They <strong>compete</strong> with the lock holder's traffic — lengthening the critical section.</div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Back-off</span>After a failed acquisition, <strong>pause</strong> before retrying.</div>
+      <ul class="small">
+        <li>Too little → contention stays high</li>
+        <li>Too much → missed opportunity</li>
+        <li><strong>Exponential back-off</strong>: grow the wait interval after each failure</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Better idea</span>Stop writing on every attempt — <em>spin on a read</em> instead. That is the <strong>test-and-test-and-set</strong> lock.</div>
+</section>
+
+<!-- TTSL -->
+<section data-background-color="#ffffff">
+  <h2>Better: test-and-test-and-set (TTSL)</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">TTSL — read-spin, then t&amp;s</div>
+      <pre><code class="language-x86asm" data-trim>
+lock:   ld  R1, &lockvar   ; ordinary load (spin)
+        bnz R1, lock       ; loop while held
+        t&s R1, &lockvar   ; try to grab it
+        bnz R1, lock       ; lost the race? spin again
+        ret
+unlock: st  &lockvar, #0
+        ret
+</code></pre>
+    </div>
+    <div>
+      <p class="small"><strong>Busy-wait with reads:</strong></p>
+      <ul class="small">
+        <li>Spin on a cached load — no bus traffic while held</li>
+        <li>The cached copy is <strong>invalidated</strong> when the holder releases</li>
+        <li>On release, threads try <code class="inline">t&amp;s</code>; only one wins, the rest fall back to read-spinning</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">The "test" (read loop) filters out the expensive "test-and-set" so the atomic write only happens when there is a real chance of success.</aside>
+</section>
+
+<!-- TTSL coherence -->
+<section data-background-color="#ffffff">
+  <h2>TTSL: Interaction with Coherence</h2>
+  <p class="small">Loads keep the block in <strong>Shared</strong>; spinning generates <em>no</em> bus traffic. Only release + the winning <code class="inline">t&amp;s</code> move the bus.</p>
+  <table class="small">
+    <tr><th>Request</th><th>P1</th><th>P2</th><th>P3</th><th>Bus</th></tr>
+    <tr><td>ld1</td><td>E</td><td>–</td><td>–</td><td>BusRd</td></tr>
+    <tr><td>t&amp;s1</td><td class="hi">M</td><td>–</td><td>–</td><td>–</td></tr>
+    <tr><td>ld2, ld3 (spin)</td><td>S</td><td>S</td><td>S</td><td>BusRd / –</td></tr>
+    <tr><td>unlock1</td><td class="hi">M</td><td>I</td><td>I</td><td>BusUpgr</td></tr>
+    <tr><td>ld2</td><td>S</td><td>S</td><td>I</td><td>BusRd</td></tr>
+    <tr><td>t&amp;s2</td><td>I</td><td class="hi">M</td><td>I</td><td>BusUpgr</td></tr>
+    <tr><td>ld3 (spin)</td><td>I</td><td>S</td><td>S</td><td>BusRd / –</td></tr>
+  </table>
+  <div class="callout ok"><span class="lbl">Win</span>Failed waiters sit in Shared and make <strong>zero</strong> bus transactions until the lock is actually released.</div>
+</section>
+
+<!-- TTSL vs t&s -->
+<section data-background-color="#ffffff">
+  <h2>TTSL vs. test&amp;set</h2>
+  <div class="cols">
+    <div>
+      <h3>Successful acquisition</h3>
+      <ul class="small">
+        <li><strong>TTSL: 2</strong> bus transactions — BusRd to fetch + BusUpgr to invalidate copies</li>
+        <li><strong>t&amp;s: 1</strong> — a single BusRdX</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Failed acquisition</h3>
+      <ul class="small">
+        <li><strong>TTSL: 1</strong> BusRd, then spin locally (no traffic)</li>
+        <li><strong>t&amp;s: unbounded</strong> — every attempt is a BusRdX</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Verdict</span>TTSL costs one extra transaction on success but eliminates the failure storm.
+    Since time in the critical section usually exceeds time to grab a free lock, <strong>test&amp;set performance can be really bad</strong>.</div>
+</section>
+
+<!-- Improving lock implementation -->
+<section data-background-color="#ffffff">
+  <h2>Can We Do Better Than Locking the Bus/Block?</h2>
+  <div class="cols">
+    <div>
+      <div class="callout warn"><span class="lbl">Bus locking</span>Limited applicability; <strong>not scalable</strong> with fine-grain locks.</div>
+      <div class="callout warn"><span class="lbl">Cache-block locking</span>Expensive — must rely on buffering or NACK to delay other requests.</div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">The illusion approach</span>Instead of <em>providing</em> atomicity, <strong>detect violations</strong> of it:</div>
+      <ul class="small">
+        <li>Detect that atomicity was broken</li>
+        <li><strong>Cancel the store</strong> — its new value must never become visible</li>
+        <li>Replay the load/branch/etc. and try again</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Two new instructions</span>This is exactly what <strong>Load-Linked / Store-Conditional</strong> provides.</div>
+</section>
+
+<!-- LL/SC two instructions -->
+<section data-background-color="#ffffff">
+  <h2>LL/SC: Two New Instructions</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Load-Linked (LL)</span>Reads a word from memory <strong>and</strong> records its address in a special <strong>LL/link register</strong>.</div>
+      <p class="small">Anything that may break atomicity <strong>clears the link register</strong>:</p>
+      <ul class="small">
+        <li>A context switch occurs</li>
+        <li>An invalidation arrives for the linked address</li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Store-Conditional (SC)</span>Tests whether the link register still matches the store address.</div>
+      <ul class="small">
+        <li><strong>Match</strong> → perform the store, return success</li>
+        <li><strong>No match</strong> → cancel the store, return failure</li>
+      </ul>
+      <p class="small muted">A failed SC means someone else touched the location — retry the whole sequence.</p>
+    </div>
+  </div>
+</section>
+
+<!-- LL/SC lock -->
+<section data-background-color="#ffffff">
+  <h2>LL/SC Lock</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">LL/SC lock / unlock</div>
+      <pre><code class="language-x86asm" data-trim>
+lock:   LL  R1, &lockvar   ; R1=MEM[&lockvar]; LINK=&lockvar
+        bnz R1, lock       ; held? spin
+        addi R1, #1        ; R1 = 1
+        SC  R1, &lockvar   ; MEM[&lockvar]=R1 if link valid
+        bnz R1, lock       ; SC failed? retry
+        ret
+unlock: st  &lockvar, #0
+        ret
+</code></pre>
+    </div>
+    <div>
+      <p class="small">After a successful <code class="inline">SC</code>, <code class="inline">R1</code> holds 1 (success); a failed <code class="inline">SC</code> returns 0 in <code class="inline">R1</code>, so the <code class="inline">bnz</code> sends us back to spin.</p>
+      <div class="callout ok"><span class="lbl">Spin = loads</span>The waiting loop uses <code class="inline">LL</code> (a load) — no bus traffic while the lock is held, like TTSL.</div>
+    </div>
+  </div>
+</section>
+
+<!-- LL/SC vs TTSL -->
+<section data-background-color="#ffffff">
+  <h2>LL/SC vs. TTSL</h2>
+  <div class="cols">
+    <div class="center">
+      <table class="small">
+        <tr><th>Request</th><th>P1</th><th>P2</th><th>P3</th><th>Bus</th></tr>
+        <tr><td>ll1</td><td>E</td><td>–</td><td>–</td><td>BusRd</td></tr>
+        <tr><td>sc1</td><td class="hi">M</td><td>–</td><td>–</td><td>–</td></tr>
+        <tr><td>ll2, ll3 (spin)</td><td>S</td><td>S</td><td>S</td><td>BusRd</td></tr>
+        <tr><td>unlock1</td><td class="hi">M</td><td>I</td><td>I</td><td>BusUpgr</td></tr>
+        <tr><td>sc2</td><td>I</td><td class="hi">M</td><td>I</td><td>BusUpgr</td></tr>
+        <tr><td>sc3</td><td>I</td><td>I</td><td class="hi">M</td><td>BusUpgr</td></tr>
+      </table>
+    </div>
+    <div>
+      <ul class="small">
+        <li><strong>Similar</strong> bus traffic to TTSL overall</li>
+        <li>Spinning on loads → <strong>no</strong> bus transactions while held</li>
+        <li>Successful acquisition = 2 bus transactions</li>
+      </ul>
+      <div class="callout ok"><span class="lbl">Key advantage</span>A <strong>failed SC generates no bus transaction</strong> — unlike a failed <code class="inline">t&amp;s</code>, which always issues a write.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Lock implementation problems -->
+<section data-background-color="#ffffff">
+  <h2>The Remaining Problems</h2>
+  <p class="small">A lock highly contended by <strong>p</strong> threads still scales badly, even with LL/SC.</p>
+  <div class="cols">
+    <div>
+      <ul class="small">
+        <li>O(p) attempts to acquire and release</li>
+        <li>A single release invalidates O(p) caches</li>
+        <li>→ O(p) subsequent cache misses</li>
+      </ul>
+      <div class="callout warn"><span class="lbl">Traffic</span>Each critical section causes \( O(p^2) \) bus traffic.</div>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Fairness</span>No guarantee a contending thread will <strong>ever</strong> acquire the lock — a thread can be starved indefinitely.</div>
+      <div class="callout takeaway"><span class="lbl">Next</span>Module 8.2: <strong>ticket</strong> and <strong>ABQL</strong> locks tackle fairness and the \(O(p^2)\) traffic.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Exercise: build CAS from LL/SC -->
+<section data-background-color="#ffffff">
+  <h2>Exercise: Build CAS from LL/SC</h2>
+  <p class="small">Construct atomic <code class="inline">CAS R1, R2, L</code>: if <code class="inline">MEM[L] == R1</code>, swap <code class="inline">R2</code> and <code class="inline">L</code>; otherwise do nothing.</p>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">One solution</div>
+      <pre><code class="language-x86asm" data-trim>
+CAS:  LL  R3, &L        ; R3 = MEM[L]; LINK = &L
+      bne R3, R1, done  ; MEM[L] != R1 -> no swap
+      SC  R2, &L        ; try MEM[L] = R2
+      beqz R2, CAS      ; SC failed -> retry
+      mov R2, R3        ; return old MEM[L] in R2
+done: ret
+</code></pre>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Example</span>Initially <code class="inline">R1=5, R2=10, L=5</code>.<br>After CAS: <code class="inline">R1=5, R2=5, L=10</code>.</div>
+      <p class="small muted">The compare and the swap happen as one unit: a failed SC means someone changed <code class="inline">L</code> mid-sequence, so we retry.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Module 8.1 review -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 8.1 — Review</h2>
+  <div class="qa"><p class="q">1. What is the purpose of an atomic RMW instruction?</p>
+    <div class="fragment"><div class="a">It is the hardware primitive that lets software build all higher-level synchronization (locks, barriers, semaphores).</div></div></div>
+  <div class="qa"><p class="q">2. What factors matter when implementing a lock?</p>
+    <div class="fragment"><div class="a">Uncontended latency, traffic scalability (on release and on failed attempts), fairness, and storage overhead.</div></div></div>
+  <div class="qa"><p class="q">3. What does TTSL improve over test&amp;set?</p>
+    <div class="fragment"><div class="a">It spins on reads, so <strong>no invalidations</strong> are generated while the lock is held.</div></div></div>
+  <div class="qa"><p class="q">4. What does LL/SC improve over TTSL?</p>
+    <div class="fragment"><div class="a">A <strong>failed</strong> lock acquisition (failed SC) generates <strong>no</strong> bus transaction.</div></div></div>
+  <p class="src">Click / press → to reveal each answer.</p>
+</section>
+
+<!-- ==================================================================
+     MODULE 8.2 — SCALABLE LOCK, BARRIER, TRANSACTIONAL MEMORY
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 8.2</div>
+  <div class="mod-title">Scalable Lock, Barrier &amp; Transactional Memory</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Explain how <strong>ticket</strong> and <strong>ABQL</strong> locks achieve fairness and reduce traffic</li>
+      <li>Implement a correct centralized <strong>barrier</strong> using <strong>sense reversal</strong></li>
+      <li>State the <strong>isolation</strong> requirement and the hardware support needed for <strong>HTM</strong></li>
+    </ul>
+  </div>
+</section>
+
+<!-- Ticket lock -->
+<section data-background-color="#ffffff">
+  <h2>Ticket Lock</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">C — ticket lock</div>
+      <pre><code class="language-c" data-trim>
+void ticketLock_init(int *next_ticket, int *now_serving) {
+  *now_serving = *next_ticket = 0;
+}
+void ticketLock_acquire(int *next_ticket, int *now_serving) {
+  my_ticket = fetch_and_inc(next_ticket);
+  while (*now_serving != my_ticket) {};
+}
+void ticketLock_release(int *next_ticket, int *now_serving) {
+  (*now_serving)++;
+}
+</code></pre>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">Fairness ✓</span>Like a deli counter: take a ticket, wait for your number. Acquisition follows <strong>queue order</strong>.</div>
+      <div class="callout warn"><span class="lbl">But…</span>Still \(O(p^2)\) traffic — every release updates <code class="inline">now_serving</code>, invalidating <strong>all</strong> p waiters' cached copies.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Ticket lock illustration -->
+<section data-background-color="#ffffff">
+  <h2>Ticket Lock: Walk-through</h2>
+  <p class="small">Each thread grabs a ticket via <code class="inline">fetch_and_inc</code>; <code class="inline">now_serving</code> advances on each release.</p>
+  <table class="small">
+    <tr><th>Step</th><th>next_ticket</th><th>now_serving</th><th>P1</th><th>P2</th><th>P3</th></tr>
+    <tr><td>Initially</td><td>0</td><td>0</td><td>–</td><td>–</td><td>–</td></tr>
+    <tr><td>P1: f&amp;i</td><td>1</td><td>0</td><td class="hi">0</td><td>–</td><td>–</td></tr>
+    <tr><td>P2: f&amp;i</td><td>2</td><td>0</td><td>0</td><td>1</td><td>–</td></tr>
+    <tr><td>P3: f&amp;i</td><td>3</td><td>0</td><td>0</td><td>1</td><td>2</td></tr>
+    <tr><td>P1: now_serving++</td><td>3</td><td class="hi">1</td><td>0</td><td>1</td><td>2</td></tr>
+    <tr><td>P2: now_serving++</td><td>3</td><td class="hi">2</td><td>0</td><td>1</td><td>2</td></tr>
+    <tr><td>P3: now_serving++</td><td>3</td><td>3</td><td>0</td><td>1</td><td>2</td></tr>
+  </table>
+  <div class="callout"><span class="lbl">Read it</span>P1 holds ticket 0 and is served first; P2 (ticket 1) waits until now_serving = 1, and so on — strict FIFO.</div>
+</section>
+
+<!-- ABQL -->
+<section data-background-color="#ffffff">
+  <h2>Array-Based Queueing Lock (ABQL)</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">C — ABQL</div>
+      <pre><code class="language-c" data-trim>
+void ABQL_init(int *next_ticket, int *can_serve) {
+  *next_ticket = 0;
+  for (i = 1; i < MAXSIZE; i++) can_serve[i] = 0;
+  can_serve[0] = 1;
+}
+void ABQL_acquire(int *next_ticket, int *can_serve) {
+  *my_ticket = fetch_and_inc(next_ticket);
+  while (can_serve[*my_ticket] != 1) {};
+}
+void ABQL_release(int *next_ticket, int *can_serve) {
+  can_serve[*my_ticket + 1] = 1;   // wake the next waiter
+  can_serve[*my_ticket]     = 0;   // reset for reuse
+}
+</code></pre>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">Fairness ✓</span>Queue order, like ticket lock.</div>
+      <div class="callout ok"><span class="lbl">Traffic ✓</span>Each thread spins on its <strong>own array slot</strong>. A release sets just the <em>next</em> slot, so it invalidates <strong>only one</strong> cache — O(1)!</div>
+    </div>
+  </div>
+</section>
+
+<!-- ABQL illustration -->
+<section data-background-color="#ffffff">
+  <h2>ABQL: Walk-through</h2>
+  <p class="small"><code class="inline">can_serve[]</code> shown as a bit string (one slot per ticket). Exactly one slot is "go".</p>
+  <table class="small">
+    <tr><th>Step</th><th>next_ticket</th><th>can_serve[]</th><th>P1</th><th>P2</th><th>P3</th></tr>
+    <tr><td>Initially</td><td>0</td><td>1000</td><td>–</td><td>–</td><td>–</td></tr>
+    <tr><td>P1: f&amp;i</td><td>1</td><td>1000</td><td class="hi">0</td><td>–</td><td>–</td></tr>
+    <tr><td>P2: f&amp;i</td><td>2</td><td>1000</td><td>0</td><td>1</td><td>–</td></tr>
+    <tr><td>P3: f&amp;i</td><td>3</td><td>1000</td><td>0</td><td>1</td><td>2</td></tr>
+    <tr><td>P1: can_serve[1]=1</td><td>3</td><td class="hi">0100</td><td>0</td><td>1</td><td>2</td></tr>
+    <tr><td>P2: can_serve[2]=1</td><td>3</td><td class="hi">0010</td><td>0</td><td>1</td><td>2</td></tr>
+    <tr><td>P3: can_serve[3]=1</td><td>3</td><td>0001</td><td>0</td><td>1</td><td>2</td></tr>
+  </table>
+  <div class="callout"><span class="lbl">Cost</span>The price for O(1) release traffic is <strong>O(p) storage</strong> — one array slot per thread.</div>
+</section>
+
+<!-- Comparison table -->
+<section data-background-color="#ffffff">
+  <h2>Lock Comparison</h2>
+  <table>
+    <tr><th>Criteria</th><th>test&amp;set</th><th>TTSL</th><th>LL/SC</th><th>Ticket</th><th>ABQL</th></tr>
+    <tr><td>Uncontended latency</td><td>Lowest</td><td>Lower</td><td>Lower</td><td>Higher</td><td>Higher</td></tr>
+    <tr><td>1-release max traffic</td><td>O(p)</td><td>O(p)</td><td>O(p)</td><td>O(p)</td><td class="hi">O(1)</td></tr>
+    <tr><td>Wait traffic</td><td class="hi">High</td><td>–</td><td>–</td><td>–</td><td>–</td></tr>
+    <tr><td>Storage</td><td>O(1)</td><td>O(1)</td><td>O(1)</td><td>O(1)</td><td class="hi">O(p)</td></tr>
+    <tr><td>Fairness guaranteed?</td><td>no</td><td>no</td><td>no</td><td class="hi">yes</td><td class="hi">yes</td></tr>
+  </table>
+  <div class="callout"><span class="lbl">Read across</span>Simpler locks win on latency; queue locks win on fairness and (ABQL) release traffic — but cost storage.</div>
+</section>
+
+<!-- Discussion -->
+<section data-background-color="#ffffff">
+  <h2>Discussion: Which Lock to Use?</h2>
+  <div class="cols">
+    <div>
+      <ul class="small">
+        <li>Design must balance <strong>latency vs. scalability</strong></li>
+        <li>ABQL is <em>not</em> automatically best — its higher latency and storage often lose</li>
+        <li><strong>LL/SC locks frequently perform very well</strong> in practice</li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Reality check</span>Scalable programs <em>rarely</em> use highly-contended locks — e.g. fine-grain linked-list parallelization spreads contention out.</div>
+      <div class="callout warn"><span class="lbl">Fairness caveat</span>Sounds great, but a fair queue lock can <strong>stall everyone</strong> if the next-in-line is context-switched out or delayed.</div>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Takeaway</span>The "best" lock depends on contention level, thread count, and scheduling — there is no universal winner.</div>
+</section>
+
+<!-- Barriers intro -->
+<section data-background-color="#ffffff">
+  <h2>Barriers</h2>
+  <div class="cols w-64">
+    <div>
+      <p>A barrier makes every thread wait until <strong>all</strong> threads arrive, then releases them together.</p>
+      <ul class="small">
+        <li>Typically implemented in <strong>software</strong> using locks, flags, and counters</li>
+        <li>Adequate for small systems</li>
+        <li><strong>Not scalable</strong> for large systems</li>
+      </ul>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 200" class="chart" style="max-width:280px">
+        <text x="120" y="16" text-anchor="middle" class="tiny muted">parallel region</text>
+        <g stroke="#3b82f6" stroke-width="3">
+          <line x1="40" y1="22" x2="40" y2="70"/><line x1="90" y1="22" x2="90" y2="55"/>
+          <line x1="150" y1="22" x2="150" y2="78"/><line x1="200" y1="22" x2="200" y2="48"/>
+        </g>
+        <rect x="20" y="80" width="200" height="18" rx="4" fill="#CC0000"/>
+        <text x="120" y="93" text-anchor="middle" class="tiny" style="fill:#fff;font-weight:700">BARRIER</text>
+        <text x="120" y="116" text-anchor="middle" class="tiny muted">parallel region</text>
+        <g stroke="#3b82f6" stroke-width="3">
+          <line x1="40" y1="120" x2="40" y2="165"/><line x1="90" y1="120" x2="90" y2="150"/>
+          <line x1="150" y1="120" x2="150" y2="170"/><line x1="200" y1="120" x2="200" y2="158"/>
+        </g>
+        <rect x="20" y="172" width="200" height="18" rx="4" fill="#CC0000"/>
+        <text x="120" y="185" text-anchor="middle" class="tiny" style="fill:#fff;font-weight:700">BARRIER</text>
+      </svg>
+      <div class="src">Threads finish at different times; the barrier resynchronizes them.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Wrong centralized barrier -->
+<section data-background-color="#ffffff">
+  <h2>A Simple (But Wrong) Centralized Barrier</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">C — buggy barrier</div>
+      <pre><code class="language-c" data-trim>
+int numArrived = 0;
+lock_type barLock = 0;
+int canGo = 0;
+
+void barrier() {
+  lock(&barLock);
+    if (numArrived == 0) canGo = 0;  // first resets flag
+    numArrived++;
+    myCount = numArrived;
+  unlock(&barLock);
+
+  if (myCount < NUM_THREADS)
+    while (canGo == 0) {};   // wait for last thread
+  else {                     // last to arrive
+    numArrived = 0;          // reset for next barrier
+    canGo = 1;               // release everyone
+  }
+}
+</code></pre>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">The race</span>Reusing the <em>same</em> <code class="inline">canGo</code> flag across consecutive barriers breaks: a fast thread can race ahead into the next barrier and reset state while slow threads are still leaving the previous one.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Sense reversal -->
+<section data-background-color="#ffffff">
+  <h2>Centralized Barrier with Sense Reversal</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">C — correct barrier</div>
+      <pre><code class="language-c" data-trim>
+int numArrived = 0;
+lock_type barLock = 0;
+int canGo = 0;
+
+void barrier() {
+  valueToWait = 1 - valueToWait;  // toggle (per-thread)
+  lock(&barLock);
+    numArrived++;
+    myCount = numArrived;
+  unlock(&barLock);
+
+  if (myCount < NUM_THREADS)
+    while (canGo != valueToWait) {};  // wait
+  else {                              // last to arrive
+    numArrived = 0;
+    canGo = valueToWait;              // release everyone
+  }
+}
+</code></pre>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">The fix</span>Each barrier <strong>flips the sense</strong> (0↔1). A thread waits for <code class="inline">canGo == valueToWait</code>, so the meaning of the flag alternates every barrier.</div>
+      <p class="small muted">No thread can be fooled by a stale flag value from a previous barrier — the sense it is waiting for is fresh.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Other barrier topics -->
+<section data-background-color="#ffffff">
+  <h2>Scaling Barriers Further</h2>
+  <p class="small">The centralized barrier serializes on one counter + one flag — fine for small systems, a bottleneck at scale.</p>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Combining-tree barrier</span>Arrange threads in a <strong>tree</strong>; each node combines arrivals from its children, so the counter contention is distributed. <span class="small muted">(§9.2.2)</span></div>
+    <div class="callout"><span class="lbl">Hardware barrier network</span>A dedicated <strong>wired-AND / barrier network</strong> signals "all arrived" in near-constant time. <span class="small muted">(§9.2.3)</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Idea</span>Distribute the arrival counting (tree) or move it into dedicated hardware to escape the centralized bottleneck.</div>
+</section>
+
+<!-- Transactional memory intro -->
+<section data-background-color="#ffffff">
+  <h2>Transactional Memory</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">A transaction</div>
+      <pre><code class="language-c" data-trim>
+atomic {
+  // arbitrary reads AND writes
+  account[i] -= amount;
+  account[j] += amount;
+}
+</code></pre>
+      <p class="small">Like code bookended by LL/SC — but it may contain <strong>arbitrary instructions, including stores</strong>.</p>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Atomicity</span>The block appears to execute <strong>completely or not at all</strong>.</div>
+      <div class="callout"><span class="lbl">Isolation</span>The result is <strong>unaffected by other threads</strong> — i.e. serializable.</div>
+      <p class="small muted">Two questions remain: what are the isolation requirements, and what hardware support is needed?</p>
+    </div>
+  </div>
+</section>
+
+<!-- Isolation -->
+<section data-background-color="#ffffff">
+  <h2>Isolation = Serializability</h2>
+  <p class="small">T1 writes x, z and reads y. T2 writes y, z and reads x. A correct result must equal <em>some</em> serial order.</p>
+  <div class="cols">
+    <div class="center">
+      <svg viewBox="0 0 200 180" class="chart" style="max-width:230px">
+        <text x="100" y="14" text-anchor="middle" class="tiny" style="font-weight:700">Sequential (isolated)</text>
+        <text x="55" y="30" text-anchor="middle" class="tiny">T1</text><text x="145" y="30" text-anchor="middle" class="tiny">T2</text>
+        <line x1="55" y1="36" x2="55" y2="92" stroke="#3b82f6" stroke-width="2"/>
+        <circle cx="55" cy="42" r="3" fill="#3b82f6"/><text x="50" y="46" text-anchor="end" class="tiny">wr x=1</text>
+        <circle cx="55" cy="70" r="3" fill="#3b82f6"/><text x="50" y="74" text-anchor="end" class="tiny">rd y</text>
+        <circle cx="55" cy="86" r="3" fill="#3b82f6"/><text x="50" y="90" text-anchor="end" class="tiny">wr z=1</text>
+        <line x1="145" y1="100" x2="145" y2="156" stroke="#22c55e" stroke-width="2"/>
+        <circle cx="145" cy="106" r="3" fill="#22c55e"/><text x="150" y="110" class="tiny">rd x</text>
+        <circle cx="145" cy="130" r="3" fill="#22c55e"/><text x="150" y="134" class="tiny">wr y=2</text>
+        <circle cx="145" cy="150" r="3" fill="#22c55e"/><text x="150" y="154" class="tiny">wr z=2</text>
+        <text x="100" y="174" text-anchor="middle" class="tiny" style="font-weight:700;fill:#15803d">z = 2 ✓</text>
+      </svg>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 200 180" class="chart" style="max-width:230px">
+        <text x="100" y="14" text-anchor="middle" class="tiny" style="font-weight:700;fill:#CC0000">Non-isolated (interleaved)</text>
+        <text x="55" y="30" text-anchor="middle" class="tiny">T1</text><text x="145" y="30" text-anchor="middle" class="tiny">T2</text>
+        <line x1="55" y1="36" x2="55" y2="150" stroke="#3b82f6" stroke-width="2"/>
+        <circle cx="55" cy="46" r="3" fill="#3b82f6"/><text x="50" y="50" text-anchor="end" class="tiny">wr x=1</text>
+        <circle cx="55" cy="110" r="3" fill="#3b82f6"/><text x="50" y="114" text-anchor="end" class="tiny">rd y</text>
+        <circle cx="55" cy="140" r="3" fill="#3b82f6"/><text x="50" y="144" text-anchor="end" class="tiny">wr z=1</text>
+        <line x1="145" y1="50" x2="145" y2="150" stroke="#22c55e" stroke-width="2"/>
+        <circle cx="145" cy="60" r="3" fill="#22c55e"/><text x="150" y="64" class="tiny">rd x</text>
+        <circle cx="145" cy="100" r="3" fill="#22c55e"/><text x="150" y="104" class="tiny">wr y=2</text>
+        <circle cx="145" cy="135" r="3" fill="#22c55e"/><text x="150" y="139" class="tiny">wr z=2</text>
+        <line x1="58" y1="48" x2="142" y2="60" stroke="#CC0000" stroke-dasharray="3 2"/>
+        <line x1="142" y1="100" x2="58" y2="108" stroke="#CC0000" stroke-dasharray="3 2"/>
+        <text x="100" y="174" text-anchor="middle" class="tiny" style="font-weight:700;fill:#CC0000">z = (1,2,?) not serializable ✗</text>
+      </svg>
+    </div>
+  </div>
+  <div class="callout warn"><span class="lbl">The hazard</span>Interleaving lets each transaction see the other's partial writes — the outcome matches <strong>no</strong> serial order.</div>
+</section>
+
+<!-- Requirements for isolation -->
+<section data-background-color="#ffffff">
+  <h2>Requirements for Isolation</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Conflict rule</span>The <strong>write set</strong> of T1 must not overlap with the <strong>read set or write set</strong> of T2 (and vice versa).</div>
+      <p class="small">Write-write and read-write overlaps are conflicts; read-read is fine.</p>
+    </div>
+    <div>
+      <p><strong>If a conflict is detected:</strong></p>
+      <ol class="small">
+        <li><strong>Abort</strong> the transaction</li>
+        <li><strong>Cancel its effect</strong> (possible because of atomicity)</li>
+        <li><strong>Retry</strong> the transaction</li>
+      </ol>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Optimistic concurrency</span>TM lets transactions run speculatively in parallel and only pays a cost when they actually conflict — unlike a lock, which serializes <em>always</em>.</div>
+</section>
+
+<!-- Needed hardware support -->
+<section data-background-color="#ffffff">
+  <h2>Needed Hardware Support (HTM)</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Track speculative state</span>Buffer non-committed writes (store buffer, L1, L2). Record the <strong>read &amp; write sets</strong> via cache tags.</div>
+    <div class="callout"><span class="lbl">Commit</span>Mechanism to <strong>publish</strong> a committing transaction's write set atomically.</div>
+    <div class="callout"><span class="lbl">Conflict detect</span>Compare a committer's write set against my read/write state — any overlap = conflict.</div>
+  </div>
+  <div class="callout"><span class="lbl">Rollback</span>A mechanism to <strong>discard</strong> speculative state when a transaction aborts.</div>
+  <div class="callout takeaway"><span class="lbl">Four pillars</span>Speculative buffering · conflict detection · commit · rollback — every HTM design provides all four.</div>
+</section>
+
+<!-- Example HW support diagram -->
+<section data-background-color="#ffffff">
+  <h2>Example HW Support: Cache-Based HTM</h2>
+  <p class="small">Augment each cache line with <strong>read (R) and write (W) speculation bits</strong>. They mark the line as part of the current transaction's read/write set.</p>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 320 180" class="chart" style="max-width:380px">
+        <text x="160" y="14" text-anchor="middle" class="tiny" style="font-weight:700">Cache line + speculation tags</text>
+        <!-- header -->
+        <g class="tiny" style="font-weight:700">
+          <text x="40" y="36" text-anchor="middle">R bit</text>
+          <text x="90" y="36" text-anchor="middle">W bit</text>
+          <text x="150" y="36" text-anchor="middle">State</text>
+          <text x="240" y="36" text-anchor="middle">Tag &amp; data</text>
+        </g>
+        <!-- rows -->
+        <g>
+          <rect x="20" y="44" width="40" height="26" fill="#dbeafe" stroke="#3b82f6"/><text x="40" y="61" text-anchor="middle" class="tiny">1</text>
+          <rect x="70" y="44" width="40" height="26" fill="#fff" stroke="#94a3b8"/><text x="90" y="61" text-anchor="middle" class="tiny">0</text>
+          <rect x="120" y="44" width="60" height="26" fill="#fff" stroke="#94a3b8"/><text x="150" y="61" text-anchor="middle" class="tiny">S</text>
+          <rect x="180" y="44" width="120" height="26" fill="#fff" stroke="#94a3b8"/><text x="240" y="61" text-anchor="middle" class="tiny">x (read set)</text>
+        </g>
+        <g>
+          <rect x="20" y="72" width="40" height="26" fill="#fff" stroke="#94a3b8"/><text x="40" y="89" text-anchor="middle" class="tiny">0</text>
+          <rect x="70" y="72" width="40" height="26" fill="#fee2e2" stroke="#CC0000"/><text x="90" y="89" text-anchor="middle" class="tiny">1</text>
+          <rect x="120" y="72" width="60" height="26" fill="#fff" stroke="#94a3b8"/><text x="150" y="89" text-anchor="middle" class="tiny">M</text>
+          <rect x="180" y="72" width="120" height="26" fill="#fff" stroke="#94a3b8"/><text x="240" y="89" text-anchor="middle" class="tiny">y (spec write)</text>
+        </g>
+        <g>
+          <rect x="20" y="100" width="40" height="26" fill="#dbeafe" stroke="#3b82f6"/><text x="40" y="117" text-anchor="middle" class="tiny">1</text>
+          <rect x="70" y="100" width="40" height="26" fill="#fee2e2" stroke="#CC0000"/><text x="90" y="117" text-anchor="middle" class="tiny">1</text>
+          <rect x="120" y="100" width="60" height="26" fill="#fff" stroke="#94a3b8"/><text x="150" y="117" text-anchor="middle" class="tiny">M</text>
+          <rect x="180" y="100" width="120" height="26" fill="#fff" stroke="#94a3b8"/><text x="240" y="117" text-anchor="middle" class="tiny">z (read+write)</text>
+        </g>
+        <text x="160" y="150" text-anchor="middle" class="tiny muted">Snooped external write to a R/W-marked line → conflict → abort</text>
+      </svg>
+    </div>
+    <div>
+      <ul class="small">
+        <li><strong>R/W bits</strong> record the read &amp; write sets in the cache</li>
+        <li>Speculative writes stay in the cache, <strong>not yet visible</strong></li>
+        <li>A snooped external access to a marked line = <strong>conflict</strong> → abort + flash-clear the bits (rollback)</li>
+        <li><strong>Commit</strong> = clear the speculation bits, making the writes globally visible</li>
+      </ul>
+      <div class="src">After Solihin Fig 8.3 — cache state through commit and abort.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Module 8.2 review -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 8.2 — Review</h2>
+  <div class="qa"><p class="q">1. What problem does the ticket lock improve over LL/SC?</p>
+    <div class="fragment"><div class="a"><strong>Fairness</strong>: a thread that wants the lock is guaranteed to eventually get it (FIFO queue order).</div></div></div>
+  <div class="qa"><p class="q">2. What problem does ABQL improve over the ticket lock?</p>
+    <div class="fragment"><div class="a"><strong>Traffic</strong>: a release invalidates only <em>one</em> sharer (the next in line) instead of all sharers — O(1) instead of O(p).</div></div></div>
+  <div class="qa"><p class="q">3. What hardware support is needed for HTM?</p>
+    <div class="fragment"><div class="a">Speculative-state buffering, conflict detection, a commit mechanism, and a rollback mechanism.</div></div></div>
+  <p class="src">Click / press → to reveal each answer.</p>
+</section>
+
+<!-- Chapter summary -->
+<section data-background-color="#ffffff">
+  <h2>Chapter 8 — Big Picture</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">8.1 Primitives</span>Atomic RMW (t&amp;s, CAS, LL/SC) underpins all locks. TTSL spins on reads; LL/SC adds no traffic on failed acquires.</div>
+    <div class="callout"><span class="lbl">8.2 Scalable locks</span>Ticket adds fairness; ABQL adds O(1) release traffic at O(p) storage. No single lock wins everywhere.</div>
+    <div class="callout"><span class="lbl">8.2 Barriers + TM</span>Sense-reversal barriers are correct &amp; reusable. HTM = optimistic atomic blocks via cache-tracked speculation.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">One sentence</span>
+    <strong>A thin layer of hardware atomicity, leveraged carefully by software, is what makes safe parallel cooperation possible</strong> — and keeping that layer cheap, scalable, and fair is the whole engineering problem.</div>
+  <p class="center muted small">Next up → <strong>memory consistency models:</strong> the rules that say <em>when</em> one thread's writes become visible to another.</p>
+</section>
+
+</div>
+
+<!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 8 — Hardware Support for Synchronization</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.04,
+    minScale: 0.2, maxScale: 1.6,
+    center: false,                 // top-align content so the NC State header bar sits at the slide top
+    hash: true, slideNumber: 'c/t', history: true,
+    transition: 'slide', transitionSpeed: 'fast',
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      {left:'\\(', right:'\\)', display:false},
+      {left:'$$', right:'$$', display:true}
+    ]},
+  });
+</script>
+</body>
+</html>

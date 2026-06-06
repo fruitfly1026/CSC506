@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSC/ECE 506 · Chapter 6 — Introduction to Shared Memory Multiprocessors</title>
+
+<!-- reveal.js core (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<!-- code highlighting + math -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+<!-- fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<!-- course theme -->
+<link rel="stylesheet" href="assets/theme.css?v=4">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============================ TITLE ============================ -->
+<section class="title-slide" data-background-color="#ffffff">
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <h1>Chapter 6</h1>
+  <div class="sub">Introduction to Shared Memory Multiprocessors</div>
+  <div class="meta">
+    Fall Semester · Based on Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em><br>
+    <span class="muted">Use ← → to navigate · <strong>S</strong> for speaker notes · <strong>F</strong> fullscreen · <strong>ESC</strong> overview</span>
+  </div>
+  <aside class="notes">
+    This chapter introduces the shared-memory abstraction: any processor can touch any address with
+    an ordinary load/store. That convenience hides three hard support problems we will spend the rest
+    of the course on — cache coherence, the memory consistency model, and synchronization. The whole
+    chapter is one module (6.1) organized around those three pillars.
+  </aside>
+</section>
+
+<!-- Roadmap -->
+<section data-background-color="#ffffff">
+  <h2>Chapter Roadmap</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Part A</span><strong>The Shared-Memory Abstraction</strong><br>
+      <span class="small">Why load/store-to-any-address is so attractive, and what it costs to provide on real hardware with caches.</span></div>
+    <div class="callout"><span class="lbl">Part B</span><strong>Coherence &amp; Consistency</strong><br>
+      <span class="small">Write propagation + write serialization (coherence); ordering across <em>different</em> addresses (the consistency model).</span></div>
+    <div class="callout"><span class="lbl">Part C</span><strong>Synchronization</strong><br>
+      <span class="small">Why a software lock is broken, Peterson's algorithm, and why hardware atomic instructions are the real fix.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The thread that ties it together</span>
+    Shared memory is a <strong>programming convenience built on top of caches and an interconnect</strong>. Making it
+    <em>correct</em> needs three mechanisms: <strong>coherence</strong>, a <strong>consistency model</strong>, and <strong>synchronization</strong>.</div>
+</section>
+
+<!-- ==================================================================
+     MODULE 6.1 — DIVIDER
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 6.1</div>
+  <div class="mod-title">Cache Coherence, Memory Consistency &amp; Synchronization</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Argue the <strong>pros and cons</strong> of the shared-memory abstraction</li>
+      <li>State the two coherence principles — <strong>write propagation</strong> and <strong>write serialization</strong></li>
+      <li>Explain why a <strong>memory consistency model</strong> is needed for ordering across addresses</li>
+      <li>Show why a naïve software lock fails and what <strong>atomic instructions</strong> fix</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Pros / cons -->
+<section data-background-color="#ffffff">
+  <h2>The Shared-Memory Abstraction</h2>
+  <div class="callout"><span class="lbl">Definition</span>
+    Any address in main memory is reachable from <em>any</em> processor with an ordinary
+    <strong>load / store</strong> instruction.</div>
+  <div class="cols">
+    <div>
+      <div class="callout ok"><span class="lbl">Advantages</span>
+        <ul class="small" style="margin:.3em 0 0 .9em">
+          <li>Naturally supports shared-memory programs (easier to write — e.g. OpenMP directives)</li>
+          <li><strong>Single OS image</strong> across all cores</li>
+          <li>Fits larger problems: \( \text{mem}_n = n \cdot \text{mem}_1 \)</li>
+          <li>Allows <strong>fine-grain</strong> sharing</li>
+        </ul>
+      </div>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Disadvantage — cost to provide</span>
+        <ul class="small" style="margin:.3em 0 0 .9em">
+          <li><strong>Cheap</strong> on small scale (2–32 procs) and multicore</li>
+          <li><strong>Expensive</strong> on large scale (&gt; 64 procs)</li>
+        </ul>
+      </div>
+      <p class="small muted">The convenience is real; the engineering bill arrives as <em>coherence + consistency + synchronization</em>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Coherence by analogy: appointment 1 -->
+<section data-background-color="#ffffff">
+  <h2>Coherence by Analogy: Write Propagation</h2>
+  <div class="cols w-64">
+    <div>
+      <blockquote style="font-size:1.0em;border-left:5px solid var(--wolf-red);padding:.3em 0 .3em 1em;margin:.3em 0;color:var(--ink-soft)">
+        You (A) agreed to meet friend B exactly one month from now. An emergency comes up — you need to
+        move the meeting to <strong>three months</strong> from now. The only way to reach B is by mail, and you
+        may only write the <em>new date</em>.
+      </blockquote>
+      <p class="small"><strong>Q:</strong> How do you ensure you'll still meet B? How important is <em>reliable</em> delivery?</p>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Principle 1 — Write Propagation</span>
+        When a processor writes a memory address, the write <strong>must be propagated to all other processors</strong>.</div>
+      <p class="small muted">The "letter" = the propagated write. If it never arrives, B keeps the stale value — exactly the
+        coherence bug.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Coherence by analogy: appointment 2 -->
+<section data-background-color="#ffffff">
+  <h2>Coherence by Analogy: Write Serialization</h2>
+  <div class="cols w-64">
+    <div>
+      <blockquote style="font-size:1.0em;border-left:5px solid var(--wolf-red);padding:.3em 0 .3em 1em;margin:.3em 0;color:var(--ink-soft)">
+        You already mailed B "change to <strong>3 months</strong>." Then you realize you actually need
+        "change to <strong>2 months</strong>," so you mail a second letter. If the letters arrive
+        <em>out of order</em>, B ends up at the wrong date.
+      </blockquote>
+      <p class="small"><strong>Q:</strong> How do you guarantee the final date is correct? How important is delivery <em>ordering</em>?</p>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Principle 2 — Write Serialization</span>
+        When there are two writes to the <strong>same address</strong>, the order they are seen must be the
+        <strong>same for all processors</strong>.</div>
+      <p class="small muted">Everyone must agree on the last write — or different cores converge to different values.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Will this code work -->
+<section data-background-color="#ffffff">
+  <h2>Will This Parallel Code Work?</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Parallel reduction with a lock</div>
+      <pre><code class="language-c" data-trim>
+sum = 0;
+begin parallel
+  for (i = 0; i &lt; 2; i++) {
+    lock(id, myLock);
+    sum = sum + a[i];
+    unlock(id, myLock);
+  }
+end parallel
+Print sum;
+</code></pre>
+    </div>
+    <div>
+      <p>Suppose <code class="inline">a[0] = 3</code> and <code class="inline">a[1] = 7</code>.</p>
+      <p class="q" style="font-size:1.2em">Will it print <strong>sum = 10</strong>?</p>
+      <div class="callout warn"><span class="lbl">Spoiler</span>
+        Not necessarily — with <strong>write-back caches</strong> each core can hold its own private copy of
+        <code class="inline">sum</code>. The lock provides mutual exclusion, but it does <em>not</em> by itself make
+        caches agree.</div>
+    </div>
+  </div>
+  <aside class="notes">No, assuming a write-back cache. It would be fine if sum were uncachable. The problem persists
+    even with a write-through cache (other caches still hold stale copies). I/O DMA can create the same
+    coherence problem.</aside>
+</section>
+
+<!-- Cache coherence illustration: animated walkthrough -->
+<section data-background-color="#ffffff">
+  <h2>Illustration: How Coherence Breaks</h2>
+  <p class="small">Three cores share a bus to main memory. We watch <code class="inline">sum</code> as P1 and P2 each add their element.</p>
+  <div class="center">
+    <svg viewBox="0 0 720 330" class="chart" style="max-width:840px">
+      <!-- cores -->
+      <g>
+        <circle cx="130" cy="40" r="30" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/><text x="130" y="46" text-anchor="middle" class="lbl">P1</text>
+        <circle cx="360" cy="40" r="30" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/><text x="360" y="46" text-anchor="middle" class="lbl">P2</text>
+        <circle cx="590" cy="40" r="30" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/><text x="590" y="46" text-anchor="middle" class="lbl">P3</text>
+      </g>
+      <!-- core to cache -->
+      <line x1="130" y1="70" x2="130" y2="100" class="axis"/>
+      <line x1="360" y1="70" x2="360" y2="100" class="axis"/>
+      <line x1="590" y1="70" x2="590" y2="100" class="axis"/>
+      <!-- caches -->
+      <g>
+        <rect x="70"  y="100" width="120" height="46" rx="6" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+        <text x="130" y="129" text-anchor="middle" class="lbl fragment" data-fragment-index="1">sum=3 (D)</text>
+        <rect x="300" y="100" width="120" height="46" rx="6" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+        <text x="360" y="129" text-anchor="middle" class="lbl fragment" data-fragment-index="3">sum=7 (D)</text>
+        <rect x="530" y="100" width="120" height="46" rx="6" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+        <text x="590" y="129" text-anchor="middle" class="lbl" style="fill:#94a3b8">(empty)</text>
+      </g>
+      <text x="40" y="129" text-anchor="end" class="note">Cache</text>
+      <!-- cache to bus -->
+      <line x1="130" y1="146" x2="130" y2="190" class="axis"/>
+      <line x1="360" y1="146" x2="360" y2="190" class="axis"/>
+      <line x1="590" y1="146" x2="590" y2="190" class="axis"/>
+      <!-- bus -->
+      <line x1="40" y1="190" x2="690" y2="190" stroke="#0f172a" stroke-width="4"/>
+      <text x="40" y="183" text-anchor="start" class="note">Bus</text>
+      <!-- mem ctrl + memory -->
+      <line x1="360" y1="190" x2="360" y2="226" class="axis"/>
+      <rect x="300" y="226" width="120" height="22" rx="4" fill="#ede9fe" stroke="#8b5cf6" stroke-width="2"/>
+      <text x="360" y="241" text-anchor="middle" class="lbl">Mem Ctrl</text>
+      <rect x="300" y="248" width="120" height="40" rx="4" fill="#e2e8f0" stroke="#64748b" stroke-width="2"/>
+      <text x="360" y="273" text-anchor="middle" class="lbl">sum=0</text>
+      <text x="280" y="273" text-anchor="end" class="note">Main Memory</text>
+      <!-- annotations -->
+      <text x="130" y="318" text-anchor="middle" class="note fragment" data-fragment-index="1" style="fill:#CC0000">P1: read 0, write 0+3 = 3 (dirty)</text>
+      <text x="360" y="318" text-anchor="middle" class="note fragment" data-fragment-index="3" style="fill:#CC0000">P2: read 0, write 0+7 = 7 (dirty)</text>
+    </svg>
+  </div>
+  <div class="callout warn fragment" data-fragment-index="3"><span class="lbl">The bug</span>
+    Both P1 and P2 read <code class="inline">sum=0</code> from memory, then each writes back a private dirty copy
+    (3 and 7). Neither saw the other's update — <strong>write propagation failed</strong>. Final printed value
+    could be 3, 7, or 10 depending on timing.</div>
+  <aside class="notes">Step through the fragments: P1 loads sum=0 and writes 3 into its own write-back cache (Dirty).
+    P2 independently loads the still-stale 0 from memory and writes 7. Memory never sees the right value
+    and the two caches disagree. This is the canonical coherence failure.</aside>
+</section>
+
+<!-- Questions about cache organization -->
+<section data-background-color="#f6f8fb">
+  <h2>Does Cache Organization Save Us?</h2>
+  <div class="qa">
+    <p class="q">Do P1 and P2 see the same value of <code class="inline">sum</code> at the end?</p>
+    <div class="fragment"><div class="a">No — each holds its own private copy; without a coherence protocol they diverge.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">What if we use <strong>write-through</strong> caches instead of write-back?</p>
+    <div class="fragment"><div class="a">Still broken. Writes reach memory immediately, but the <em>other</em> cache keeps its stale copy
+      until it is told to update or invalidate. Propagation is still missing.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">What if there are no caches, or <code class="inline">sum</code> is uncachable?</p>
+    <div class="fragment"><div class="a">Then it works — every access goes straight to the single shared memory location. But giving up
+      caching destroys performance, so we keep caches and add a protocol.</div></div>
+  </div>
+</section>
+
+<!-- Transaction serialization: write vs write -->
+<section data-background-color="#ffffff">
+  <h2>Why Serialization Matters: Two Writes</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 320 200" class="chart">
+        <rect x="20" y="20" width="60" height="30" rx="6" fill="#dbeafe" stroke="#3b82f6"/><text x="50" y="40" text-anchor="middle" class="lbl">P1: x=1</text>
+        <rect x="20" y="150" width="60" height="30" rx="6" fill="#dbeafe" stroke="#3b82f6"/><text x="50" y="170" text-anchor="middle" class="lbl">P2: x=2</text>
+        <rect x="240" y="20" width="60" height="30" rx="6" fill="#fef3c7" stroke="#f59e0b"/><text x="270" y="40" text-anchor="middle" class="lbl">P3</text>
+        <rect x="240" y="150" width="60" height="30" rx="6" fill="#fef3c7" stroke="#f59e0b"/><text x="270" y="170" text-anchor="middle" class="lbl">P4</text>
+        <!-- arrows -->
+        <line x1="80" y1="35" x2="240" y2="35" stroke="#CC0000" stroke-width="2" marker-end="url(#ar6)"/>
+        <line x1="80" y1="165" x2="240" y2="165" stroke="#2563eb" stroke-width="2" marker-end="url(#ar6)"/>
+        <line x1="80" y1="42" x2="240" y2="158" stroke="#2563eb" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#ar6)"/>
+        <line x1="80" y1="158" x2="240" y2="42" stroke="#CC0000" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#ar6)"/>
+        <text x="270" y="64" text-anchor="middle" class="note" style="fill:#CC0000">sees x=2</text>
+        <text x="270" y="144" text-anchor="middle" class="note" style="fill:#2563eb">sees x=1</text>
+        <defs><marker id="ar6" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#444"/></marker></defs>
+      </svg>
+    </div>
+    <div>
+      <p class="small">P1 and P2 both write <code class="inline">x</code>. If P3 and P4 receive the two writes in
+        <strong>different orders</strong>…</p>
+      <div class="callout warn"><span class="lbl">Result</span>P3 and P4 settle on <strong>different final values</strong> of <code class="inline">x</code>.
+        The system is incoherent.</div>
+      <p class="small muted">All processors must agree on a single global order of writes to the same address.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Transaction serialization: write vs read; read vs read -->
+<section data-background-color="#ffffff">
+  <h2>Write vs. Read, and Read vs. Read</h2>
+  <div class="cols">
+    <div>
+      <h3>Write vs. read</h3>
+      <p class="small">P1 writes <code class="inline">x=1</code>; it reaches P2 and P3 at different times. P2 reads
+        <code class="inline">x</code> <em>before</em> the write has reached P3.</p>
+      <div class="callout warn"><span class="lbl">Effect</span>P2 and P3 observe different values — the ordering of a write relative to reads matters too.</div>
+    </div>
+    <div>
+      <h3>Read vs. read</h3>
+      <div class="callout ok"><span class="lbl">Doesn't matter</span>Only one value is involved — two reads can be reordered freely.</div>
+      <div class="callout takeaway"><span class="lbl">So the rule is</span>The order between a <strong>write and anything else</strong> must be consistent
+        across processors. Hence the name <strong>write serialization</strong>.</div>
+    </div>
+  </div>
+  <p class="small muted">Requirements: a write must <strong>appear atomic</strong>, and its <strong>completion must be identifiable</strong>.</p>
+</section>
+
+<!-- Main observations -->
+<section data-background-color="#ffffff">
+  <h2>Coherence: The Two Properties</h2>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Write propagation</span>
+      A value written in one cache <strong>must reach</strong> the other caches.</div>
+    <div class="callout"><span class="lbl">Write serialization</span>
+      Successive writes to the same datum are <strong>seen in the same order</strong> by all caches.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">We need a protocol</span>
+    A mechanism that guarantees both is a <strong>cache coherence protocol</strong>. It can be built in
+    <strong>hardware</strong> or <strong>software</strong> — but software implementations usually carry very
+    high overhead, so real machines do it in hardware (Chapter 7 onward).</div>
+</section>
+
+<!-- Memory consistency problem intro -->
+<section data-background-color="#ffffff">
+  <h2>From One Datum to Many: Consistency</h2>
+  <div class="callout"><span class="lbl">Coherence is per-address</span>
+    Cache coherence only governs propagation and ordering of accesses to a <strong>single</strong> memory location.</div>
+  <p class="center q" style="font-size:1.25em;margin:.6em 0">
+    Is there any need to order accesses to <strong>multiple, different</strong> data items?</p>
+  <div class="callout takeaway"><span class="lbl">Yes</span>
+    Programs rely on ordering <em>between distinct variables</em> (e.g. "set data, then set the ready flag").
+    Guaranteeing that cross-address ordering is the job of the <strong>memory consistency model</strong>.</div>
+</section>
+
+<!-- Consistency illustration -->
+<section data-background-color="#ffffff">
+  <h2>Consistency: The Flag Idiom</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">P0 — producer</div>
+      <pre><code class="language-c" data-trim>
+S1: datum = 5;
+S2: datumIsReady = 1;
+</code></pre>
+      <div class="code-label">P1 — consumer</div>
+      <pre><code class="language-c" data-trim>
+S3: while (!datumIsReady) {};
+S4: print datum;
+</code></pre>
+    </div>
+    <div>
+      <p class="small">Common in <strong>DOACROSS</strong> and <strong>DOPIPE</strong> point-to-point synchronization.</p>
+      <ul class="small">
+        <li>Correctness depends on the order of <strong>S1 before S2</strong>, and <strong>S3 before S4</strong></li>
+        <li>What if <strong>S2 runs before S1</strong>? P1 prints garbage.</li>
+        <li>What if <strong>S4 runs before S3</strong>? P1 reads before it is ready.</li>
+      </ul>
+      <div class="callout warn"><span class="lbl">The trap</span>Even if P0 <em>executes</em> S1 before S2, P1 does
+        <strong>not necessarily see them in that order</strong> on a real multiprocessor.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Global ordering / consistency model -->
+<section data-background-color="#ffffff">
+  <h2>Global Ordering &amp; the Consistency Model</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Full ordering</span>
+        Every access a processor issues runs in <strong>program order</strong>, and all processors see them in
+        that order.</div>
+      <p class="small" style="color:var(--warn)">✗ Full ordering is <strong>expensive</strong> — it forbids almost
+        every performance optimization.</p>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Real solution — a contract</span>
+        A <strong>memory consistency model</strong> documents which orderings the hardware <em>does</em> guarantee
+        and which it does <em>not</em>.</div>
+      <ul class="small">
+        <li>Programmers must write code that <strong>conforms</strong> to the model</li>
+        <li>Misunderstanding it is a source of <strong>subtle bugs</strong></li>
+        <li>It contributes to <strong>code non-portability</strong> across machines</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- How to ensure ordering -->
+<section data-background-color="#ffffff">
+  <h2>Enforcing Order: Compiler + Hardware</h2>
+  <p class="small">Both layers can reorder memory operations, so both must cooperate.</p>
+  <div class="cols">
+    <div>
+      <h3>The compiler may reorder</h3>
+      <ul class="small">
+        <li>No data dependence between S1 and S2 → free to swap them</li>
+        <li>Must be <strong>explicitly told not to</strong> — e.g. declare <code class="inline">volatile</code></li>
+        <li>This disables aggressive sequential optimizations</li>
+      </ul>
+    </div>
+    <div>
+      <h3>The hardware may reorder</h3>
+      <ul class="small">
+        <li><strong>Write buffers</strong>, the memory controller, network delay</li>
+        <li>Many ILP features reorder memory references</li>
+        <li>Goal: preserve required ordering <em>while still exploiting ILP</em></li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">Key tension</span>We want ordering guarantees <strong>and</strong> performance —
+    the consistency model defines exactly where the line is drawn.</div>
+</section>
+
+<!-- Synchronization: software lock -->
+<section data-background-color="#ffffff">
+  <h2>Synchronization: A First (Broken) Lock</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">C — naïve spin lock</div>
+      <pre><code class="language-c" data-trim>
+void lock(int *lockvar) {
+  while (*lockvar == 1) {};  // wait until released
+  *lockvar = 1;              // acquire lock
+}
+void unlock(int *lockvar) {
+  *lockvar = 0;
+}
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label">In machine language</div>
+      <pre><code class="language-x86asm" data-trim>
+lock:   ld   R1, &amp;lockvar   ; R1 = MEM[&amp;lockvar]
+        bnz  R1, lock       ; retry if R1 != 0
+        sti  &amp;lockvar, #1   ; MEM[&amp;lockvar] = 1
+        ret
+unlock: sti  &amp;lockvar, #0   ; MEM[&amp;lockvar] = 0
+        ret
+</code></pre>
+    </div>
+  </div>
+  <p class="small muted">Goal: guarantee <strong>mutual exclusion</strong> — at most one thread in the critical section.</p>
+</section>
+
+<!-- Problem with software lock -->
+<section data-background-color="#ffffff">
+  <h2>Why That Lock Is Wrong</h2>
+  <div class="callout warn"><span class="lbl">Not atomic</span>
+    The sequence <code class="inline">ld</code> → <code class="inline">bnz</code> → <code class="inline">sti</code>
+    is <strong>three separate instructions</strong>, not one indivisible operation.</div>
+  <div class="cols">
+    <div>
+      <p class="small">Two threads can interleave like this:</p>
+      <ul class="small">
+        <li>T1 reads <code class="inline">lockvar = 0</code>, decides to acquire</li>
+        <li>T2 reads <code class="inline">lockvar = 0</code> <em>before</em> T1 stores</li>
+        <li><strong>Both</strong> then store 1 and enter the critical section</li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Consequence</span>
+        Multiple threads enter the critical section simultaneously — mutual exclusion is violated. We need the
+        test-and-set to be <strong>atomic</strong>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Peterson's algorithm -->
+<section data-background-color="#ffffff">
+  <h2>Peterson's Algorithm (Software-Only)</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Two-process mutual exclusion</div>
+      <pre><code class="language-c" data-trim>
+int turn;
+int interested[n];   // init 0
+
+void lock(int process) {     // 0 or 1
+  int other = 1 - process;
+  interested[process] = TRUE;
+  turn = process;
+  while (turn == process &amp;&amp;
+         interested[other] == TRUE) {};
+}
+void unlock(int process) {
+  interested[process] = FALSE;
+}
+</code></pre>
+    </div>
+    <div>
+      <p class="small"><strong>Exit the wait loop only if:</strong></p>
+      <ul class="small">
+        <li><code class="inline">interested[other] == FALSE</code> — the other process isn't competing (or just unlocked), <em>or</em></li>
+        <li><code class="inline">turn != process</code> — the other set <code class="inline">turn</code> to itself and is blocked in its own loop</li>
+      </ul>
+      <div class="callout"><span class="lbl">No atomic instruction needed</span>Correctness comes purely from the
+        ordering of two ordinary writes.</div>
+    </div>
+  </div>
+</section>
+
+<!-- No race -->
+<section data-background-color="#ffffff">
+  <h2>Peterson: The Common Case (No Race)</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Proc 0</div>
+      <pre><code class="language-c" data-trim>
+interested[0] = TRUE;
+turn = 0;
+while (turn==0 &amp;&amp; interested[1]==TRUE) {};
+// interested[1]==FALSE
+// → Proc 0 enters critical section
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label">Proc 1 (arrives later)</div>
+      <pre><code class="language-c" data-trim>
+interested[1] = TRUE;
+turn = 1;
+while (turn==1 &amp;&amp; interested[0]==TRUE) {};
+// turn==1 &amp;&amp; interested[0]==TRUE
+// → Proc 1 spins until Proc 0 unlocks
+</code></pre>
+    </div>
+  </div>
+  <div class="callout ok"><span class="lbl">Works</span>Proc 0 is already inside; Proc 1 correctly waits. After
+    <code class="inline">unlock</code> sets <code class="inline">interested[0]=FALSE</code>, Proc 1 proceeds.</div>
+</section>
+
+<!-- There is race -->
+<section data-background-color="#ffffff">
+  <h2>Peterson: The Contended Case</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Proc 0</div>
+      <pre><code class="language-c" data-trim>
+interested[0] = TRUE;
+turn = 0;
+
+
+
+while (turn==0 &amp;&amp; interested[1]==TRUE) {};
+// turn==1 now → Proc 0 enters CS
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label">Proc 1 (interleaved)</div>
+      <pre><code class="language-c" data-trim>
+interested[1] = TRUE;
+
+
+turn = 1;          // overwrites turn
+
+while (turn==1 &amp;&amp; interested[0]==TRUE) {};
+// → Proc 1 waits until Proc 0 unlocks
+</code></pre>
+    </div>
+  </div>
+  <div class="callout ok"><span class="lbl">Still correct</span>Both set <code class="inline">interested</code>, but
+    whoever writes <code class="inline">turn</code> <strong>last</strong> loses the tie and waits. Exactly one
+    enters. <code class="inline">turn</code> breaks the symmetry.</div>
+</section>
+
+<!-- Will Peterson work / consistency dependence -->
+<section data-background-color="#ffffff">
+  <h2>Peterson Depends on Memory Ordering</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Correctness hinges on the <strong>global order</strong> of these two writes:</p>
+      <pre><code class="language-c" data-trim>
+A: interested[process] = TRUE;
+B: turn = process;
+</code></pre>
+      <p class="small">If the hardware/compiler lets <strong>B appear before A</strong> on the other core…</p>
+    </div>
+    <div>
+      <div class="code-label">Reordered: both enter!</div>
+      <pre><code class="language-c" data-trim>
+// Proc 0          // Proc 1
+interested[0]=TRUE;
+                   turn = 1;
+turn = 0;
+                   interested[1]=TRUE;
+while(turn==0 &amp;&amp; interested[1]) {};
+// turn==0? sees interested[1]
+// stale → BOTH may enter CS
+</code></pre>
+    </div>
+  </div>
+  <div class="callout warn"><span class="lbl">So</span>Peterson is correct <strong>only</strong> under a strong
+    consistency model (or with explicit fences). It is intimately tied to the <strong>memory consistency problem</strong>.</div>
+</section>
+
+<!-- Performance problem / atomic instructions -->
+<section data-background-color="#ffffff">
+  <h2>Why Software Locks Lose to Hardware</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Assuming full ordering</span>
+        Peterson <em>does</em> achieve mutual exclusion — but it is <strong>very inefficient</strong>.</div>
+      <ul class="small">
+        <li>Scaling to <em>n</em> threads needs elaborate schemes</li>
+        <li>e.g. a hierarchical <strong>tournament</strong> of pairwise locks</li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">The real fix</span>
+        If <strong>non-atomicity</strong> is the root problem, let hardware provide an atomic
+        <strong>load–modify–store</strong> sequence — typically a single <strong>atomic instruction</strong>
+        (e.g. test-and-set, fetch-and-add, compare-and-swap).</div>
+    </div>
+  </div>
+  <p class="small muted">Atomic instructions make a correct lock both simple and fast — the subject of later chapters.</p>
+</section>
+
+<!-- ==================================================================
+     MODULE REVIEW
+     ================================================================== -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 6.1 — Review</h2>
+  <div class="qa">
+    <p class="q">1. What two principles define cache coherence?</p>
+    <div class="fragment"><div class="a"><strong>Write propagation</strong> (a write reaches all caches) and
+      <strong>write serialization</strong> (all processors see writes to one address in the same order).</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. How does memory consistency differ from coherence?</p>
+    <div class="fragment"><div class="a">Coherence orders accesses to a <em>single</em> address; the
+      <strong>consistency model</strong> defines ordering guarantees <em>across different</em> addresses.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Why does the naïve spin lock fail, and what fixes it?</p>
+    <div class="fragment"><div class="a">Its test-then-set isn't atomic, so two threads can both acquire. A hardware
+      <strong>atomic instruction</strong> (atomic load–modify–store) fixes it.</div></div>
+  </div>
+  <p class="src">Click / press → to reveal each answer.</p>
+</section>
+
+<!-- Module review question -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 6.1 — Big Question</h2>
+  <div class="qa">
+    <p class="q">What key concepts do we need to support the shared-memory abstraction in multiprocessors?</p>
+    <div class="fragment">
+      <div class="cols c3" style="margin-top:.4em">
+        <div class="callout"><span class="lbl">1</span><strong>Cache coherence</strong><br><span class="small">propagation + serialization per address</span></div>
+        <div class="callout"><span class="lbl">2</span><strong>Memory consistency model</strong><br><span class="small">ordering across addresses</span></div>
+        <div class="callout"><span class="lbl">3</span><strong>Synchronization support</strong><br><span class="small">atomic instructions, locks</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Chapter summary -->
+<section data-background-color="#ffffff">
+  <h2>Chapter 6 — Big Picture</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Abstraction</span>Shared memory = load/store to any address. Convenient, but
+      not free on real hardware with caches.</div>
+    <div class="callout"><span class="lbl">Coherence + consistency</span>Propagation &amp; serialization fix one address;
+      a consistency model orders across addresses.</div>
+    <div class="callout"><span class="lbl">Synchronization</span>Software locks need atomicity; hardware atomic
+      instructions deliver it.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">One sentence</span>
+    <strong>Shared memory is an abstraction that hardware must actively maintain</strong> — through coherence, a
+    consistency model, and synchronization primitives.</div>
+  <p class="center muted small">Next up → <strong>Chapter 7:</strong> how cache coherence protocols actually work (snooping &amp; directories).</p>
+</section>
+
+</div>
+
+<!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 6 — Shared Memory Multiprocessors</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.04,
+    minScale: 0.2, maxScale: 1.6,
+    center: false,                 // top-align content so the NC State header bar sits at the slide top
+    hash: true, slideNumber: 'c/t', history: true,
+    transition: 'slide', transitionSpeed: 'fast',
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      {left:'\\(', right:'\\)', display:false},
+      {left:'$$', right:'$$', display:true}
+    ]},
+  });
+</script>
+</body>
+</html>

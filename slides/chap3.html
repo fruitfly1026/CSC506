@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSC/ECE 506 · Chapter 3 — Shared Memory Parallel Programming</title>
+
+<!-- reveal.js core (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<!-- code highlighting + math -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+<!-- fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<!-- course theme -->
+<link rel="stylesheet" href="assets/theme.css?v=4">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============================ TITLE ============================ -->
+<section class="title-slide" data-background-color="#ffffff">
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <h1>Chapter 3</h1>
+  <div class="sub">Shared Memory Parallel Programming — Finding, Expressing &amp; Synchronizing Tasks</div>
+  <div class="meta">
+    Fall Semester · Based on Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em><br>
+    <span class="muted">Use ← → to navigate · <strong>S</strong> for speaker notes · <strong>F</strong> fullscreen · <strong>ESC</strong> overview</span>
+  </div>
+  <aside class="notes">
+    Chapter 3 is the "how do I actually parallelize a program" chapter. The goal: given source code,
+    without knowing the algorithm, find parallel tasks; decide which variables each thread can touch;
+    and coordinate threads with synchronization. We work mostly in the shared-memory model and express
+    the result in OpenMP and pthreads.
+  </aside>
+</section>
+
+<!-- Roadmap -->
+<section data-background-color="#ffffff">
+  <h2>Chapter Roadmap</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Module 3.1</span><strong>Parallelism &amp; Dependence Analysis</strong><br>
+      <span class="small">The three dependence types, loop-carried vs. loop-independent, the ITG and LDG.</span></div>
+    <div class="callout"><span class="lbl">Module 3.2</span><strong>Loop-Level Parallelism</strong><br>
+      <span class="small">Reading the LDG to extract <em>DOALL, DOACROSS, function</em> and <em>DOPIPE</em> parallelism.</span></div>
+    <div class="callout"><span class="lbl">Module 3.3</span><strong>Algorithm-Level Parallelism</strong><br>
+      <span class="small">When code analysis is too pessimistic — red/black ordering, asynchronous relaxation.</span></div>
+  </div>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Module 3.4</span><strong>Variable Scope &amp; OpenMP</strong><br>
+      <span class="small">Shared / private / reduction; privatization; expressing it all with <code class="inline">#pragma omp</code>.</span></div>
+    <div class="callout"><span class="lbl">Module 3.5</span><strong>Synchronization &amp; pthreads</strong><br>
+      <span class="small">Point-to-point, locks, barriers — and the pthreads primitives that implement them.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The thread that ties it together</span>
+    Parallelization is two problems: <strong>correctness</strong> (find tasks, scope variables, synchronize) and <strong>performance</strong> (map tasks to hardware). This chapter is the correctness half.</div>
+</section>
+
+<!-- Steps in creating a parallel program -->
+<section data-background-color="#ffffff">
+  <h2>The Two Halves of Parallelization</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Task creation — correctness</span>
+        <ul class="small" style="margin:.3em 0 0 .9em">
+          <li>Find parallel tasks (code &amp; algorithm analysis)</li>
+          <li>Partition variables: shared / private / reduction</li>
+          <li>Insert synchronization</li>
+        </ul></div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Task mapping — performance</span>
+        <ul class="small" style="margin:.3em 0 0 .9em">
+          <li>Static vs. dynamic scheduling</li>
+          <li>Block vs. cyclic distribution</li>
+          <li>Dimension mapping (row- vs. column-wise)</li>
+          <li>Communication &amp; data-locality considerations</li>
+        </ul></div>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">This chapter</span>
+    We focus on <strong>task creation</strong>. Mapping (the performance half) is the subject of later chapters — here we just make a correct parallel program.</div>
+</section>
+
+<!-- ==================================================================
+     MODULE 3.1 — DEPENDENCE ANALYSIS
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 3.1</div>
+  <div class="mod-title">Parallelism &amp; Dependence Analysis</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Identify <strong>true</strong>, <strong>anti</strong>, and <strong>output</strong> dependences in source code</li>
+      <li>Distinguish <strong>loop-carried</strong> from <strong>loop-independent</strong> dependences</li>
+      <li>Draw an <strong>Iteration-space Traversal Graph (ITG)</strong> and a <strong>Loop-Carried Dependence Graph (LDG)</strong></li>
+    </ul>
+  </div>
+</section>
+
+<!-- Code analysis premise -->
+<section data-background-color="#ffffff">
+  <h2>The Premise of Code Analysis</h2>
+  <div class="callout"><span class="lbl">Goal</span>
+    Given code — <strong>without</strong> knowing the algorithm — find the parallel tasks. Our main lever is <strong>loop dependence analysis</strong>.</div>
+  <p class="small"><strong>Notation we'll use throughout:</strong></p>
+  <ul class="small">
+    <li><code class="inline">S</code> = a statement in the source code; <code class="inline">S[i,j,…]</code> = that statement in loop iteration <code class="inline">[i,j,…]</code></li>
+    <li><code class="inline">S1</code> <em>then</em> <code class="inline">S2</code> means <code class="inline">S1</code> happens before <code class="inline">S2</code></li>
+  </ul>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">S1 T S2 — true</span><span class="small">S1 <strong>writes</strong> a location later <strong>read</strong> by S2 (read-after-write). The real producer→consumer flow.</span></div>
+    <div class="callout warn"><span class="lbl">S1 A S2 — anti</span><span class="small">S1 <strong>reads</strong> a location later <strong>written</strong> by S2 (write-after-read).</span></div>
+    <div class="callout warn"><span class="lbl">S1 O S2 — output</span><span class="small">S1 and S2 <strong>write</strong> the same location (write-after-write).</span></div>
+  </div>
+  <p class="small muted">Anti &amp; output are "name" dependences — they exist because of <em>reuse</em> of a storage location, not real data flow.</p>
+</section>
+
+<!-- Dependence example -->
+<section data-background-color="#ffffff">
+  <h2>Worked Example: Spotting Dependences</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Source</div>
+      <pre><code class="language-c" data-trim>
+S1: x = 2;
+S2: y = x;
+S3: y = x + z;
+S4: z = 6;
+</code></pre>
+      <p class="small">Trace each variable: who writes it, who reads it, in what order.</p>
+    </div>
+    <div>
+      <table>
+        <tr><th>Dependence</th><th>Type</th><th>Why</th></tr>
+        <tr><td>S1 T S2</td><td>true</td><td>S1 writes <code class="inline">x</code>, S2 reads it</td></tr>
+        <tr><td>S1 T S3</td><td>true</td><td>S1 writes <code class="inline">x</code>, S3 reads it</td></tr>
+        <tr><td>S3 A S4</td><td>anti</td><td>S3 reads <code class="inline">z</code>, S4 writes it</td></tr>
+        <tr><td>S2 O S3</td><td>output</td><td>both write <code class="inline">y</code></td></tr>
+      </table>
+      <div class="callout"><span class="lbl">Grouping</span>
+        Merge S1,S2 → <code class="inline">S12</code> and S3,S4 → <code class="inline">S34</code>: the relation collapses to <strong>S12 T S34</strong> and <strong>S12 O S34</strong>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Loop carried vs independent -->
+<section data-background-color="#ffffff">
+  <h2>Loop-Carried vs. Loop-Independent</h2>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Loop-carried</span>
+      Dependence crosses iterations — <strong>remove the loop and it disappears</strong>. This is what blocks parallelism.</div>
+    <div class="callout ok"><span class="lbl">Loop-independent</span>
+      Dependence lives <strong>within one iteration</strong> — it survives even if the loop is removed.</div>
+  </div>
+  <div class="code-label">A 1-D loop</div>
+  <pre><code class="language-c" data-trim>
+for (i = 1; i < n; i++) {
+  S1: a[i] = a[i-1] + 1;   // S1[i] T S1[i+1]  -> loop-carried
+  S2: b[i] = a[i];         // S1[i] T S2[i]    -> loop-independent
+}
+</code></pre>
+  <p class="small"><code class="inline">a[i]</code> depends on <code class="inline">a[i-1]</code> from the <em>previous</em> iteration (carried); <code class="inline">b[i]</code> uses <code class="inline">a[i]</code> from the <em>same</em> iteration (independent).</p>
+</section>
+
+<!-- Loop carried in nests -->
+<section data-background-color="#ffffff">
+  <h2>Which Loop Carries the Dependence?</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Carried on the j loop</div>
+      <pre><code class="language-c" data-trim>
+for (i = 1; i < n; i++)
+  for (j = 1; j < n; j++)
+    S3: a[i][j] = a[i][j-1] + 1;
+</code></pre>
+      <p class="small"><code class="inline">S3[i,j] T S3[i,j+1]</code> → carried on <strong>j</strong>. <strong>No</strong> carried dependence on the <code class="inline">i</code> loop → <em>i is parallel.</em></p>
+    </div>
+    <div>
+      <div class="code-label">Carried on the i loop</div>
+      <pre><code class="language-c" data-trim>
+for (i = 1; i < n; i++)
+  for (j = 1; j < n; j++)
+    S4: a[i][j] = a[i-1][j] + 1;
+</code></pre>
+      <p class="small"><code class="inline">S4[i,j] T S4[i+1,j]</code> → carried on <strong>i</strong>. <strong>No</strong> carried dependence on the <code class="inline">j</code> loop → <em>j is parallel.</em></p>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The payoff</span>
+    A loop level with <strong>no loop-carried dependence is fully parallel</strong>. Finding that level is the whole game.</div>
+</section>
+
+<!-- ITG -->
+<section data-background-color="#ffffff">
+  <h2>Iteration-Space Traversal Graph (ITG)</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">The ITG draws the <strong>happens-before</strong> order of the iteration space.</p>
+      <ul class="small">
+        <li><strong>Node</strong> = a point <code class="inline">[i,j]</code> in the iteration space</li>
+        <li><strong>Directed edge</strong> = the next point visited after the current one</li>
+      </ul>
+      <div class="code-label">Example</div>
+      <pre><code class="language-c" data-trim>
+for (i=1; i<4; i++)
+  for (j=1; j<4; j++)
+    S3: a[i][j]=a[i][j-1]+1;
+</code></pre>
+      <p class="small muted">Row-major traversal: finish a row of <code class="inline">j</code>, then drop to the next <code class="inline">i</code>.</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 280 220" class="chart" style="max-width:340px">
+        <text x="150" y="16" text-anchor="middle" class="lbl">j →</text>
+        <text x="14" y="120" text-anchor="middle" class="lbl" transform="rotate(-90 14 120)">i →</text>
+        <text x="60" y="40" text-anchor="middle" class="lbl">1</text>
+        <text x="150" y="40" text-anchor="middle" class="lbl">2</text>
+        <text x="240" y="40" text-anchor="middle" class="lbl">3</text>
+        <text x="34" y="74" text-anchor="middle" class="lbl">1</text>
+        <text x="34" y="134" text-anchor="middle" class="lbl">2</text>
+        <text x="34" y="194" text-anchor="middle" class="lbl">3</text>
+        <defs><marker id="ar3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#1d4ed8"/></marker></defs>
+        <g stroke="#1d4ed8" stroke-width="2" fill="none" marker-end="url(#ar3)">
+          <line x1="72" y1="70" x2="138" y2="70"/><line x1="162" y1="70" x2="228" y2="70"/>
+          <line x1="72" y1="130" x2="138" y2="130"/><line x1="162" y1="130" x2="228" y2="130"/>
+          <line x1="72" y1="190" x2="138" y2="190"/><line x1="162" y1="190" x2="228" y2="190"/>
+          <path d="M240,82 C268,98 268,112 138,124"/>
+          <path d="M240,142 C268,158 268,172 138,184"/>
+        </g>
+        <g fill="#3b82f6" stroke="#1d4ed8">
+          <circle cx="60" cy="70" r="9"/><circle cx="150" cy="70" r="9"/><circle cx="240" cy="70" r="9"/>
+          <circle cx="60" cy="130" r="9"/><circle cx="150" cy="130" r="9"/><circle cx="240" cy="130" r="9"/>
+          <circle cx="60" cy="190" r="9"/><circle cx="150" cy="190" r="9"/><circle cx="240" cy="190" r="9"/>
+        </g>
+      </svg>
+      <div class="src">ITG = traversal order, <em>not</em> dependences.</div>
+    </div>
+  </div>
+</section>
+
+<!-- LDG -->
+<section data-background-color="#ffffff">
+  <h2>Loop-Carried Dependence Graph (LDG)</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">The LDG draws the <strong>dependences</strong> (true/anti/output), not the traversal order.</p>
+      <ul class="small">
+        <li><strong>Node</strong> = a point in the iteration space</li>
+        <li><strong>Directed edge</strong> = a dependence, labeled by type</li>
+      </ul>
+      <p class="small">For the same loop, the only relation is
+        <code class="inline">S3[i,j] T S3[i,j+1]</code> — a horizontal true-dependence chain along each row. <strong>No vertical edges</strong> → the <code class="inline">i</code> rows are independent.</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 280 220" class="chart" style="max-width:340px">
+        <text x="150" y="16" text-anchor="middle" class="lbl">j →</text>
+        <text x="60" y="40" text-anchor="middle" class="lbl">1</text>
+        <text x="150" y="40" text-anchor="middle" class="lbl">2</text>
+        <text x="240" y="40" text-anchor="middle" class="lbl">3</text>
+        <text x="34" y="74" text-anchor="middle" class="lbl">1</text>
+        <text x="34" y="134" text-anchor="middle" class="lbl">2</text>
+        <text x="34" y="194" text-anchor="middle" class="lbl">3</text>
+        <defs><marker id="art" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#0f172a"/></marker></defs>
+        <g stroke="#0f172a" stroke-width="2" marker-end="url(#art)">
+          <line x1="72" y1="70" x2="138" y2="70"/><line x1="162" y1="70" x2="228" y2="70"/>
+          <line x1="72" y1="130" x2="138" y2="130"/><line x1="162" y1="130" x2="228" y2="130"/>
+          <line x1="72" y1="190" x2="138" y2="190"/><line x1="162" y1="190" x2="228" y2="190"/>
+        </g>
+        <g fill="#dc2626" style="font-size:13px;font-weight:700">
+          <text x="105" y="62">T</text><text x="195" y="62">T</text>
+          <text x="105" y="122">T</text><text x="195" y="122">T</text>
+          <text x="105" y="182">T</text><text x="195" y="182">T</text>
+        </g>
+        <g fill="#3b82f6" stroke="#1d4ed8">
+          <circle cx="60" cy="70" r="9"/><circle cx="150" cy="70" r="9"/><circle cx="240" cy="70" r="9"/>
+          <circle cx="60" cy="130" r="9"/><circle cx="150" cy="130" r="9"/><circle cx="240" cy="130" r="9"/>
+          <circle cx="60" cy="190" r="9"/><circle cx="150" cy="190" r="9"/><circle cx="240" cy="190" r="9"/>
+        </g>
+      </svg>
+      <div class="src">Each row is a serial chain; rows are parallel.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 5-point stencil LDG -->
+<section data-background-color="#ffffff">
+  <h2>A Denser Example: 5-Point Stencil</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">Loop nest</div>
+      <pre><code class="language-c" data-trim>
+for (i=1; i<=n; i++)
+  for (j=1; j<=n; j++)
+    S1: a[i][j] = a[i][j-1] + a[i][j+1]
+               + a[i-1][j] + a[i+1][j];
+</code></pre>
+      <p class="small"><strong>True:</strong> <code class="inline">S1[i,j] T S1[i,j+1]</code>, <code class="inline">S1[i,j] T S1[i+1,j]</code><br>
+      <strong>Anti:</strong> <code class="inline">S1[i,j] A S1[i+1,j]</code>, <code class="inline">S1[i,j] A S1[i,j+1]</code><br>
+      <strong>Output:</strong> none</p>
+      <div class="callout warn"><span class="lbl">Note</span>Each grid edge represents <strong>both</strong> a true and an anti dependence → neither full rows nor full columns are independent.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 220" class="chart" style="max-width:300px">
+        <text x="130" y="16" text-anchor="middle" class="lbl">j →</text>
+        <text x="14" y="120" text-anchor="middle" class="lbl" transform="rotate(-90 14 120)">i →</text>
+        <defs><marker id="ar5" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#0f172a"/></marker></defs>
+        <g stroke="#0f172a" stroke-width="2" marker-end="url(#ar5)">
+          <line x1="62" y1="60" x2="118" y2="60"/><line x1="142" y1="60" x2="198" y2="60"/>
+          <line x1="62" y1="120" x2="118" y2="120"/><line x1="142" y1="120" x2="198" y2="120"/>
+          <line x1="62" y1="180" x2="118" y2="180"/><line x1="142" y1="180" x2="198" y2="180"/>
+          <line x1="50" y1="72" x2="50" y2="108"/><line x1="130" y1="72" x2="130" y2="108"/><line x1="210" y1="72" x2="210" y2="108"/>
+          <line x1="50" y1="132" x2="50" y2="168"/><line x1="130" y1="132" x2="130" y2="168"/><line x1="210" y1="132" x2="210" y2="168"/>
+        </g>
+        <g fill="#3b82f6" stroke="#1d4ed8">
+          <circle cx="50" cy="60" r="9"/><circle cx="130" cy="60" r="9"/><circle cx="210" cy="60" r="9"/>
+          <circle cx="50" cy="120" r="9"/><circle cx="130" cy="120" r="9"/><circle cx="210" cy="120" r="9"/>
+          <circle cx="50" cy="180" r="9"/><circle cx="130" cy="180" r="9"/><circle cx="210" cy="180" r="9"/>
+        </g>
+        <text x="38" y="50" class="lbl">1</text><text x="124" y="50" class="lbl">2</text><text x="206" y="50" class="lbl">n</text>
+      </svg>
+      <div class="src">Edges go right and down — a dependence "wavefront."</div>
+    </div>
+  </div>
+</section>
+
+<!-- Review 3.1 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 3.1 — Review</h2>
+  <div class="qa">
+    <p class="q">1. What are the three types of dependences?</p>
+    <div class="fragment"><div class="a"><strong>True</strong> (producer→consumer, RAW), <strong>anti</strong> (WAR), and <strong>output</strong> (WAW).</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. Which dependence types are tied to loop structure?</p>
+    <div class="fragment"><div class="a"><strong>Loop-carried</strong> (across iterations) and <strong>loop-independent</strong> (within one iteration). Only loop-carried dependences block iteration-level parallelism.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. ITG vs. LDG — what does each show?</p>
+    <div class="fragment"><div class="a">The <strong>ITG</strong> shows the traversal (happens-before) order; the <strong>LDG</strong> shows the actual dependences between iteration points.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 3.2 — LOOP-LEVEL PARALLELISM
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 3.2</div>
+  <div class="mod-title">Loop-Level Parallelism</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Read an LDG to find independent tasks and rewrite the loop to expose them</li>
+      <li>Tell apart <strong>DOALL</strong>, <strong>DOACROSS</strong>, <strong>function</strong>, and <strong>DOPIPE</strong> parallelism</li>
+      <li>Use <strong>post/wait</strong> synchronization to parallelize loops with carried dependences</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Finding tasks across iterations -->
+<section data-background-color="#ffffff">
+  <h2>Finding Tasks Across Iterations</h2>
+  <p class="small">A dependence must be <em>obeyed</em> (especially true dependences) — but gaps in the LDG are opportunities.</p>
+  <div class="cols">
+    <div>
+      <div class="code-label">Stride-2 dependence</div>
+      <pre><code class="language-c" data-trim>
+for (i=2; i<=n; i++)
+  S: a[i] = a[i-2];
+</code></pre>
+      <p class="small"><code class="inline">a[i]</code> depends only on <code class="inline">a[i-2]</code> → even and odd indices never touch.</p>
+    </div>
+    <div>
+      <div class="code-label">Split into two independent tasks</div>
+      <pre><code class="language-c" data-trim>
+for (i=2; i<=n; i+=2)   // even chain
+  S: a[i] = a[i-2];
+for (i=3; i<=n; i+=2)   // odd chain
+  S: a[i] = a[i-2];
+</code></pre>
+      <p class="small ok-text" style="color:var(--ok)">✓ Two independent chains → run them on two threads.</p>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">DOALL</span>
+    When a loop level has <strong>no loop-carried dependence</strong>, every iteration is independent — a <strong>DOALL</strong> loop, the gold standard. The inner <code class="inline">j</code> loop of <code class="inline">a[i][j]=a[i][j-1]+1</code> gives <code class="inline">n</code> independent tasks (one per <code class="inline">i</code>).</p></div>
+</section>
+
+<!-- Anti-diagonal example -->
+<section data-background-color="#ffffff">
+  <h2>Wavefront: Parallel Anti-Diagonals</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">In the 5-point stencil, each edge is a true+anti dependence — but within any <strong>anti-diagonal</strong> the nodes do not depend on one another.</p>
+      <div class="callout"><span class="lbl">Idea</span>Iterate <em>over anti-diagonals</em> (serially), parallelizing the points <em>within</em> each one.</div>
+      <div class="code-label">Restructured shape</div>
+      <pre><code class="language-c" data-trim>
+// 2n-1 anti-diagonals, computed in order
+for (i = 1; i <= 2*n-1; i++) {
+  // count points on this anti-diagonal,
+  // find its first (row,col)
+  for_all (k = 1; k <= points; k++) {
+    a[row][col] = ...;   // independent!
+    row--; col++;
+  }
+}
+</code></pre>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 220" class="chart" style="max-width:300px">
+        <defs><marker id="arw" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#0f172a"/></marker></defs>
+        <!-- diagonal highlight bands -->
+        <g stroke="#c7d2fe" stroke-width="20" stroke-linecap="round">
+          <line x1="50" y1="60" x2="50" y2="60"/>
+          <line x1="50" y1="120" x2="130" y2="60"/>
+          <line x1="50" y1="180" x2="210" y2="60"/>
+          <line x1="130" y1="180" x2="210" y2="120"/>
+          <line x1="210" y1="180" x2="210" y2="180"/>
+        </g>
+        <g stroke="#0f172a" stroke-width="1.5" marker-end="url(#arw)">
+          <line x1="62" y1="60" x2="118" y2="60"/><line x1="142" y1="60" x2="198" y2="60"/>
+          <line x1="62" y1="120" x2="118" y2="120"/><line x1="142" y1="120" x2="198" y2="120"/>
+          <line x1="62" y1="180" x2="118" y2="180"/><line x1="142" y1="180" x2="198" y2="180"/>
+          <line x1="50" y1="72" x2="50" y2="108"/><line x1="130" y1="72" x2="130" y2="108"/><line x1="210" y1="72" x2="210" y2="108"/>
+          <line x1="50" y1="132" x2="50" y2="168"/><line x1="130" y1="132" x2="130" y2="168"/><line x1="210" y1="132" x2="210" y2="168"/>
+        </g>
+        <g fill="#3b82f6" stroke="#1d4ed8">
+          <circle cx="50" cy="60" r="9"/><circle cx="130" cy="60" r="9"/><circle cx="210" cy="60" r="9"/>
+          <circle cx="50" cy="120" r="9"/><circle cx="130" cy="120" r="9"/><circle cx="210" cy="120" r="9"/>
+          <circle cx="50" cy="180" r="9"/><circle cx="130" cy="180" r="9"/><circle cx="210" cy="180" r="9"/>
+        </g>
+      </svg>
+      <div class="src">Shaded bands = independent anti-diagonals.</div>
+    </div>
+  </div>
+</section>
+
+<!-- OpenMP for the wavefront -->
+<section data-background-color="#ffffff">
+  <h2>Expressing the Wavefront in OpenMP</h2>
+  <p class="small">Parallelize the inner (within-anti-diagonal) loop; <code class="inline">row</code>/<code class="inline">col</code> are computed per thread.</p>
+  <div class="code-label">OpenMP — parallel inner loop</div>
+  <pre><code class="language-c" data-trim>
+for (i = 1; i <= 2*n - 1; i++) {          // serial over anti-diagonals
+  int points, row, col;
+  if (i <= n) { points = i;     row = i; col = 1; }
+  else        { points = 2*n-i; row = n; col = i-n+1; }
+
+  #pragma omp parallel for default(shared) \
+                           private(k) firstprivate(row, col)
+  for (int k = 1; k <= points; k++) {
+    a[row - (k-1)][col + (k-1)] = /* stencil update */ ;
+  }
+}
+</code></pre>
+  <div class="callout"><span class="lbl">Why firstprivate</span>
+    Each thread needs its <em>own initialized</em> copy of <code class="inline">row</code>/<code class="inline">col</code> for the anti-diagonal; deriving the index from <code class="inline">k</code> keeps iterations independent.</div>
+</section>
+
+<!-- DOACROSS -->
+<section data-background-color="#ffffff">
+  <h2>DOACROSS: Parallelizing a Carried Dependence</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Sequential — carried on a[]</div>
+      <pre><code class="language-c" data-trim>
+for (i=1; i<=N; i++) {
+  S: a[i] = a[i-1] + b[i]*c[i];
+}
+</code></pre>
+      <p class="small"><code class="inline">S[i] T S[i+1]</code> looks fully serial — but <code class="inline">b[i]*c[i]</code> has <strong>no</strong> carried dependence.</p>
+    </div>
+    <div>
+      <div class="code-label">Split out the independent work</div>
+      <pre><code class="language-c" data-trim>
+for (i=1; i<=N; i++)        // DOALL
+  S1: temp[i] = b[i]*c[i];
+for (i=1; i<=N; i++)        // serial
+  S2: a[i] = a[i-1] + temp[i];
+</code></pre>
+      <p class="small">First loop parallel; time <code class="inline">N·(T<sub>S1</sub>+T<sub>S2</sub>)</code> → <code class="inline">T<sub>S1</sub>+N·T<sub>S2</sub></code>. But <code class="inline">temp[]</code> adds storage.</p>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">DOACROSS</span>
+    Better: keep one loop and let iterations <em>overlap</em>, guarding only the carried part with <strong>point-to-point synchronization</strong>.</div>
+</section>
+
+<!-- Post-wait -->
+<section data-background-color="#ffffff">
+  <h2>Post / Wait Synchronization</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">post(x)</span>Increments the counter <code class="inline">m(x)</code> named by <code class="inline">x</code>.</div>
+      <div class="callout"><span class="lbl">wait(x)</span>Blocks while <code class="inline">m(x) ≤ 0</code>; when <code class="inline">m(x) &gt; 0</code> it unblocks and decrements.</div>
+      <p class="small">Names can be structured: <code class="inline">post(i+1)</code> / <code class="inline">wait(i)</code> chains successive iterations.</p>
+    </div>
+    <div>
+      <div class="code-label">DOACROSS with post/wait</div>
+      <pre><code class="language-c" data-trim>
+post(0);
+#pragma omp parallel for ordered
+for (i=1; i<=N; i++) {
+  S1: temp = b[i]*c[i];   // independent
+  wait(i-1);              // need a[i-1]
+  S2: a[i] = a[i-1] + temp;
+  post(i);                // release a[i]
+}
+</code></pre>
+      <p class="small">Time → <code class="inline">T<sub>S1</sub> + N·T<sub>S2</sub></code>, and <code class="inline">temp</code> is now <strong>per-thread</strong>, not per-iteration.</p>
+    </div>
+  </div>
+  <aside class="notes">post/wait is the conceptual primitive; in OpenMP the natural realizations are an `ordered` clause or explicit atomic counters. The point is overlap: the independent S1 of iteration i runs while the dependent S2 chain catches up.</aside>
+</section>
+
+<!-- Function parallelism / loop distribution -->
+<section data-background-color="#ffffff">
+  <h2>Function Parallelism via Loop Distribution</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">One loop, several statements</div>
+      <pre><code class="language-c" data-trim>
+for (i=0; i<n; i++) {
+  S1: a[i] = b[i+1]*a[i-1];
+  S2: b[i] = b[i]*coef;
+  S3: c[i] = 0.5*(c[i]+a[i]);
+  S4: d[i] = d[i-1]*d[i];
+}
+</code></pre>
+      <p class="tiny">Carried: <code class="inline">S1[i] A S2[i+1]</code> · Loop-indep: <code class="inline">S1[i] T S3[i]</code> · <code class="inline">S4</code> is independent of S1–S3.</p>
+    </div>
+    <div>
+      <div class="code-label">After loop distribution</div>
+      <pre><code class="language-c" data-trim>
+for (i=0; i<n; i++) {     // task A
+  S1: a[i] = b[i+1]*a[i-1];
+  S2: b[i] = b[i]*coef;
+  S3: c[i] = 0.5*(c[i]+a[i]);
+}
+for (i=0; i<n; i++)       // task B
+  S4: d[i] = d[i-1]*d[i];
+</code></pre>
+      <p class="small ok-text" style="color:var(--ok)">✓ Each loop is a parallel <strong>task</strong> — run A and B concurrently.</p>
+    </div>
+  </div>
+  <p class="tiny muted"><code class="inline">S1[i] A S2[i+1]</code> only requires all S1's finish before any S2 of a later iteration — preserved within task A's order.</p>
+</section>
+
+<!-- Function parallelism notes -->
+<section data-background-color="#ffffff">
+  <h2>Function vs. Data Parallelism</h2>
+  <div class="cols">
+    <div class="callout warn"><span class="lbl">Function parallelism</span>
+      <ul class="small" style="margin:.3em 0 0 .9em">
+        <li>Modest degree — does <strong>not grow</strong> with input size</li>
+        <li>Hard to load-balance</li>
+        <li>Natural for pipelines: video encode/decode, polygon rendering</li>
+      </ul></div>
+    <div class="callout ok"><span class="lbl">Data parallelism</span>
+      <ul class="small" style="margin:.3em 0 0 .9em">
+        <li>Degree <strong>scales with data size</strong></li>
+        <li>Most scalable programs are data parallel</li>
+        <li>Use function parallelism to fill in when data parallelism is limited</li>
+      </ul></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Rule of thumb</span>
+    Reach for <strong>data parallelism (DOALL)</strong> first; layer function/DOPIPE parallelism on top when DOALL alone doesn't fill the machine.</div>
+</section>
+
+<!-- DOPIPE -->
+<section data-background-color="#ffffff">
+  <h2>DOPIPE: Software Pipelining a Loop</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Sequential</div>
+      <pre><code class="language-c" data-trim>
+for (i=2; i<=N; i++) {
+  S1: a[i] = a[i-1] + b[i];
+  S2: c[i] = c[i] + a[i];
+}
+</code></pre>
+      <p class="tiny">Carried: <code class="inline">S1[i-1] T S1[i]</code> (S1 is a serial chain).<br>
+      Loop-indep: <code class="inline">S1[i] T S2[i]</code> (S2 follows S1 same iteration).</p>
+      <div class="callout"><span class="lbl">Opportunity</span>S2 has <strong>no</strong> carried dependence — it can run a pipeline stage <em>behind</em> S1.</div>
+    </div>
+    <div>
+      <div class="code-label">DOPIPE — two pipelined stages</div>
+      <pre><code class="language-c" data-trim>
+for (i=2; i<=N; i++) {    // stage 1
+  a[i] = a[i-1] + b[i];
+  post(i);
+}
+for (i=2; i<=N; i++) {    // stage 2
+  wait(i);
+  c[i] = c[i] + a[i];
+}
+</code></pre>
+      <p class="small">Stage 2 consumes <code class="inline">a[i]</code> as soon as stage 1 posts it — the two stages overlap like a pipeline.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Review 3.2 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 3.2 — Review</h2>
+  <div class="qa">
+    <p class="q">Describe DOALL, DOACROSS, function, and DOPIPE parallelism.</p>
+    <div class="fragment"><div class="a">
+      <ul class="small" style="margin:0 0 0 .9em">
+        <li><strong>DOALL</strong> — parallelism between <em>independent</em> loop iterations.</li>
+        <li><strong>DOACROSS</strong> — parallelism between <em>dependent</em> iterations, guarded by synchronization.</li>
+        <li><strong>Function</strong> — parallelism between independent code sections (e.g. distributed loops).</li>
+        <li><strong>DOPIPE</strong> — parallelism between <em>dependent statements</em> in a loop, software-pipelined with synchronization.</li>
+      </ul></div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 3.3 — ALGORITHM-LEVEL PARALLELISM
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 3.3</div>
+  <div class="mod-title">Algorithm-Level Parallelism</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Explain why <strong>code analysis alone misses</strong> parallelism the algorithm allows</li>
+      <li>Apply <strong>red-black (checkerboard) ordering</strong> to expose fully parallel sweeps</li>
+      <li>Reason about <strong>asynchronous</strong> (chaotic) relaxation and its trade-offs</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Algorithm analysis intro -->
+<section data-background-color="#ffffff">
+  <h2>When Code Analysis Is Too Pessimistic</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Code analysis assumes the <em>given</em> traversal order is sacred. But the ITG sometimes imposes <strong>unnecessary serialization</strong>.</p>
+      <div class="callout"><span class="lbl">Ocean / stencil</span>
+        At each sweep, each point is updated from its neighbors. <strong>Any order within a sweep is just an approximation</strong> — different orderings simply converge faster or slower.</div>
+      <p class="small">So we are <em>free to change the ordering</em> to expose parallelism.</p>
+    </div>
+    <div>
+      <div class="code-label">The Gauss-Seidel-style sweep</div>
+      <pre><code class="language-c" data-trim>
+for (I=1; I<=N; I++)
+  for (j=1; j<=N; j++) {
+    S1: temp = A[I][j];
+    S2: A[I][j] = 0.2*(A[I][j]+A[I][j-1]
+                 + A[I-1][j]+A[I][j+1]+A[I+1][j]);
+    S3: diff += abs(A[I][j]-temp);
+  }
+</code></pre>
+      <p class="tiny muted">As written, the 5-point coupling serializes the sweep into a wavefront.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Red-black -->
+<section data-background-color="#ffffff">
+  <h2>Red-Black Coloring</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">Color the grid like a checkerboard. A red point's four neighbors are all <strong>black</strong>, and vice-versa.</p>
+      <div class="callout ok"><span class="lbl">Key fact</span>
+        Within one sweep, there is <strong>no dependence between red and black points</strong> — so each color sweep is <em>fully parallel</em>.</div>
+      <div class="code-label">Restructured algorithm</div>
+      <pre><code class="language-c" data-trim>
+while (!converged) {
+  doall (red points)   compute;   // DOALL
+  barrier;                        // wait for red
+  doall (black points) compute;   // DOALL
+  barrier;
+}
+</code></pre>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 200 200" class="chart" style="max-width:260px">
+        <g stroke="#94a3b8">
+          <!-- 4x4 checkerboard of points -->
+          <g>
+            <circle cx="40"  cy="40"  r="11" fill="#dc2626"/><circle cx="90"  cy="40"  r="11" fill="#1e293b"/><circle cx="140" cy="40"  r="11" fill="#dc2626"/><circle cx="190" cy="40"  r="11" fill="#1e293b" transform="translate(-20,0)"/>
+          </g>
+          <g>
+            <circle cx="40"  cy="90"  r="11" fill="#1e293b"/><circle cx="90"  cy="90"  r="11" fill="#dc2626"/><circle cx="140" cy="90"  r="11" fill="#1e293b"/><circle cx="170" cy="90"  r="11" fill="#dc2626"/>
+          </g>
+          <g>
+            <circle cx="40"  cy="140" r="11" fill="#dc2626"/><circle cx="90"  cy="140" r="11" fill="#1e293b"/><circle cx="140" cy="140" r="11" fill="#dc2626"/><circle cx="170" cy="140" r="11" fill="#1e293b"/>
+          </g>
+          <g>
+            <circle cx="40"  cy="170" r="11" fill="#1e293b"/><circle cx="90"  cy="170" r="11" fill="#dc2626"/><circle cx="140" cy="170" r="11" fill="#1e293b"/><circle cx="170" cy="170" r="11" fill="#dc2626"/>
+          </g>
+        </g>
+        <text x="100" y="196" text-anchor="middle" class="lbl">red ⟂ black within a sweep</text>
+      </svg>
+      <div class="src">Two fully parallel half-sweeps per iteration.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Asynchronous -->
+<section data-background-color="#ffffff">
+  <h2>Going Further: Asynchronous Execution</h2>
+  <div class="cols">
+    <div>
+      <p>If the algorithm tolerates it, we can <strong>simply ignore dependences within a sweep</strong> — threads read whatever value of a neighbor is currently available.</p>
+      <div class="callout ok"><span class="lbl">Upside</span>No synchronization inside a sweep → maximum parallelism, no barrier stalls.</div>
+      <div class="callout warn"><span class="lbl">Downside</span>The parallel program is now <strong>nondeterministic</strong> — results are timing-dependent, and convergence behavior changes.</div>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">The spectrum</span>
+        <ul class="small" style="margin:.3em 0 0 .9em">
+          <li><strong>Strict order</strong> — wavefront, limited parallelism, deterministic</li>
+          <li><strong>Red-black</strong> — fully parallel sweeps, deterministic, an exact reordering</li>
+          <li><strong>Asynchronous</strong> — most parallel, nondeterministic, only valid if the numerics tolerate it</li>
+        </ul></div>
+      <p class="small muted">Choosing a point on this spectrum is an <em>algorithm</em> decision, invisible to pure code analysis.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 3.4 — VARIABLE SCOPE & OPENMP
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 3.4</div>
+  <div class="mod-title">Variable Scope &amp; OpenMP</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Classify variable accesses: read-only, R/W non-conflicting, R/W conflicting</li>
+      <li>Apply <strong>privatization</strong> and <strong>reduction</strong> to remove conflicts</li>
+      <li>Choose the right OpenMP clause: <code class="inline">shared</code> / <code class="inline">private</code> / <code class="inline">reduction</code></li>
+    </ul>
+  </div>
+</section>
+
+<!-- Determining variable scope -->
+<section data-background-color="#ffffff">
+  <h2>Determining Variable Scope</h2>
+  <p class="small">Specific to the <strong>shared-memory</strong> model: given the parallel tasks, decide how each variable is used <em>across</em> tasks.</p>
+  <div class="cols c3">
+    <div class="callout ok"><span class="lbl">Read-only</span><span class="small">Only read by all tasks. Safe to <strong>share</strong>.</span></div>
+    <div class="callout"><span class="lbl">R/W non-conflicting</span><span class="small">Read and/or written by <strong>only one</strong> task. Also safe to share.</span></div>
+    <div class="callout warn"><span class="lbl">R/W conflicting</span><span class="small">Written by one task and read/written by <strong>another</strong> — the dangerous case.</span></div>
+  </div>
+  <div class="code-label">Example — task = each "for i" iteration</div>
+  <pre><code class="language-c" data-trim>
+for (i=1; i<=n; i++)
+  for (j=1; j<=n; j++) {
+    S2: a[i][j] = b[i][j] + c[i][j];
+    S3: b[i][j] = a[i][j-1] * d[i][j];
+  }
+</code></pre>
+  <p class="small">Read-only: <code class="inline">n, c, d</code> · R/W non-conflicting: <code class="inline">a, b</code> · R/W conflicting: <code class="inline">i, j</code> (the loop indices).</p>
+</section>
+
+<!-- Privatization -->
+<section data-background-color="#ffffff">
+  <h2>Privatization</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Privatization</span>
+        Convert a shared variable into a <strong>per-thread private</strong> copy to remove a conflict.
+        Goal: turn <em>R/W conflicting</em> into <em>R/W non-conflicting</em>.</div>
+      <p class="small"><strong>A conflicting variable is privatizable if:</strong></p>
+      <ul class="small">
+        <li>In program order, each task <strong>writes it before reading</strong> it, and</li>
+        <li>The values for different tasks are <strong>known ahead of time</strong> (so private copies can be initialized).</li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">Consequence</span>The conflict disappears once the variable is privatized — one copy per <strong>thread</strong> (not per task).</div>
+      <div class="callout"><span class="lbl">Special case: registers</span>
+        A register-allocated scalar is <em>inherently</em> private — each core has its own register file.</div>
+      <p class="small">In the previous example, <code class="inline">i</code> and <code class="inline">j</code> are conflicting but privatizable → <code class="inline">i[ID], j[ID]</code> per thread.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Reduction -->
+<section data-background-color="#ffffff">
+  <h2>Reduction</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Reduction</span>
+        A special privatization where each thread accumulates into a <strong>private partial result</strong>, then all partials are merged into the shared result at the end.</div>
+      <div class="code-label">Classic example — summing an array</div>
+      <pre><code class="language-c" data-trim>
+double sum = 0.0;
+#pragma omp parallel for reduction(+:sum)
+for (i = 0; i < n; i++)
+    sum += a[i];
+</code></pre>
+      <p class="small">Each thread keeps a private <code class="inline">sum</code>; OpenMP combines them with <code class="inline">+</code> at the join.</p>
+    </div>
+    <div>
+      <p class="small"><strong>Reducibility criteria</strong> — the update order must not matter, so the operator must be:</p>
+      <div class="eq small">\( u \;\text{op}\; v = v \;\text{op}\; u \quad\text{(commutative)} \)</div>
+      <div class="eq small">\( (u \;\text{op}\; v)\;\text{op}\; w = u\;\text{op}\;(v\;\text{op}\;w)\;\text{(assoc.)} \)</div>
+      <p class="small">Examples: <code class="inline">+</code>, <code class="inline">*</code>, logical <code class="inline">AND</code>/<code class="inline">OR</code>, <code class="inline">min</code>/<code class="inline">max</code>. The accumulated scalar is the <strong>reduction variable</strong>.</p>
+      <div class="callout warn"><span class="lbl">Caution</span>Floating-point <code class="inline">+</code> is not perfectly associative — reduction can change the last bits of a result.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Scope determination summary + OpenMP -->
+<section data-background-color="#ffffff">
+  <h2>Putting Scope into OpenMP</h2>
+  <div class="cols">
+    <div>
+      <table>
+        <tr><th>Category</th><th>OpenMP clause</th></tr>
+        <tr><td>Privatizable</td><td class="hi"><code class="inline">private</code></td></tr>
+        <tr><td>Read-only</td><td><code class="inline">shared</code></td></tr>
+        <tr><td>R/W non-conflicting</td><td><code class="inline">shared</code></td></tr>
+        <tr><td>Reduction variable</td><td class="hi"><code class="inline">reduction(op:var)</code></td></tr>
+        <tr><td>Other conflicting</td><td><code class="inline">shared</code> + lock/atomic</td></tr>
+      </table>
+      <p class="tiny muted"><code class="inline">private</code> further splits into <code class="inline">firstprivate</code> (init from the outside value) and <code class="inline">lastprivate</code> (copy the final value out).</p>
+    </div>
+    <div>
+      <div class="code-label">Scoping the "for i" example</div>
+      <pre><code class="language-c" data-trim>
+#pragma omp parallel for \
+        default(none) \
+        shared(n, a, b, c, d) \
+        private(i, j)
+for (i=1; i<=n; i++)
+  for (j=1; j<=n; j++) {
+    a[i][j] = b[i][j] + c[i][j];
+    b[i][j] = a[i][j-1] * d[i][j];
+  }
+</code></pre>
+      <p class="small">Shared: <code class="inline">n, c, d, a, b</code> · Private: <code class="inline">i, j</code>. Using <code class="inline">default(none)</code> forces you to scope every variable on purpose.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Review 3.4 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 3.4 — Review</h2>
+  <div class="qa">
+    <p class="q">1. Define the main variable scopes in shared-memory parallel programming.</p>
+    <div class="fragment"><div class="a"><strong>Shared</strong> — all threads see one copy. <strong>Private</strong> — each thread has its own copy (OpenMP refines into <code class="inline">firstprivate</code>/<code class="inline">lastprivate</code>). <strong>Reduction</strong> — private partials merged by a commutative/associative operator.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. Parallelizing the <code class="inline">for j</code> loop of a nest with arrays A,B,C,Y and scalars x,k — give the scopes.</p>
+    <div class="fragment"><div class="a"><strong>Shared:</strong> <code class="inline">i, n, m, A, B, C, Y</code> &nbsp; <strong>Private:</strong> <code class="inline">j, k, x</code>.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 3.5 — SYNCHRONIZATION & PTHREADS
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 3.5</div>
+  <div class="mod-title">Synchronization &amp; pthreads</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Name the three synchronization primitives and when to use each</li>
+      <li>Use a <strong>lock</strong> to protect a critical section and explain granularity trade-offs</li>
+      <li>Explain why <strong>load balance</strong> dominates barrier performance, and what gang scheduling fixes</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Synchronization primitives -->
+<section data-background-color="#ffffff">
+  <h2>Three Synchronization Primitives</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Point-to-point</span>
+      <span class="small">A <code class="inline">post()</code>/<code class="inline">wait()</code> pair (shared memory) — or <code class="inline">send()</code>/<code class="inline">recv()</code> in message passing. Orders <em>two specific</em> threads.</span></div>
+    <div class="callout"><span class="lbl">Lock (mutex)</span>
+      <span class="small">Mutual exclusion: only <strong>one</strong> thread in the locked region at a time.</span></div>
+    <div class="callout"><span class="lbl">Barrier</span>
+      <span class="small">A point no thread passes until <strong>all</strong> threads have arrived. Global event sync.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Match the tool to the need</span>
+    Producer→consumer ordering? Point-to-point. Protecting a shared update? Lock. Phase boundary (like red→black)? Barrier.</div>
+</section>
+
+<!-- Lock -->
+<section data-background-color="#ffffff">
+  <h2>Locks: Protecting a Critical Section</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Race — unsynchronized</div>
+      <pre><code class="language-c" data-trim>
+// inside a parallel region
+for (i=start; i<end; i++)
+    sum = sum + a[i];   // lost updates!
+</code></pre>
+      <p class="small" style="color:var(--warn)">✗ Concurrent read-modify-write on the shared <code class="inline">sum</code> → lost updates.</p>
+    </div>
+    <div>
+      <div class="code-label">Correct — with a lock (pthreads)</div>
+      <pre><code class="language-c" data-trim>
+pthread_mutex_t x = PTHREAD_MUTEX_INITIALIZER;
+for (i=start; i<end; i++) {
+    pthread_mutex_lock(&x);
+    sum = sum + a[i];
+    pthread_mutex_unlock(&x);
+}
+</code></pre>
+      <p class="small ok-text" style="color:var(--ok)">✓ Only one thread updates <code class="inline">sum</code> at a time.</p>
+    </div>
+  </div>
+  <div class="cols">
+    <div class="callout warn"><span class="lbl">Granularity</span>Locking every iteration <strong>serializes</strong> the loop — prefer a per-thread partial sum (a reduction!) and one lock at the end.</div>
+    <div class="callout"><span class="lbl">Open questions</span>What granularity to lock? How to build a lock that is both <strong>correct and fast</strong>? (later chapters)</div>
+  </div>
+</section>
+
+<!-- Barrier -->
+<section data-background-color="#ffffff">
+  <h2>Barriers &amp; Load Balance</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">Barrier</span>Global event sync — every thread blocks until the last one arrives, then all proceed.</div>
+      <div class="callout warn"><span class="lbl">Cost = slowest thread</span>
+        A barrier's wall-clock time is set by the <strong>slowest</strong> thread, so <strong>load balance is critical</strong>.</div>
+      <p class="small"><strong>Artificial</strong> imbalance also arises from <em>context switching</em> — a thread swapped out mid-region stalls everyone at the barrier. Mitigate with <strong>gang scheduling</strong> (co-schedule all of a job's threads together).</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 220 200" class="chart" style="max-width:280px">
+        <line x1="180" y1="14" x2="180" y2="186" stroke="#CC0000" stroke-width="2" stroke-dasharray="5 4"/>
+        <text x="180" y="12" text-anchor="middle" class="note" style="fill:#CC0000">barrier</text>
+        <!-- 4 thread bars of differing length -->
+        <g>
+          <rect x="20" y="36" width="120" height="18" rx="4" fill="#3b82f6"/><text x="14" y="49" text-anchor="end" class="lbl">T0</text>
+          <rect x="140" y="36" width="40" height="18" rx="4" fill="#cbd5e1"/>
+          <rect x="20" y="70" width="158" height="18" rx="4" fill="#3b82f6"/><text x="14" y="83" text-anchor="end" class="lbl">T1</text>
+          <rect x="20" y="104" width="90" height="18" rx="4" fill="#3b82f6"/><text x="14" y="117" text-anchor="end" class="lbl">T2</text>
+          <rect x="110" y="104" width="70" height="18" rx="4" fill="#cbd5e1"/>
+          <rect x="20" y="138" width="140" height="18" rx="4" fill="#3b82f6"/><text x="14" y="151" text-anchor="end" class="lbl">T3</text>
+          <rect x="160" y="138" width="20" height="18" rx="4" fill="#cbd5e1"/>
+        </g>
+        <text x="100" y="180" text-anchor="middle" class="lbl">grey = idle, waiting on T1</text>
+      </svg>
+      <div class="src">Imbalance → wasted cycles at the barrier.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Review 3.5 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 3.5 — Review</h2>
+  <div class="qa">
+    <p class="q">1. What synchronization primitives does a shared-memory system support?</p>
+    <div class="fragment"><div class="a"><strong>Lock</strong> (mutual exclusion), <strong>barrier</strong> (global event), and <strong>point-to-point</strong> (e.g. post/wait).</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. Why is load balancing important when barriers are used?</p>
+    <div class="fragment"><div class="a">A parallel region's execution time is determined by the <strong>slowest thread</strong> — imbalance leaves everyone else idle at the barrier.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. What does gang scheduling solve — and not solve?</p>
+    <div class="fragment"><div class="a">It prevents the no-forward-progress stall when a thread is switched out, and frees CPUs for other work during a switch-out. It does <strong>not</strong> remove inherent load imbalance.</div></div>
+  </div>
+</section>
+
+<!-- Chapter summary -->
+<section data-background-color="#ffffff">
+  <h2>Chapter 3 — Big Picture</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">3.1 Dependences</span>True/anti/output, loop-carried vs. -independent, ITG &amp; LDG.</div>
+    <div class="callout"><span class="lbl">3.2 Loop parallelism</span>DOALL, DOACROSS, function, DOPIPE — read the LDG to find them.</div>
+    <div class="callout"><span class="lbl">3.3 Algorithm</span>Reorder (red-black) or relax (async) to beat code analysis.</div>
+  </div>
+  <div class="cols">
+    <div class="callout"><span class="lbl">3.4 Variable scope</span>shared / private / reduction; privatization removes conflicts; express in OpenMP.</div>
+    <div class="callout"><span class="lbl">3.5 Synchronization</span>Point-to-point, locks, barriers — implemented with pthreads; mind load balance.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">One sentence</span>
+    <strong>Find independent tasks, scope each variable correctly, and coordinate with the lightest synchronization that preserves the dependences.</strong> Get those three right and you have a correct shared-memory parallel program.</div>
+  <p class="center muted small">Next up → mapping tasks to hardware for <em>performance</em>.</p>
+</section>
+
+</div>
+
+<!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 3 — Shared Memory Programming</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.04,
+    minScale: 0.2, maxScale: 1.6,
+    center: false,                 // top-align content so the NC State header bar sits at the slide top
+    hash: true, slideNumber: 'c/t', history: true,
+    transition: 'slide', transitionSpeed: 'fast',
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      {left:'\\(', right:'\\)', display:false},
+      {left:'$$', right:'$$', display:true}
+    ]},
+  });
+</script>
+</body>
+</html>

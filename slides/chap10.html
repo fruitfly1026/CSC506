@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSC/ECE 506 · Chapter 10 — Distributed Shared Memory Multiprocessors</title>
+
+<!-- reveal.js core (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<!-- code highlighting + math -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+<!-- fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<!-- course theme -->
+<link rel="stylesheet" href="assets/theme.css?v=4">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============================ TITLE ============================ -->
+<section class="title-slide" data-background-color="#ffffff">
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <h1>Chapter 10</h1>
+  <div class="sub">Distributed Shared Memory Multiprocessors — Scalable Directory Coherence</div>
+  <div class="meta">
+    Fall Semester · Based on Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em><br>
+    <span class="muted">Use ← → to navigate · <strong>S</strong> for speaker notes · <strong>F</strong> fullscreen · <strong>ESC</strong> overview</span>
+  </div>
+  <aside class="notes">
+    Chapter 10 asks: how do we keep caches coherent once a machine is too big for a
+    shared bus and broadcast snooping? The answer is the <em>directory</em> — a structure
+    at the "home" memory that tracks who has a copy of each block, so coherence traffic
+    is sent point-to-point only to the caches that matter. Three modules: (10.1) the basic
+    directory protocol and its directory-storage formats, (10.2) handling protocol races
+    in a real non-atomic system, and (10.3) the cache-based (SCI / linked-list) alternative.
+  </aside>
+</section>
+
+<!-- Roadmap -->
+<section data-background-color="#ffffff">
+  <h2>Chapter Roadmap</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Module 10.1</span><strong>Basic Directory Protocol</strong><br>
+      <span class="small">Why broadcast doesn't scale, the <em>home / directory</em> idea, read &amp; write handling, and directory storage formats (full vector, coarse, limited pointers, sparse).</span></div>
+    <div class="callout"><span class="lbl">Module 10.2</span><strong>Handling Protocol Races</strong><br>
+      <span class="small">What breaks when the directory is out of sync and messages are non-atomic — transient states, NACKs, home-centric vs. requestor-assisted.</span></div>
+    <div class="callout"><span class="lbl">Module 10.3</span><strong>Cache-Based Directory</strong><br>
+      <span class="small">The SCI linked-list scheme: tiny storage, but longer write latency and trickier races.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The thread that ties it together</span>
+    A directory <strong>filters coherence traffic</strong> so only the caches that actually share a block get involved. That filtering is what lets shared memory scale to <strong>tens–hundreds</strong> of processors — but it costs storage, extra hops, and a much more complex protocol.</div>
+</section>
+
+<!-- ==================================================================
+     MODULE 10.1 — BASIC DIRECTORY PROTOCOL
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 10.1</div>
+  <div class="mod-title">Basic Directory Protocol</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Explain why <strong>snoopy/broadcast</strong> coherence stops scaling, and how a <strong>directory</strong> fixes it</li>
+      <li>Trace the <strong>home / owner / sharer</strong> message exchanges for a read and a write</li>
+      <li>Compare directory-storage formats: <strong>full bit-vector, coarse vector, limited pointers, sparse</strong></li>
+    </ul>
+  </div>
+</section>
+
+<!-- Scalable shared memory -->
+<section data-background-color="#ffffff">
+  <h2>Why Bus-Based Coherence Doesn't Scale</h2>
+  <div class="cols">
+    <div>
+      <p>A shared bus with snooping is great for <strong>small</strong> multiprocessors — but it hits two kinds of limits.</p>
+      <div class="callout warn"><span class="lbl">Physical constraints</span>
+        Long shared wires force a <strong>low clock frequency</strong>; bus <strong>arbitration delay</strong> grows with the number of clients.</div>
+      <div class="callout warn"><span class="lbl">Protocol constraints</span>
+        Snoop/broadcast <strong>saturates bandwidth</strong> quickly — every request is seen by <em>every</em> cache. <strong>Contention everywhere</strong>: bus, snoopers, memory.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 300 200" class="chart" style="max-width:340px">
+        <g fill="#dbeafe" stroke="#3b82f6">
+          <rect x="20" y="20" width="50" height="30" rx="5"/><rect x="90" y="20" width="50" height="30" rx="5"/>
+          <rect x="160" y="20" width="50" height="30" rx="5"/><rect x="230" y="20" width="50" height="30" rx="5"/>
+        </g>
+        <g class="lbl"><text x="45" y="39" text-anchor="middle">P0</text><text x="115" y="39" text-anchor="middle">P1</text>
+          <text x="185" y="39" text-anchor="middle">P2</text><text x="255" y="39" text-anchor="middle">P3</text></g>
+        <g class="axis"><line x1="45" y1="50" x2="45" y2="95"/><line x1="115" y1="50" x2="115" y2="95"/>
+          <line x1="185" y1="50" x2="185" y2="95"/><line x1="255" y1="50" x2="255" y2="95"/></g>
+        <rect x="20" y="95" width="260" height="26" rx="6" fill="#fee2e2" stroke="#CC0000" stroke-width="2"/>
+        <text x="150" y="112" text-anchor="middle" class="lbl" style="fill:#CC0000;font-weight:700">shared bus — every snoop hits everyone</text>
+        <line x1="150" y1="121" x2="150" y2="150" class="axis"/>
+        <rect x="100" y="150" width="100" height="26" rx="6" fill="#fef3c7" stroke="#f59e0b"/>
+        <text x="150" y="167" text-anchor="middle" class="lbl">memory</text>
+      </svg>
+      <div class="src">How do we scale to a larger MP?</div>
+    </div>
+  </div>
+</section>
+
+<!-- Ways to scale -->
+<section data-background-color="#ffffff">
+  <h2>Two Ways to Scale a Bus-Based MP</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Approach 1 — better interconnect, keep broadcast</span>
+        Replace the bus with <strong>point-to-point</strong> links, but still rely on snooping/broadcast.
+        <ul class="small" style="margin-top:.4em">
+          <li>AMD Opteron (mesh), IBM Cell (ring), Intel Larrabee (ring)</li>
+          <li>Still <strong>cannot scale to hundreds</strong> of processors — broadcast is the bottleneck</li>
+        </ul></div>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">Approach 2 — replace broadcast with a directory</span>
+        Track sharers explicitly so coherence messages go only where needed.
+        <ul class="small" style="margin-top:.4em">
+          <li>e.g. the SGI Altix system</li>
+          <li>Leads to <strong>Distributed Shared Memory (DSM)</strong></li>
+          <li>Scales to <strong>tens–hundreds</strong> of processors</li>
+        </ul></div>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Direction of this chapter</span>
+    We take Approach 2. Memory is <strong>physically distributed</strong> across nodes, but still presents a <strong>single shared address space</strong> — a directory keeps it coherent.</div>
+</section>
+
+<!-- Memory mapping on DSM -->
+<section data-background-color="#ffffff">
+  <h2>Mapping Memory onto a DSM</h2>
+  <p class="small">Memory is split across nodes. <em>How</em> we assign addresses to nodes trades off locality against balance.</p>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Block interleaving</span>
+      Spread consecutive blocks across nodes.
+      <ul class="small" style="margin-top:.3em">
+        <li>Naturally balances load…</li>
+        <li>…but <strong>scatters data</strong> — hard to exploit locality</li>
+      </ul></div>
+    <div class="callout"><span class="lbl">No interleaving (page granularity)</span>
+      The <strong>OS</strong> decides where each page lives — with big performance impact.
+      <ul class="small" style="margin-top:.3em">
+        <li><strong>First-touch</strong>: page goes to the node that first accesses it (good locality)</li>
+        <li><strong>Round-robin</strong>: pages cycle across nodes (good balance)</li>
+      </ul></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Key point</span>
+    Whatever the policy, <strong>each block maps to exactly one node</strong> — its <em>home</em>. That single, well-defined home is what makes the directory idea work.</div>
+</section>
+
+<!-- Finding a block / home / directory -->
+<section data-background-color="#ffffff">
+  <h2>Finding a Block: Home &amp; Directory</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">Home</span>
+        Each block maps to a single memory — its <strong>home</strong>. The home is the authoritative tracker for that block.</div>
+      <div class="callout"><span class="lbl">Directory</span>
+        At the home, a structure records <strong>which caches may have a copy</strong> of the block and <strong>in what state</strong>.</div>
+      <p class="small"><strong>Where is the directory stored?</strong></p>
+      <ul class="small">
+        <li>Entirely in <strong>memory</strong>, or split <strong>memory + cache</strong></li>
+        <li><strong>Centralized</strong> (one table) vs. <strong>distributed</strong> (each node holds the directory for its own home blocks)</li>
+      </ul>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 200" class="chart" style="max-width:280px">
+        <rect x="20" y="14" width="200" height="48" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+        <text x="120" y="33" text-anchor="middle" class="lbl" style="font-weight:700">Home node (for block B)</text>
+        <text x="120" y="50" text-anchor="middle" class="tiny">owns the memory + directory entry for B</text>
+        <!-- directory entry -->
+        <rect x="40" y="84" width="160" height="40" rx="6" fill="#fff7ed" stroke="#f59e0b" stroke-width="2"/>
+        <text x="120" y="78" text-anchor="middle" class="tiny" style="fill:#b45309">directory entry</text>
+        <rect x="48" y="92" width="40" height="24" rx="3" fill="#fde68a" stroke="#b45309"/>
+        <text x="68" y="108" text-anchor="middle" class="tiny">state</text>
+        <rect x="92" y="92" width="100" height="24" rx="3" fill="#fff" stroke="#b45309"/>
+        <text x="142" y="108" text-anchor="middle" class="tiny">sharer info</text>
+        <text x="120" y="150" text-anchor="middle" class="tiny muted">"who has B, and in what state?"</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Read handling diagram -->
+<section data-background-color="#ffffff">
+  <h2>Directory Handling of a <em>Load</em> (Read)</h2>
+  <div class="center">
+    <svg viewBox="0 0 760 260" class="chart" style="max-width:920px">
+      <!-- requestor P0 -->
+      <circle cx="80" cy="40" r="22" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/><text x="80" y="45" text-anchor="middle" class="lbl">P0</text>
+      <rect x="45" y="80" width="70" height="26" rx="4" fill="#fff" stroke="#64748b"/><text x="80" y="97" text-anchor="middle" class="tiny">cache (miss)</text>
+      <text x="80" y="124" text-anchor="middle" class="tiny" style="fill:#CC0000">requestor</text>
+      <!-- owner P3 -->
+      <circle cx="660" cy="40" r="22" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/><text x="660" y="45" text-anchor="middle" class="lbl">P3</text>
+      <rect x="615" y="80" width="90" height="26" rx="4" fill="#dcfce7" stroke="#16a34a"/><text x="660" y="97" text-anchor="middle" class="tiny">B (M, dirty)</text>
+      <text x="660" y="124" text-anchor="middle" class="tiny" style="fill:#16a34a">owner</text>
+      <!-- home -->
+      <rect x="300" y="170" width="160" height="44" rx="6" fill="#fff7ed" stroke="#f59e0b" stroke-width="2"/>
+      <text x="380" y="188" text-anchor="middle" class="tiny" style="fill:#b45309;font-weight:700">Home directory</text>
+      <text x="380" y="204" text-anchor="middle" class="tiny">B : EM @ P3</text>
+      <!-- 1 read -->
+      <path d="M105,100 C190,150 250,165 300,182" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#arR)"/>
+      <text x="175" y="135" class="tiny" style="fill:#CC0000">1. Read (P0→H)</text>
+      <!-- 2 intervention -->
+      <path d="M460,182 C540,160 600,140 645,108" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#arP)"/>
+      <text x="540" y="135" class="tiny" style="fill:#7c3aed">2. Int (H→P3)</text>
+      <!-- 3 flush to requestor -->
+      <path d="M615,80 C420,30 230,40 105,72" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#arG)"/>
+      <text x="330" y="38" class="tiny" style="fill:#16a34a">3. Flush — owner supplies block to P0 (and updates home)</text>
+      <defs>
+        <marker id="arR" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#CC0000"/></marker>
+        <marker id="arP" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#7c3aed"/></marker>
+        <marker id="arG" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#16a34a"/></marker>
+      </defs>
+    </svg>
+  </div>
+  <div class="callout"><span class="lbl">Three hops</span>
+    <strong>1.</strong> P0 misses, sends Read to the home. &nbsp;<strong>2.</strong> Home looks up the directory, finds owner P3, sends an <strong>intervention</strong>. &nbsp;<strong>3.</strong> Owner P3 <strong>flushes</strong> the block to P0 (and may update home).</div>
+</section>
+
+<!-- Write handling diagram -->
+<section data-background-color="#ffffff">
+  <h2>Directory Handling of a <em>Store</em> (Write)</h2>
+  <div class="center">
+    <svg viewBox="0 0 760 260" class="chart" style="max-width:920px">
+      <!-- requestor P0 -->
+      <circle cx="80" cy="40" r="22" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/><text x="80" y="45" text-anchor="middle" class="lbl">P0</text>
+      <text x="80" y="80" text-anchor="middle" class="tiny" style="fill:#CC0000">requestor</text>
+      <!-- sharers P1 P2 -->
+      <circle cx="420" cy="40" r="22" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/><text x="420" y="45" text-anchor="middle" class="lbl">P1</text>
+      <rect x="385" y="72" width="70" height="22" rx="4" fill="#fef3c7" stroke="#f59e0b"/><text x="420" y="88" text-anchor="middle" class="tiny">B (S)</text>
+      <circle cx="620" cy="40" r="22" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/><text x="620" y="45" text-anchor="middle" class="lbl">P2</text>
+      <rect x="585" y="72" width="70" height="22" rx="4" fill="#fef3c7" stroke="#f59e0b"/><text x="620" y="88" text-anchor="middle" class="tiny">B (S)</text>
+      <text x="520" y="112" text-anchor="middle" class="tiny" style="fill:#b45309">sharers</text>
+      <!-- home -->
+      <rect x="250" y="170" width="170" height="44" rx="6" fill="#fff7ed" stroke="#f59e0b" stroke-width="2"/>
+      <text x="335" y="188" text-anchor="middle" class="tiny" style="fill:#b45309;font-weight:700">Home directory</text>
+      <text x="335" y="204" text-anchor="middle" class="tiny">B : S @ {P1,P2}</text>
+      <!-- 1 upgrade -->
+      <path d="M90,62 C160,130 200,160 250,182" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#arR2)"/>
+      <text x="120" y="130" class="tiny" style="fill:#CC0000">1. Upgr / Write (P0→H)</text>
+      <!-- 2 invalidations -->
+      <path d="M400,170 C405,130 410,110 418,96" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#arP2)"/>
+      <path d="M420,170 C500,130 560,110 605,96" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#arP2)"/>
+      <text x="455" y="150" class="tiny" style="fill:#7c3aed">2. Inv (H→P1,P2)</text>
+      <!-- 3 invack to requestor -->
+      <path d="M385,40 C260,18 150,22 92,28" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#arG2)"/>
+      <path d="M585,40 C400,8 200,12 92,24" fill="none" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arG2)"/>
+      <text x="200" y="14" class="tiny" style="fill:#16a34a">3. InvAck (P1,P2 → P0)</text>
+      <defs>
+        <marker id="arR2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#CC0000"/></marker>
+        <marker id="arP2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#7c3aed"/></marker>
+        <marker id="arG2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#16a34a"/></marker>
+      </defs>
+    </svg>
+  </div>
+  <div class="callout"><span class="lbl">Targeted invalidation</span>
+    <strong>1.</strong> P0 sends Write/Upgrade to home. &nbsp;<strong>2.</strong> Home knows P1, P2 are sharers and sends <strong>invalidations</strong> only to them. &nbsp;<strong>3.</strong> Sharers reply with <strong>InvAck</strong> to the requestor.</div>
+</section>
+
+<!-- Directory location choices -->
+<section data-background-color="#ffffff">
+  <h2>Directory Location Choices</h2>
+  <p class="small">The directory can live at different points in the hierarchy — the principle (track sharers at the home) is the same.</p>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Classic DSM</span>
+      Directory sits beside <strong>main memory</strong> at each node; nodes joined by an interconnect. Each node = P + L1/L2 + a slice of memory + its directory.</div>
+    <div class="callout"><span class="lbl">Directory-coherent LLCs</span>
+      In a multicore, the directory tracks the <strong>last-level caches</strong> across chips; each chip has a memory controller to its own DRAM.</div>
+    <div class="callout"><span class="lbl">Non-LLC (L2/L3 slices)</span>
+      Directory can track <strong>inner cache levels</strong> (e.g. L3 slices), with memory controllers feeding off-chip memory.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Common thread</span>
+    Wherever it lives, the directory is <strong>distributed with the memory it tracks</strong> — there is no single hot-spot table the way a single bus is a single hot-spot wire.</div>
+</section>
+
+<!-- What info in directory -->
+<section data-background-color="#ffffff">
+  <h2>What Information Does the Directory Keep?</h2>
+  <div class="cols w-64">
+    <div>
+      <p>At minimum the directory must record, per block:</p>
+      <ul class="small">
+        <li><strong>Which caches</strong> are sharers / the owner</li>
+        <li><strong>Which state</strong> the block is cached in</li>
+      </ul>
+      <p class="small">Ideally it would mirror the caches' full <strong>MESI</strong> state — but it can't.</p>
+      <div class="callout warn"><span class="lbl">The E→M problem</span>
+        A cache's transition from <strong>Exclusive → Modified</strong> is <strong>silent</strong> (no message). So the directory <em>cannot</em> tell E from M.</div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">So the directory keeps 3 states</span></div>
+      <table>
+        <tr><th>Dir state</th><th>Meaning</th></tr>
+        <tr><td class="hi"><strong>EM</strong></td><td>block cached in Exclusive <em>or</em> Modified by one owner</td></tr>
+        <tr><td><strong>S</strong></td><td>block cached <em>Shared</em> by one or more</td></tr>
+        <tr><td><strong>U</strong></td><td>Uncached (or only in Invalid)</td></tr>
+      </table>
+      <p class="tiny muted">Caches still run full MESI; the directory collapses E and M into a single EM state.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Performance criteria -->
+<section data-background-color="#ffffff">
+  <h2>Performance Criteria for a Directory Design</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Main criteria</span>
+        <ul class="small" style="margin-top:.3em">
+          <li><strong>Traffic</strong> on invalidations</li>
+          <li><strong>Latency</strong> of invalidations</li>
+          <li><strong>Storage</strong> overhead of the directory</li>
+        </ul></div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Less important</span>
+        <ul class="small" style="margin-top:.3em">
+          <li>Traffic on interventions</li>
+          <li>Latency of interventions</li>
+        </ul></div>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Why invalidations dominate</span>
+    An <strong>invalidation</strong> may involve <em>many</em> sharers, while an <strong>intervention</strong> involves a <em>single</em> owner. So the cost and scalability of the design is driven by invalidation behavior.</div>
+</section>
+
+<!-- Example setup -->
+<section data-background-color="#ffffff">
+  <h2>A Worked Protocol: Setup</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Cache states</span>Full <strong>MESI</strong> in each cache.</div>
+      <div class="callout"><span class="lbl">Directory format</span><strong>Full bit-vector</strong> — one presence bit per node, plus a state field.</div>
+      <div class="callout"><span class="lbl">Directory states</span>
+        <strong>EM</strong> (Exclusive or Modified) · <strong>S</strong> (Shared) · <strong>U</strong> (Unowned).</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 150" class="chart" style="max-width:300px">
+        <text x="120" y="20" text-anchor="middle" class="tiny muted">directory entry for one block (3 nodes)</text>
+        <rect x="30" y="34" width="50" height="34" rx="4" fill="#fde68a" stroke="#b45309"/>
+        <text x="55" y="55" text-anchor="middle" class="lbl">state</text>
+        <rect x="90" y="34" width="40" height="34" fill="#fff" stroke="#334155"/>
+        <rect x="130" y="34" width="40" height="34" fill="#fff" stroke="#334155"/>
+        <rect x="170" y="34" width="40" height="34" fill="#fff" stroke="#334155"/>
+        <text x="110" y="55" text-anchor="middle" class="lbl">P1</text>
+        <text x="150" y="55" text-anchor="middle" class="lbl">P2</text>
+        <text x="190" y="55" text-anchor="middle" class="lbl">P3</text>
+        <text x="150" y="90" text-anchor="middle" class="tiny">presence bits (1 = node caches the block)</text>
+        <text x="120" y="120" text-anchor="middle" class="tiny muted">e.g.  S · 101  →  Shared by P1 and P3</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Coherence messages -->
+<section data-background-color="#ffffff">
+  <h2>Full Bit-Vector: Coherence Messages</h2>
+  <div class="cols c3">
+    <div>
+      <div class="code-label">Issued by requestor</div>
+      <ul class="small">
+        <li><strong>Read</strong> — read request</li>
+        <li><strong>ReadX</strong> — read-exclusive (write) request</li>
+        <li><strong>Upgr</strong> — upgrade (already shared → write)</li>
+      </ul>
+    </div>
+    <div>
+      <div class="code-label">Issued by home</div>
+      <ul class="small">
+        <li><strong>ReplyD</strong> — reply <em>with</em> data</li>
+        <li><strong>Reply</strong> — reply <em>without</em> data</li>
+        <li><strong>Inv</strong> — ask sharer to invalidate</li>
+        <li><strong>Int</strong> — ask owner to flush &amp; go to S</li>
+      </ul>
+    </div>
+    <div>
+      <div class="code-label">Issued by owner / sharer</div>
+      <ul class="small">
+        <li><strong>Flush</strong> — owner sends data to home + requestor</li>
+        <li><strong>InvAck</strong> — ack of an Inv</li>
+        <li><strong>Ack</strong> — ack of a non-inval msg</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">Note the variety</span>Far more message types than a snoopy protocol — that richness is what enables point-to-point, traffic-filtered coherence.</div>
+</section>
+
+<!-- Directory state transition diagram -->
+<section data-background-color="#ffffff">
+  <h2>State Transition at the Directory</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 420 300" class="chart" style="max-width:520px">
+        <defs>
+          <marker id="dsa" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#334155"/></marker>
+        </defs>
+        <!-- states -->
+        <ellipse cx="130" cy="70" rx="34" ry="26" fill="#fee2e2" stroke="#CC0000" stroke-width="2"/><text x="130" y="76" text-anchor="middle" class="lbl" style="font-weight:700">EM</text>
+        <ellipse cx="360" cy="70" rx="30" ry="24" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/><text x="360" y="76" text-anchor="middle" class="lbl" style="font-weight:700">U</text>
+        <ellipse cx="130" cy="230" rx="30" ry="24" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/><text x="130" y="236" text-anchor="middle" class="lbl" style="font-weight:700">S</text>
+        <!-- U -> EM -->
+        <line x1="330" y1="70" x2="166" y2="70" stroke="#334155" stroke-width="1.6" marker-end="url(#dsa)"/>
+        <text x="248" y="56" text-anchor="middle" class="tiny">Read/ReplyD</text>
+        <text x="248" y="68" text-anchor="middle" class="tiny">ReadX/ReplyD</text>
+        <!-- EM self loop -->
+        <path d="M104,52 C70,30 100,10 130,30" fill="none" stroke="#334155" stroke-width="1.4" marker-end="url(#dsa)"/>
+        <text x="70" y="28" class="tiny">ReadX/Reply,Inv</text>
+        <!-- EM -> S -->
+        <path d="M140,96 C160,140 160,180 142,208" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#dsa)"/>
+        <text x="178" y="155" class="tiny">Read/Int</text>
+        <!-- S -> EM -->
+        <path d="M118,206 C95,170 95,135 116,98" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#dsa)"/>
+        <text x="20" y="150" class="tiny">Upgr/Reply,Inv</text>
+        <text x="20" y="162" class="tiny">ReadX/ReplyD,Inv</text>
+        <!-- S self loop -->
+        <path d="M104,244 C70,266 100,282 128,260" fill="none" stroke="#334155" stroke-width="1.4" marker-end="url(#dsa)"/>
+        <text x="40" y="284" class="tiny">Read/ReplyD</text>
+      </svg>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Legend</span>
+        Each arc is labeled <code class="inline">&lt;request&gt;/&lt;reply1&gt;,&lt;reply2&gt;</code>.</div>
+      <ul class="small">
+        <li><strong>U→EM</strong>: first Read/ReadX, home replies with data.</li>
+        <li><strong>EM→S</strong>: a Read from a third party → home intervenes the owner.</li>
+        <li><strong>S→EM</strong>: an Upgr/ReadX → home invalidates other sharers.</li>
+        <li>Self-loops keep the same state (e.g. another Read while Shared).</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- Visualization: initial -->
+<section data-background-color="#ffffff">
+  <h2>Full Bit-Vector Walkthrough — Layout</h2>
+  <div class="center">
+    <svg viewBox="0 0 720 280" class="chart" style="max-width:900px">
+      <!-- three nodes -->
+      <g>
+        <circle cx="120" cy="34" r="20" fill="#dbeafe" stroke="#3b82f6"/><text x="120" y="39" text-anchor="middle" class="lbl">P1</text>
+        <circle cx="360" cy="34" r="20" fill="#dbeafe" stroke="#3b82f6"/><text x="360" y="39" text-anchor="middle" class="lbl">P2</text>
+        <circle cx="600" cy="34" r="20" fill="#dbeafe" stroke="#3b82f6"/><text x="600" y="39" text-anchor="middle" class="lbl">P3</text>
+      </g>
+      <!-- caches -->
+      <g class="tiny" fill="#475569"><text x="120" y="68" text-anchor="middle">cache (data | state)</text>
+        <text x="360" y="68" text-anchor="middle">cache</text><text x="600" y="68" text-anchor="middle">cache</text></g>
+      <g fill="#fff" stroke="#334155"><rect x="80" y="74" width="50" height="26"/><rect x="130" y="74" width="30" height="26"/>
+        <rect x="320" y="74" width="50" height="26"/><rect x="370" y="74" width="30" height="26"/>
+        <rect x="560" y="74" width="50" height="26"/><rect x="610" y="74" width="30" height="26"/></g>
+      <!-- dir ctrl -->
+      <g class="tiny" fill="#b45309"><text x="120" y="128" text-anchor="middle">Dir Ctrl + memory slice</text>
+        <text x="360" y="128" text-anchor="middle">home of X</text><text x="600" y="128" text-anchor="middle">Dir Ctrl</text></g>
+      <g fill="#fff7ed" stroke="#f59e0b">
+        <rect x="80" y="134" width="80" height="26"/>
+        <rect x="320" y="134" width="50" height="26"/><rect x="370" y="134" width="20" height="26"/><rect x="390" y="134" width="40" height="26"/>
+        <rect x="560" y="134" width="80" height="26"/></g>
+      <text x="380" y="151" text-anchor="middle" class="tiny">data | st | bits</text>
+      <!-- interconnect -->
+      <rect x="40" y="210" width="640" height="30" rx="6" fill="#e2e8f0" stroke="#64748b"/>
+      <text x="360" y="230" text-anchor="middle" class="lbl">Interconnection Network</text>
+      <g class="axis"><line x1="120" y1="160" x2="120" y2="210"/><line x1="360" y1="160" x2="360" y2="210"/><line x1="600" y1="160" x2="600" y2="210"/></g>
+    </svg>
+  </div>
+  <div class="callout"><span class="lbl">Scenario</span>
+    Block <strong>X</strong> is homed at the middle node (P2's slice). We trace a sequence of accesses by P1 and P3 and watch the cache states, the directory state, and the presence bits evolve. Directory starts at <strong>U, 000</strong>.</div>
+</section>
+
+<!-- Walkthrough table -->
+<section data-background-color="#ffffff">
+  <h2>Full Bit-Vector Walkthrough — Trace</h2>
+  <p class="small muted">Directory entry shown as <code class="inline">state, presence-bits(P1 P2 P3)</code>. X is homed at P2.</p>
+  <table style="font-size:.8em">
+    <tr><th>Action</th><th>P1</th><th>P2</th><th>P3</th><th>Dir @Home</th><th>Network messages</th><th>Hops</th></tr>
+    <tr><td>R1 (P1 reads)</td><td class="hi">E</td><td>–</td><td>–</td><td>EM, 100</td><td>Read (P1→H), ReplyD (H→P1)</td><td>2</td></tr>
+    <tr><td>W1 (P1 writes)</td><td class="hi">M</td><td>–</td><td>–</td><td>EM, 100</td><td>— (silent E→M)</td><td>0</td></tr>
+    <tr><td>R3 (P3 reads)</td><td>S</td><td>–</td><td class="hi">S</td><td>S, 101</td><td>Read (P3→H), Int (H→P1), Flush (P1→H,P3)</td><td>3</td></tr>
+    <tr><td>W3 (P3 writes)</td><td>I</td><td>–</td><td class="hi">M</td><td>EM, 001</td><td>Upgr (P3→H), Reply (H→P3) // Inv (H→P1), InvAck (P1→P3)</td><td>3</td></tr>
+    <tr><td>R1 (P1 reads)</td><td class="hi">S</td><td>–</td><td>S</td><td>S, 101</td><td>Read (P1→H), Int (H→P3), Flush (P3→H,P1)</td><td>3</td></tr>
+    <tr><td>R3 (P3 reads)</td><td>S</td><td>–</td><td>S</td><td>S, 101</td><td>— (already shared)</td><td>0</td></tr>
+    <tr><td>R2 (P2 reads)</td><td>S</td><td class="hi">S</td><td>S</td><td>S, 111</td><td>Read (P2→H), ReplyD (H→P2)</td><td>2</td></tr>
+  </table>
+</section>
+
+<!-- Annotated visualization of one step -->
+<section data-background-color="#ffffff">
+  <h2>Walkthrough Detail — R3 on a Modified Block</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 480 260" class="chart" style="max-width:560px">
+        <defs><marker id="vm" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#CC0000"/></marker></defs>
+        <!-- P1 owner M -->
+        <circle cx="70" cy="30" r="18" fill="#dbeafe" stroke="#3b82f6"/><text x="70" y="35" text-anchor="middle" class="lbl">P1</text>
+        <rect x="35" y="56" width="70" height="24" fill="#dcfce7" stroke="#16a34a"/><text x="70" y="72" text-anchor="middle" class="tiny">X=2 · M→S</text>
+        <!-- P3 requestor -->
+        <circle cx="400" cy="30" r="18" fill="#dbeafe" stroke="#3b82f6"/><text x="400" y="35" text-anchor="middle" class="lbl">P3</text>
+        <rect x="365" y="56" width="70" height="24" fill="#fff" stroke="#334155"/><text x="400" y="72" text-anchor="middle" class="tiny">X=2 · S</text>
+        <!-- home -->
+        <rect x="160" y="150" width="160" height="40" rx="5" fill="#fff7ed" stroke="#f59e0b"/>
+        <text x="240" y="167" text-anchor="middle" class="tiny" style="fill:#b45309">Home (P2)</text>
+        <text x="240" y="182" text-anchor="middle" class="tiny">EM,100 → S,101</text>
+        <!-- read -->
+        <path d="M382,48 C320,110 290,135 300,150" fill="none" stroke="#CC0000" stroke-width="1.8" marker-end="url(#vm)"/>
+        <text x="320" y="118" class="tiny" style="fill:#CC0000">Read</text>
+        <!-- int -->
+        <path d="M170,160 C110,120 90,100 80,82" fill="none" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#vm)"/>
+        <text x="95" y="130" class="tiny" style="fill:#7c3aed">Int</text>
+        <!-- flush -->
+        <path d="M105,60 C230,20 320,28 382,46" fill="none" stroke="#16a34a" stroke-width="1.8" marker-end="url(#vm)"/>
+        <text x="210" y="22" class="tiny" style="fill:#16a34a">Flush (to home + P3)</text>
+      </svg>
+    </div>
+    <div>
+      <p class="small">P3 wants to read X, which P1 holds <strong>Modified</strong>.</p>
+      <ol class="small">
+        <li>P3 → <strong>Read</strong> to home.</li>
+        <li>Home is in <strong>EM,100</strong>; sends <strong>Int</strong> to owner P1.</li>
+        <li>P1 <strong>flushes</strong> X to home <em>and</em> P3, downgrades to S.</li>
+        <li>Home becomes <strong>S, 101</strong>.</li>
+      </ol>
+      <div class="callout"><span class="lbl">3 hops</span>Read → Int → Flush. The classic three-hop miss to a remotely-modified block.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Note on the protocol -->
+<section data-background-color="#ffffff">
+  <h2>Observations on the Basic Protocol</h2>
+  <div class="cols">
+    <div>
+      <div class="callout ok"><span class="lbl">Good</span>
+        <ul class="small" style="margin-top:.3em">
+          <li>Many transactions proceed <strong>in parallel</strong> (vs. one bus at a time)</li>
+          <li>Home supplies clean data, so snoopy's <strong>FlushOpt is unneeded</strong></li>
+        </ul></div>
+      <div class="callout"><span class="lbl">Reply forwarding</span>
+        Home replies to the writer so the <strong>requestor collects InvAcks</strong> directly → <strong>3 hops instead of 4</strong>.</div>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Costs</span>
+        <ul class="small" style="margin-top:.3em">
+          <li>Much more complex — many message types</li>
+          <li><strong>Protocol races</strong> can occur (Module 10.2)</li>
+          <li>Some requests take <strong>3 hops</strong> (vs. 2 in SMP)</li>
+        </ul></div>
+    </div>
+  </div>
+  <aside class="notes">"Reply forwarding" is the trick that gets writes down to 3 hops: instead of the home collecting all the invalidation acks and then telling the requestor, the home replies to the requestor and the sharers send their InvAcks straight to the requestor, who counts them.</aside>
+</section>
+
+<!-- Overheads of full bit-vector -->
+<section data-background-color="#ffffff">
+  <h2>Overheads of the Full Bit-Vector Scheme</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Write traffic</span><strong>O(sharers)</strong> invalidations.</div>
+      <div class="callout"><span class="lbl">Write latency</span><strong>O(1)</strong> — invalidations sent in parallel — but higher than SMP because of InvAck collection.</div>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Storage — the killer</span>
+        One <strong>presence bit per node per line</strong>. With p nodes:
+        <div class="eq small">\( \text{overhead} = O(p^2) \)</div>
+        <span class="tiny">(p bits/line, and #lines grows with p)</span></div>
+    </div>
+  </div>
+  <table style="font-size:.85em">
+    <tr><th>Nodes (64-byte line)</th><th>Bits/line</th><th>Storage overhead</th></tr>
+    <tr><td>64</td><td>64</td><td>12.7%</td></tr>
+    <tr><td>256</td><td>256</td><td class="hi">50%</td></tr>
+    <tr><td>1024</td><td>1024</td><td class="hi">200%</td></tr>
+  </table>
+  <div class="callout takeaway"><span class="lbl">Conclusion</span>The full bit-vector <strong>does not scale</strong> in storage. The next slides reduce it.</div>
+</section>
+
+<!-- Reducing storage overhead -->
+<section data-background-color="#ffffff">
+  <h2>Reducing Storage: Coarse Vector &amp; Limited Pointers</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Coarse vector</span>
+        One bit represents a <strong>group of g nodes</strong>. Invalidation goes to all nodes in any group whose bit is set.
+        <div class="eq tiny">\( O(p^2/g) \)</div>
+        <span class="tiny">256 procs, 4/cluster, 128B line → 6.25% overhead</span></div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Limited pointers</span>
+        Keep only <strong>a few pointers</strong> to sharers (each \(\log_2 p\) bits).
+        <div class="eq tiny">\( O(\text{numptr} \cdot \log_2 p \cdot p) \)</div>
+        <span class="tiny">Most blocks have few sharers, so ~5 pointers usually suffice. p=1024 → 10-bit pointers.</span></div>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">Also simple</span>Larger cache lines amortize the per-line directory cost (fewer lines). But limited pointers raise a question: <strong>what happens on overflow</strong> — more sharers than pointers?</div>
+</section>
+
+<!-- Overflow schemes -->
+<section data-background-color="#ffffff">
+  <h2>Overflow Schemes for Limited Pointers</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Broadcast</span>
+      Set an <strong>overflow bit</strong>; once set, fall back to <strong>broadcasting</strong> invalidations to all nodes.</div>
+    <div class="callout"><span class="lbl">No-broadcast (invalidate to fit)</span>
+      Cap sharers at the pointer count: to admit a new sharer, <strong>invalidate one existing</strong> sharer first.</div>
+    <div class="callout"><span class="lbl">Coarse vector</span>
+      On overflow, <strong>reinterpret the pointer bits as a coarse vector</strong>; invalidation goes to all nodes a bit covers.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Trade-off</span>
+    Each scheme trades <strong>storage</strong> against <strong>extra invalidation traffic</strong> in the (rare) widely-shared case.</div>
+</section>
+
+<!-- Sparse directories -->
+<section data-background-color="#ffffff">
+  <h2>Sparse (Cached) Directories</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">Observation</span>
+        Total cache entries ≪ total memory blocks → <strong>most directory entries are in state U</strong> (uncached). Storing them all is wasteful.</div>
+      <div class="callout ok"><span class="lbl">Idea</span>
+        Keep directory entries <strong>only for non-U blocks</strong>, organized as a <strong>cache</strong>. Allocate an entry when a block becomes cached.</div>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">It can overflow</span>
+        Caches replace blocks <strong>silently</strong> — the directory never sees the eviction, so it can't free the entry. The directory-cache fills up.</div>
+      <div class="callout"><span class="lbl">Handling overflow (simple)</span>
+        When an entry must be evicted, <strong>send invalidations to all its sharers</strong>, then reuse the slot.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Mixing formats (Origin2000) -->
+<section data-background-color="#ffffff">
+  <h2>Mixing Formats: SGI Origin 2000</h2>
+  <p class="small">A real machine uses <strong>several formats at once</strong> (2 processors per node, sharing a "Hub").</p>
+  <ul class="small">
+    <li><strong>Exclusively cached</strong>: the entry is a single <strong>pointer</strong> to that processor.</li>
+    <li><strong>Shared</strong>: a <strong>bit vector</strong> of <em>node</em> ids (not processor ids). An Inv to a Hub is broadcast to both processors in that node.</li>
+    <li>Two sizes: <strong>16-bit</strong> (32 procs, in DRAM) and <strong>64-bit</strong> (128 procs, extra bits in extension memory).</li>
+    <li>Larger machines: <strong>coarse vector</strong>, each bit = p/64 nodes; the machine chooses bit-vector vs. coarse-vector <em>dynamically</em>.</li>
+  </ul>
+  <div class="callout"><span class="lbl">Takeaway</span>Production DSMs don't pick one format — they <strong>adapt</strong> the directory representation to the sharing pattern and the machine size.</div>
+</section>
+
+<!-- Module 10.1 review -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 10.1 — Review</h2>
+  <div class="qa">
+    <p class="q">1. How does a directory protocol scale better than broadcast/snoopy?</p>
+    <div class="fragment"><div class="a">The directory <strong>filters traffic</strong>: only the owner/sharer caches are contacted for a transaction. In broadcast, <em>every</em> cache controller participates.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. Why can't the directory distinguish Exclusive from Modified?</p>
+    <div class="fragment"><div class="a">The cache's <strong>E→M transition is silent</strong> (no message). Without changing MESI, the directory can't tell them apart, so it keeps a single <strong>EM</strong> state.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Why is directory storage a scalability problem, and what mitigates it?</p>
+    <div class="fragment"><div class="a">Possible sharers grow with the number of caches → per-line bits grow → <strong>O(p²)</strong>. Mitigations: <strong>coarse vector, limited pointers, sparse directory</strong> (the last two need an overflow policy).</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 10.2 — HANDLING PROTOCOL RACES
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 10.2</div>
+  <div class="mod-title">Handling Protocol Races</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Identify the two sources of protocol races: <strong>out-of-sync directory</strong> and <strong>non-atomic messages</strong></li>
+      <li>Apply the general toolkit: <strong>transient states, NACKs, outstanding-transaction buffers</strong></li>
+      <li>Contrast <strong>home-centric</strong> and <strong>requestor-assisted</strong> transaction handling</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Assumptions so far -->
+<section data-background-color="#ffffff">
+  <h2>The Assumptions We've Been Making</h2>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Assumption 1</span>
+      The directory state always reflects the <strong>most up-to-date</strong> state of the caches.</div>
+    <div class="callout"><span class="lbl">Assumption 2</span>
+      The messages for a request are processed <strong>atomically</strong> (instantaneously, indivisibly).</div>
+  </div>
+  <div class="callout warn"><span class="lbl">Reality</span>
+    In a real machine, <strong>one or both can be violated</strong> → <strong>protocol races</strong>. Some races are easy to handle; others are subtle.</div>
+  <div class="callout takeaway"><span class="lbl">Goal of this module</span>
+    Illustrate <em>approaches</em> for dealing with races — not to enumerate every possible race. We focus on the techniques, not exhaustive coverage.</div>
+</section>
+
+<!-- Out of sync directory -->
+<section data-background-color="#ffffff">
+  <h2>Races from an Out-of-Sync Directory</h2>
+  <p class="small">The directory's view can lag the caches because of silent replacements and in-flight writebacks.</p>
+  <div class="cols">
+    <div>
+      <div class="callout ok"><span class="lbl">Easy cases</span>
+        <ul class="small" style="margin-top:.3em">
+          <li>Inv to a node that <strong>silently replaced</strong> the block → it can still reply <strong>InvAck</strong>.</li>
+          <li>Read from a node the home <em>already</em> thinks is a sharer → just reply with data (<strong>ReplyD</strong>).</li>
+        </ul></div>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Hard case</span>
+        Read/ReadX arrives for a block the home thinks is in <strong>EM @ that owner</strong>, but:
+        <ul class="small" style="margin-top:.3em">
+          <li>If clean — it was replaced <strong>silently</strong> (gone).</li>
+          <li>If dirty — its <strong>Flush hasn't arrived yet</strong>.</li>
+        </ul>
+        <span class="tiny">Wait? It may never come. Reply with data? It may be stale.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Out of sync fix -->
+<section data-background-color="#ffffff">
+  <h2>Fixing Out-of-Sync Races: Enlist the Nodes</h2>
+  <div class="callout"><span class="lbl">The home alone can't solve it</span>
+    Individual nodes must <strong>participate</strong> in resolving the ambiguity.</div>
+  <ul class="small">
+    <li>Each node keeps an <strong>outstanding-transaction buffer</strong> for any Flush it has issued.</li>
+    <li>Require the home to <strong>acknowledge</strong> receipt of a Flush.</li>
+    <li><strong>Delay</strong> any Read/ReadX to a block that is still being written back.</li>
+  </ul>
+  <div class="callout ok"><span class="lbl">Result</span>
+    The home only ever sees a Read/ReadX for a block that is <strong>not</strong> mid-writeback — so it can safely send <strong>ReplyD</strong>.</div>
+  <div class="callout"><span class="lbl">Protocol change</span>
+    Split <strong>EM</strong> into two transient flavors — <strong>EM<sub>A</sub></strong> and <strong>EM<sub>B</sub></strong> — to distinguish handling a Read/ReadX from the <em>current owner</em> vs. from <em>others</em>. Notation: <code class="inline">Req[Requestor] / Reply1[Dest], Reply2[Dest]</code>.</div>
+</section>
+
+<!-- Non-atomic messages -->
+<section data-background-color="#ffffff">
+  <h2>Races from Non-Atomic Messages: Early Invalidation</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 420 240" class="chart" style="max-width:500px">
+        <defs><marker id="na" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#334155"/></marker></defs>
+        <!-- lifelines -->
+        <text x="60" y="20" text-anchor="middle" class="lbl">A</text>
+        <text x="210" y="20" text-anchor="middle" class="lbl">Home</text>
+        <text x="370" y="20" text-anchor="middle" class="lbl">B</text>
+        <line x1="60" y1="28" x2="60" y2="225" stroke="#cbd5e1"/>
+        <line x1="210" y1="28" x2="210" y2="225" stroke="#cbd5e1"/>
+        <line x1="370" y1="28" x2="370" y2="225" stroke="#cbd5e1"/>
+        <!-- 1 read -->
+        <line x1="62" y1="50" x2="208" y2="60" stroke="#3b82f6" stroke-width="1.6" marker-end="url(#na)"/>
+        <text x="100" y="46" class="tiny" style="fill:#3b82f6">1. Read</text>
+        <!-- 2 replyD delayed -->
+        <line x1="208" y1="80" x2="64" y2="150" stroke="#16a34a" stroke-width="1.6" stroke-dasharray="5 3" marker-end="url(#na)"/>
+        <text x="120" y="105" class="tiny" style="fill:#16a34a">2. ReplyD (delayed!)</text>
+        <!-- 3 write from B -->
+        <line x1="368" y1="95" x2="212" y2="105" stroke="#CC0000" stroke-width="1.6" marker-end="url(#na)"/>
+        <text x="270" y="92" class="tiny" style="fill:#CC0000">3. Write</text>
+        <!-- 4 inv arrives early -->
+        <line x1="208" y1="120" x2="64" y2="120" stroke="#7c3aed" stroke-width="1.6" marker-end="url(#na)"/>
+        <text x="95" y="116" class="tiny" style="fill:#7c3aed">4. Inv (arrives before ReplyD!)</text>
+      </svg>
+    </div>
+    <div>
+      <p class="small">A reads; the home's <strong>ReplyD is delayed</strong>. Meanwhile B writes, and the home's <strong>Inv to A overtakes</strong> the data.</p>
+      <div class="callout warn"><span class="lbl">"Early Invalidation" race</span>
+        The invalidation for a block reaches A <em>before</em> the data A is still waiting for.</div>
+    </div>
+  </div>
+</section>
+
+<!-- How should A respond -->
+<section data-background-color="#ffffff">
+  <h2>How Should A Respond?</h2>
+  <div class="cols">
+    <div>
+      <div class="callout warn"><span class="lbl">Wrong way 1 — ack then accept</span>
+        A InvAcks (B thinks write is done), then A receives the late ReplyD and <strong>caches the block that should have been invalidated</strong>.</div>
+      <div class="callout warn"><span class="lbl">Wrong way 2 — ignore</span>
+        A ignores the Inv → the invalidation is <strong>lost</strong> and write propagation <strong>fails</strong>.</div>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">Solution A — Home-centric (brute force)</span>
+        Home <strong>avoids overlapping</strong> request handling: waits for <strong>Acks from all parties</strong> before moving on.</div>
+      <div class="callout ok"><span class="lbl">Solution B — Requestor-assisted</span>
+        Allow overlap, but each node keeps an <strong>outstanding-transaction buffer</strong> and <strong>does not service</strong> requests to the same block until its current transaction completes.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Processing a read request -->
+<section data-background-color="#ffffff">
+  <h2>Processing a Read: Home-Centric vs. Requestor-Assisted</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Read to a clean (U/S) block</span>
+        <strong>Home-centric:</strong> dir enters transient state → ReplyD → requestor sends Ack → home closes (updates vector).
+        <span class="tiny">Cons: heavy serialization at home; closes late; needs an Ack.</span>
+        <hr style="border:none;border-top:1px solid #e2e8f0;margin:.4em 0">
+        <strong>Requestor-assisted:</strong> dir sends ReplyD and <strong>closes immediately</strong>; the requestor buffers/NACKs new requests until ReplyD arrives.</div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Read to an EM block</span>
+        <strong>Home-centric:</strong> home → Int to owner; owner flushes to home + requestor; requestor Acks; home closes (→ S).
+        <hr style="border:none;border-top:1px solid #e2e8f0;margin:.4em 0">
+        <strong>Requestor-assisted:</strong> home → Int, but <strong>cannot close yet</strong> — the final Shared state needs a clean copy at home. Home closes only <strong>after</strong> the owner's Flush arrives.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Processing a write request 1 -->
+<section data-background-color="#ffffff">
+  <h2>Processing a Write — U and Shared Blocks</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">ReadX to a U block</span>
+        <strong>Home-centric:</strong> home replies with data → requestor Acks → home closes.
+        <hr style="border:none;border-top:1px solid #e2e8f0;margin:.4em 0">
+        <strong>Requestor-assisted:</strong> home sends ReplyD and <strong>closes immediately</strong>.</div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">ReadX to a Shared block</span>
+        <strong>Home-centric:</strong> dir transient; sends Inv; <strong>InvAcks collected</strong> (at requestor → notify home, or at home); then home closes.
+        <hr style="border:none;border-top:1px solid #e2e8f0;margin:.4em 0">
+        <strong>Requestor-assisted:</strong> home sends Invs and <strong>closes</strong>; <strong>InvAcks collected at the requestor</strong>, which buffers/NACKs new requests until all arrive.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Processing a write request 2 -->
+<section data-background-color="#ffffff">
+  <h2>Processing a Write — EM Blocks</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">ReadX to an EM block — Home-centric</span>
+        Dir transient; send Inv messages; InvAcks collected at requestor (→ notify home) or at home; then home closes.</div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">ReadX to an EM block — Requestor-assisted</span>
+        Requestor → ReadX; home sends <strong>Inv to owner</strong> and <strong>closes</strong>; owner flushes to requestor; requestor buffers/NACKs until the block arrives from the old owner.</div>
+    </div>
+  </div>
+  <div class="callout warn"><span class="lbl">Remaining problem</span>
+    What if the old owner <strong>no longer has the block</strong>? It was Modified and being written back, or it was Exclusive and silently evicted. The home <strong>cannot close yet</strong> — it may still have to supply the block, so it closes <strong>late, after an Ack from the owner</strong>.</div>
+</section>
+
+<!-- Transient states -->
+<section data-background-color="#ffffff">
+  <h2>Transient States &amp; the New State Diagram</h2>
+  <div class="cols w-37">
+    <div>
+      <div class="callout"><span class="lbl">Why transient states</span>
+        Needed <strong>every time a transaction can't close instantly</strong>.</div>
+      <ul class="small">
+        <li><strong>EM2S</strong>: EM → S in progress</li>
+        <li><strong>EM2EM</strong>: EM → EM, but a <em>different</em> owner</li>
+        <li><strong>EM<sub>A</sub>/EM<sub>B</sub></strong>: split EM (which side owns)</li>
+      </ul>
+      <p class="tiny muted">Dashed arcs = transient transitions awaiting a Flush/Ack. Labels keep the <code class="inline">Req[who]/Reply[who]</code> form.</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 420 320" class="chart" style="max-width:520px">
+        <defs><marker id="ns" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#334155"/></marker></defs>
+        <!-- stable states -->
+        <ellipse cx="160" cy="150" rx="30" ry="24" fill="#fee2e2" stroke="#CC0000" stroke-width="2"/><text x="160" y="155" text-anchor="middle" class="tiny" style="font-weight:700">EM_A</text>
+        <ellipse cx="320" cy="150" rx="26" ry="22" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/><text x="320" y="155" text-anchor="middle" class="lbl" style="font-weight:700">U</text>
+        <ellipse cx="160" cy="250" rx="26" ry="22" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/><text x="160" y="255" text-anchor="middle" class="lbl" style="font-weight:700">S</text>
+        <ellipse cx="320" cy="250" rx="30" ry="24" fill="#fee2e2" stroke="#CC0000" stroke-width="2"/><text x="320" y="255" text-anchor="middle" class="tiny" style="font-weight:700">EM_B</text>
+        <!-- transient (boxes) -->
+        <rect x="240" y="30" width="74" height="24" rx="3" fill="#ede9fe" stroke="#7c3aed"/><text x="277" y="46" text-anchor="middle" class="tiny" style="font-weight:700">EM_A2EM_B</text>
+        <rect x="240" y="78" width="74" height="24" rx="3" fill="#ede9fe" stroke="#7c3aed"/><text x="277" y="94" text-anchor="middle" class="tiny" style="font-weight:700">EM_B2EM_A</text>
+        <rect x="30" y="138" width="64" height="24" rx="3" fill="#ede9fe" stroke="#7c3aed"/><text x="62" y="154" text-anchor="middle" class="tiny" style="font-weight:700">EM_A2S</text>
+        <rect x="288" y="290" width="64" height="24" rx="3" fill="#ede9fe" stroke="#7c3aed"/><text x="320" y="306" text-anchor="middle" class="tiny" style="font-weight:700">EM_B2S</text>
+        <!-- U -> EM_A and EM_B -->
+        <line x1="294" y1="150" x2="192" y2="150" stroke="#334155" stroke-width="1.5" marker-end="url(#ns)"/>
+        <line x1="320" y1="172" x2="320" y2="226" stroke="#334155" stroke-width="1.5" marker-end="url(#ns)"/>
+        <!-- EM_A <-> S -->
+        <path d="M150,172 C140,200 140,220 152,230" fill="none" stroke="#334155" stroke-width="1.3" marker-end="url(#ns)"/>
+        <path d="M172,228 C182,205 182,190 168,174" fill="none" stroke="#334155" stroke-width="1.3" marker-end="url(#ns)"/>
+        <!-- S <-> EM_B -->
+        <path d="M186,250 C230,242 270,244 292,248" fill="none" stroke="#334155" stroke-width="1.3" marker-end="url(#ns)"/>
+        <!-- transient dashed -->
+        <path d="M188,140 C220,90 240,60 260,54" fill="none" stroke="#7c3aed" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#ns)"/>
+        <path d="M314,78 C290,70 250,150 192,150" fill="none" stroke="#7c3aed" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#ns)"/>
+        <path d="M132,150 C112,150 100,150 94,150" fill="none" stroke="#7c3aed" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#ns)"/>
+        <path d="M320,274 C320,282 320,286 320,290" fill="none" stroke="#7c3aed" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#ns)"/>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Write propagation and serialization -->
+<section data-background-color="#ffffff">
+  <h2>Write Propagation &amp; Serialization</h2>
+  <ul class="small">
+    <li><strong>Write propagation</strong> is achieved through <strong>invalidation</strong>.</li>
+    <li>Multiple writes to a block are <strong>serialized by the protocol</strong>.</li>
+    <li>A transaction closes only after the home receives the <strong>Ack from the current owner</strong>.</li>
+    <li>A new ReadX is <strong>not served until the previous ReadX closes</strong> → this provides <strong>write serialization</strong>.</li>
+  </ul>
+  <div class="callout takeaway"><span class="lbl">Why it matters</span>
+    The home acts as the <strong>serialization point</strong> for each block. By not overlapping conflicting writes to the same block, the directory guarantees a single global order of writes — the core requirement for coherence.</div>
+</section>
+
+<!-- Synchronization support -->
+<section data-background-color="#ffffff">
+  <h2>Synchronization Support</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Atomic instructions</span>
+      Supported by the home entering a <strong>transient state</strong> until the instruction completes.</div>
+    <div class="callout"><span class="lbl">LL / SC</span>
+      <strong>No change</strong> needed at the directory — it works as ordinary coherent loads/stores.</div>
+    <div class="callout"><span class="lbl">In-memory atomics</span>
+      If the directory controller can do <strong>inc/add/compare</strong>, perform the op <em>there</em> (allocate the variable in a non-cacheable page).</div>
+  </div>
+  <div class="cols">
+    <div class="callout ok"><span class="lbl">In-memory pro</span>No invalidations and subsequent misses — <strong>O(p)</strong> complexity under contention.</div>
+    <div class="callout warn"><span class="lbl">In-memory con</span>Worse under <em>low</em> contention — long distance, no temporal locality at the requester.</div>
+  </div>
+</section>
+
+<!-- Memory consistency -->
+<section data-background-color="#ffffff">
+  <h2>Memory Consistency Models on DSM</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Sequential Consistency (SC)</span>
+        Write completion is detected when <strong>all InvAcks are collected</strong>. <strong>Prefetching</strong> and <strong>load speculation</strong> are still applicable to recover performance.</div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">As p grows…</span>
+        Average cache-miss latency <strong>increases</strong> and is <strong>harder to hide</strong>.</div>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Implication</span>
+    The bigger the machine, the more the <strong>benefit of relaxed consistency models</strong> grows versus SC — because there is more latency to overlap.</div>
+</section>
+
+<!-- Module 10.2 review -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 10.2 — Review</h2>
+  <div class="qa">
+    <p class="q">1. What are the two sources of protocol races?</p>
+    <div class="fragment"><div class="a"><strong>Out-of-sync directory</strong> — the directory no longer reflects the caches' real states. <strong>Non-instantaneous processing</strong> — the home may overlap multiple transactions, so messages race.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. What is the general strategy for dealing with protocol races?</p>
+    <div class="fragment"><div class="a">Add <strong>transient states</strong> when a transaction can't close immediately; <strong>NACK</strong> requests while in a transient state; and <strong>enlist nodes</strong> (outstanding-transaction buffers) to resolve the ambiguity.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 10.3 — CACHE-BASED DIRECTORY
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 10.3</div>
+  <div class="mod-title">Cache-Based Directory Protocol</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Explain the <strong>linked-list</strong> (cache-based) directory and the <strong>SCI</strong> standard</li>
+      <li>Trace SSCI messages: <strong>WB+Int+UpdPtr</strong>, pointer maintenance, list invalidation</li>
+      <li>Compare cache-based vs. memory-based directories on storage, latency, and traffic</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Flat cache-based scheme -->
+<section data-background-color="#ffffff">
+  <h2>Flat, Cache-Based Schemes</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">Idea</span>
+        Sharers form a <strong>linked list</strong>. The <strong>home stores only the head pointer</strong>; each cache stores the <strong>next</strong> sharer.</div>
+      <ul class="small">
+        <li>On a <strong>read</strong>: insert yourself at the <strong>head</strong> (needs communication).</li>
+        <li>On a <strong>write</strong>: propagate invalidations <strong>down the chain</strong>.</li>
+      </ul>
+      <div class="callout"><span class="lbl">SCI</span>
+        Scalable Coherent Interface — <strong>IEEE standard</strong> (1993), uses a <strong>doubly-linked</strong> list.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 200" class="chart" style="max-width:280px">
+        <defs><marker id="ll" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#334155"/></marker></defs>
+        <rect x="80" y="14" width="80" height="30" rx="5" fill="#fff7ed" stroke="#f59e0b"/>
+        <text x="120" y="26" text-anchor="middle" class="tiny" style="fill:#b45309">Home</text>
+        <text x="120" y="39" text-anchor="middle" class="tiny">head ptr</text>
+        <g fill="#dbeafe" stroke="#3b82f6">
+          <rect x="80" y="74" width="80" height="28" rx="5"/>
+          <rect x="80" y="118" width="80" height="28" rx="5"/>
+          <rect x="80" y="162" width="80" height="28" rx="5"/></g>
+        <text x="120" y="92" text-anchor="middle" class="tiny">cache C1 · next→</text>
+        <text x="120" y="136" text-anchor="middle" class="tiny">cache C2 · next→</text>
+        <text x="120" y="180" text-anchor="middle" class="tiny">cache C3 · null</text>
+        <line x1="120" y1="44" x2="120" y2="74" stroke="#334155" stroke-width="1.4" marker-end="url(#ll)"/>
+        <line x1="120" y1="102" x2="120" y2="118" stroke="#334155" stroke-width="1.4" marker-end="url(#ll)"/>
+        <line x1="120" y1="146" x2="120" y2="162" stroke="#334155" stroke-width="1.4" marker-end="url(#ll)"/>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- SSCI assumptions -->
+<section data-background-color="#ffffff">
+  <h2>SSCI — A Simplified SCI for Illustration</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Real SCI</span>
+        IEEE standard (1993); three protocol sets (minimal / typical / full); <strong>7 state bits, 29 stable states</strong> + many pending states.</div>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">SSCI (Simple SCI)</span>
+        For teaching, retain similarity with full-bit-vector:
+        <ul class="small" style="margin-top:.3em">
+          <li><strong>MESI</strong> in caches; <strong>U / S / EM</strong> in the directory</li>
+          <li>Replace presence bits with a <strong>pointer</strong></li>
+          <li><strong>Doubly-linked</strong> list; most races ignored in the illustration</li>
+        </ul></div>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">New transaction</span>
+    <code class="inline">WB+Int+UpdPtr</code> — writeback + intervention + update of <strong>next / prev / head pointers</strong>. This is the extra work cache-based schemes pay to maintain the list.</div>
+</section>
+
+<!-- SSCI visualization -->
+<section data-background-color="#ffffff">
+  <h2>SSCI Walkthrough — Inserting at the Head</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 480 250" class="chart" style="max-width:560px">
+        <defs><marker id="sm" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#CC0000"/></marker></defs>
+        <!-- P1 old owner M -->
+        <circle cx="70" cy="30" r="18" fill="#dbeafe" stroke="#3b82f6"/><text x="70" y="35" text-anchor="middle" class="lbl">P1</text>
+        <rect x="30" y="54" width="84" height="26" fill="#dcfce7" stroke="#16a34a"/><text x="72" y="71" text-anchor="middle" class="tiny">X=2 · M→S</text>
+        <!-- P3 requestor -->
+        <circle cx="410" cy="30" r="18" fill="#dbeafe" stroke="#3b82f6"/><text x="410" y="35" text-anchor="middle" class="lbl">P3</text>
+        <rect x="368" y="54" width="84" height="26" fill="#fff" stroke="#334155"/><text x="410" y="71" text-anchor="middle" class="tiny">X=2 · S (head)</text>
+        <!-- home -->
+        <rect x="170" y="150" width="150" height="40" rx="5" fill="#fff7ed" stroke="#f59e0b"/>
+        <text x="245" y="167" text-anchor="middle" class="tiny" style="fill:#b45309">Home</text>
+        <text x="245" y="182" text-anchor="middle" class="tiny">EM,head=1 → S,head=3</text>
+        <!-- read -->
+        <path d="M392,48 C330,110 300,135 305,150" fill="none" stroke="#CC0000" stroke-width="1.6" marker-end="url(#sm)"/>
+        <text x="330" y="116" class="tiny" style="fill:#CC0000">Read</text>
+        <!-- replyID -->
+        <path d="M186,160 C300,120 360,90 392,52" fill="none" stroke="#16a34a" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#sm)"/>
+        <text x="300" y="100" class="tiny" style="fill:#16a34a">ReplyID (old head = P1)</text>
+        <!-- WB+Int+UpdPtr P3->P1 -->
+        <path d="M370,66 C220,40 140,42 114,58" fill="none" stroke="#7c3aed" stroke-width="1.6" marker-end="url(#sm)"/>
+        <text x="180" y="34" class="tiny" style="fill:#7c3aed">WB+Int+UpdPtr (P3→P1)</text>
+        <!-- Flush -->
+        <path d="M70,80 C90,120 120,140 168,160" fill="none" stroke="#16a34a" stroke-width="1.4" marker-end="url(#sm)"/>
+        <text x="95" y="120" class="tiny" style="fill:#16a34a">Flush</text>
+      </svg>
+    </div>
+    <div>
+      <p class="small">P3 reads X, currently held Modified by P1.</p>
+      <ol class="small">
+        <li>P3 → <strong>Read</strong> to home.</li>
+        <li>Home replies <strong>ReplyID</strong> with the old head pointer (P1), sets head = P3.</li>
+        <li>P3 sends <strong>WB+Int+UpdPtr</strong> to P1.</li>
+        <li>P1 <strong>flushes</strong>, downgrades to S, links to P3.</li>
+      </ol>
+      <div class="callout warn"><span class="lbl">4 hops</span>Read to Modified data costs <strong>4 hops</strong> here (3 if the home forwards the read to the owner).</div>
+    </div>
+  </div>
+</section>
+
+<!-- SSCI example table -->
+<section data-background-color="#ffffff">
+  <h2>SSCI Walkthrough — Trace</h2>
+  <p class="small muted">Cache state shown as <code class="inline">state, prev, next</code>; directory as <code class="inline">state, head</code>. Same access sequence as the full-bit-vector example.</p>
+  <table style="font-size:.78em">
+    <tr><th>Action</th><th>P1</th><th>P2</th><th>P3</th><th>Dir</th><th>Messages</th><th>Hops</th></tr>
+    <tr><td>R1</td><td class="hi">E,0,0</td><td>–</td><td>–</td><td>EM,1</td><td>Read (P1→H), ReplyD (H→P1)</td><td>2</td></tr>
+    <tr><td>W1</td><td class="hi">M,0,0</td><td>–</td><td>–</td><td>EM,1</td><td>—</td><td>0</td></tr>
+    <tr><td>R3</td><td>S,3,0</td><td>–</td><td class="hi">S,0,1</td><td>S,3</td><td>Read(P3→H), ReplyID(H→P3), WB+Int+UpdPtr(P3→P1), Flush(P1→H,P3)</td><td>4</td></tr>
+    <tr><td>W3</td><td>I,3,0</td><td>–</td><td class="hi">M,0,0</td><td>EM,3</td><td>Upgr(P3→H) // Inv(P3→P1), InvAck(P1→P3)</td><td>2</td></tr>
+    <tr><td>R1</td><td class="hi">S,0,3</td><td>–</td><td>S,1,0</td><td>S,1</td><td>Read(P1→H), ReplyID(H→P1), WB+Int+UpdPtr(P1→P3), Flush(P3→H,P1)</td><td>4</td></tr>
+    <tr><td>R3</td><td>S,0,3</td><td>–</td><td>S,1,0</td><td>S,1</td><td>—</td><td>0</td></tr>
+    <tr><td>R2</td><td>S,2,3</td><td class="hi">S,0,1</td><td>S,1,0</td><td>S,2</td><td>Read(P2→H), ReplyD/ID(H→P2), UpdPtr(P2→P1)</td><td>3</td></tr>
+  </table>
+</section>
+
+<!-- Observations cache vs memory -->
+<section data-background-color="#ffffff">
+  <h2>Cache-Based vs. Memory-Based Directory</h2>
+  <div class="cols">
+    <div>
+      <div class="callout warn"><span class="lbl">Disadvantages</span>
+        <ul class="small" style="margin-top:.3em">
+          <li>Read to <strong>Shared</strong> data: higher latency/traffic (pointer updates)</li>
+          <li>Read to <strong>Modified</strong>: <strong>4 hops</strong> (3 if home forwards)</li>
+          <li>Write invalidation latency is <strong>O(sharers)</strong> — serial down the list</li>
+          <li>Replacement incurs pointer updates</li>
+        </ul></div>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">Advantages</span>
+        <ul class="small" style="margin-top:.3em">
+          <li><strong>Small storage</strong> overhead</li>
+          <li>Linked list supports <strong>fairness</strong></li>
+          <li><strong>Distributed</strong> invalidation</li>
+        </ul></div>
+      <div class="callout"><span class="lbl">Races</span>
+        Quite a few more — pointer updates and state transitions must be <strong>atomic</strong>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Scaling properties cache-based -->
+<section data-background-color="#ffffff">
+  <h2>Scaling Properties (Cache-Based)</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Write traffic</span><strong>O(sharers)</strong></div>
+      <div class="callout warn"><span class="lbl">Write latency</span><strong>O(sharers)</strong> — you don't know the next sharer until you reach the current one; each node assists along the way.</div>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">Storage</span>
+        Scales well on both axes: only <strong>one head pointer per memory block</strong>; the rest is proportional to <strong>cache</strong> size.</div>
+      <div class="callout"><span class="lbl">Other</span>
+        Mature, IEEE standard, supports fairness — but <strong>complex</strong>.</div>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The key trade</span>
+    Memory-based: <strong>O(1) write latency</strong> but <strong>O(p²)</strong> storage. Cache-based (SCI): tiny storage but <strong>O(sharers) write latency</strong>. You pay either in space or in time.</div>
+</section>
+
+<!-- Comparison table -->
+<section data-background-color="#ffffff">
+  <h2>Comparing the Schemes</h2>
+  <p class="tiny muted">p = #processors · g = group size · k = fraction of dir entries cached · M = mem lines/node · C = cache lines/proc</p>
+  <table style="font-size:.78em">
+    <tr><th></th><th>Bus broadcast</th><th>Full bit-vector</th><th>Coarse vector</th><th>Limited ptrs</th><th>Sparse (cached)</th><th>SCI</th></tr>
+    <tr><td>Inval traffic</td><td>O(1)</td><td>O(sh)</td><td>O(sh)</td><td>O(sh)</td><td>O(sh)</td><td>O(sh)</td></tr>
+    <tr><td>Inval latency</td><td>O(1)</td><td>O(1)</td><td>O(1)</td><td>O(1)</td><td>O(1)</td><td class="hi">O(sh)</td></tr>
+    <tr><td>Storage</td><td>zero</td><td>Mp²</td><td>Mp²/g</td><td>Mp·log p·#ptr</td><td>kMp²</td><td>mem Mp·log p + cache 2Cp·log p</td></tr>
+    <tr><td>O(storage)</td><td>—</td><td class="hi">O(Mp²)</td><td>O(Mp²/g)</td><td>O(Mp log p)</td><td>O(Cp²) if kM=C</td><td>O(Mp log p)</td></tr>
+  </table>
+  <div class="callout takeaway"><span class="lbl">Read the latency row</span>
+    Every memory-based directory keeps <strong>O(1)</strong> invalidation latency (parallel Invs). Only <strong>SCI</strong> trades that away for tiny storage — its list-walk makes invalidation <strong>O(sharers)</strong>.</div>
+</section>
+
+<!-- Module 10.3 review -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 10.3 — Review</h2>
+  <div class="qa">
+    <p class="q">1. How does a cache-based (SCI) directory store sharer information?</p>
+    <div class="fragment"><div class="a">As a <strong>doubly-linked list</strong>: the home holds only the <strong>head pointer</strong>; each sharing cache stores prev/next pointers. Storage is proportional to <em>cache</em> size, not p².</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. Why is write/invalidation latency O(sharers) in SCI?</p>
+    <div class="fragment"><div class="a">Invalidations must walk the list <strong>node by node</strong> — you can't reach the next sharer until you've processed the current one, so latency grows with the number of sharers.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. State the central trade-off between memory-based and cache-based directories.</p>
+    <div class="fragment"><div class="a">Memory-based = <strong>O(1) inval latency, O(p²) storage</strong>. Cache-based = <strong>tiny storage, O(sharers) inval latency</strong>. Space vs. time.</div></div>
+  </div>
+</section>
+
+<!-- Chapter summary -->
+<section data-background-color="#ffffff">
+  <h2>Chapter 10 — Big Picture</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">10.1 Directory</span>Track sharers at the <strong>home</strong> so coherence traffic is filtered point-to-point. Storage formats trade space vs. precision.</div>
+    <div class="callout"><span class="lbl">10.2 Races</span>Real machines aren't atomic — handle races with <strong>transient states, NACKs, and node cooperation</strong>.</div>
+    <div class="callout"><span class="lbl">10.3 SCI</span>A <strong>linked-list</strong> directory trades O(1) latency for tiny, cache-proportional storage.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">One sentence</span>
+    <strong>Directories make shared memory scale by replacing broadcast with bookkeeping</strong> — and every design choice is a trade among storage, latency, traffic, and protocol complexity.</div>
+  <p class="center muted small">Directory coherence is what lets a DSM look like one big coherent memory across tens to hundreds of cores.</p>
+</section>
+
+</div>
+
+<!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 10 — Distributed Shared Memory</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.04,
+    minScale: 0.2, maxScale: 1.6,
+    center: false,                 // top-align content so the NC State header bar sits at the slide top
+    hash: true, slideNumber: 'c/t', history: true,
+    transition: 'slide', transitionSpeed: 'fast',
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      {left:'\\(', right:'\\)', display:false},
+      {left:'$$', right:'$$', display:true}
+    ]},
+  });
+</script>
+</body>
+</html>
