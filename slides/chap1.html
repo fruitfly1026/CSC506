@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <!-- course theme -->
-<link rel="stylesheet" href="assets/theme.css?v=3">
+<link rel="stylesheet" href="assets/theme.css?v=4">
 </head>
 <body>
 <div class="reveal">
@@ -350,7 +350,7 @@
   <div class="cols">
     <div>
       <div class="code-label">Original (sequential issue)</div>
-      <pre><code class="language-asm" data-trim>
+      <pre><code class="language-x86asm" data-trim>
 LD    F0, 34(R2)
 ADDD  F4, F0, F2
 LD    F7, 45(R3)
@@ -359,7 +359,7 @@ ADDD  F8, F7, F6
     </div>
     <div>
       <div class="code-label">Scheduled (2-wide issue)</div>
-      <pre><code class="language-asm" data-trim>
+      <pre><code class="language-x86asm" data-trim>
 LD   F0,34(R2)  │  LD   F7,45(R3)
 ADDD F4,F0,F2   │  ADDD F8,F7,F6
 </code></pre>
@@ -803,7 +803,7 @@ void MyFunction() {
     </div>
     <div>
       <div class="code-label">→ one instruction stream (x86)</div>
-      <pre><code class="language-asm" data-trim>
+      <pre><code class="language-x86asm" data-trim>
 push ebp
 mov  ebp, esp
 sub  esp, 12
@@ -864,7 +864,7 @@ for (i = 0; i < 4; i++)
     </div>
     <div>
       <div class="code-label">SIMD style — 4×32-bit in a 128-bit reg</div>
-      <pre><code class="language-asm" data-trim>
+      <pre><code class="language-x86asm" data-trim>
 MOVUPS XMM0, [EAX]   ; load A[0..3]
 MOVUPS XMM1, [EBX]   ; load B[0..3]
 ADDPS  XMM0, XMM1    ; 4 adds at once

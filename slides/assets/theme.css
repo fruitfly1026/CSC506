@@ -156,6 +156,9 @@
   font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
   padding: 1em 1.2em; border-radius: 10px; line-height: 1.45;
   background: var(--code-bg); max-height: none;
+  /* Safety net: render every code block as a light-on-dark block even when
+     highlight.js doesn't recognize the language (e.g. asm) and omits .hljs. */
+  display: block; white-space: pre; overflow: auto; color: #e6edf3;
 }
 .reveal code.inline {
   font-family: "JetBrains Mono", monospace; background: var(--bg-alt);
