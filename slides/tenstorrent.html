@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSC/ECE 506 · Tenstorrent &amp; TT-Metalium — Matmul Labs</title>
+
+<!-- reveal.js core (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<!-- code highlighting + math -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+<!-- fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<!-- course theme -->
+<link rel="stylesheet" href="assets/theme.css?v=6">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============================ TITLE ============================ -->
+<section class="title-slide" data-background-color="#ffffff">
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <h1>Tenstorrent &amp; TT-Metalium</h1>
+  <div class="sub">Tensix architecture and three matrix-multiplication labs</div>
+  <div class="meta">
+    Tenstorrent Unit · A throughput accelerator for the post-GPU era<br>
+    <span class="muted">Use ← → to navigate · <strong>S</strong> for speaker notes · <strong>F</strong> fullscreen · <strong>ESC</strong> overview</span>
+  </div>
+  <aside class="notes">
+    This unit introduces Tenstorrent's Tensix architecture and the low-level TT-Metalium
+    programming model, then builds matrix multiplication up through three labs:
+    single-core, multi-core (SPMD), and multi-core with NoC multicast. It parallels the
+    GPU unit's themes — tiles, data movement, and many simple compute engines — and feeds
+    into the course's CUDA SpMV comparison.
+  </aside>
+</section>
+
+<!-- Roadmap -->
+<section data-background-color="#ffffff">
+  <h2>Unit Roadmap</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Module 1</span><strong>Architecture &amp; Model</strong><br>
+      <span class="small">The Tensix core, the grid + NoC, tiles &amp; circular buffers, and the TT-Metalium host API lifecycle.</span></div>
+    <div class="callout"><span class="lbl">Labs 1 &amp; 2</span><strong>Single- &amp; Multi-Core</strong><br>
+      <span class="small">Tiled matmul on one core, then SPMD static work-splitting across a grid of cores.</span></div>
+    <div class="callout"><span class="lbl">Lab 3</span><strong>Multicast Reuse</strong><br>
+      <span class="small">Broadcast input blocks over the NoC to cut DRAM traffic; sender/receiver kernels + semaphores.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The thread that ties it together</span>
+    A Tenstorrent device is a <strong>grid of small RISC-V-driven tile engines</strong> wired by a network-on-chip. Performance comes from <strong>keeping those engines fed</strong> — exactly the data-movement story we saw with GPUs.</div>
+</section>
+
+<!-- ==================================================================
+     MODULE 1 — ARCHITECTURE & TT-METALIUM MODEL
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 1</div>
+  <div class="mod-title">Tenstorrent Architecture &amp; the TT-Metalium Model</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Describe the <strong>Tensix core</strong>: L1 SRAM, two NoC routers, compute engine, five RISC-V cores</li>
+      <li>Explain the <strong>grid + NoC</strong> and the host ↔ device DRAM data flow over PCIe</li>
+      <li>Reason about <strong>32×32 tiles</strong>, tiled layout, and <strong>circular buffers</strong> (L1 FIFOs)</li>
+      <li>Walk the <strong>TT-Metalium host API lifecycle</strong> from device open to result read-back</li>
+    </ul>
+  </div>
+</section>
+
+<!-- What kind of accelerator -->
+<section data-background-color="#ffffff">
+  <h2>A Tile-Based Throughput Accelerator</h2>
+  <div class="cols w-64">
+    <div>
+      <p>Tenstorrent is a <strong>PCIe accelerator</strong> with its own DRAM, separate from host memory — like a GPU, but the compute fabric is a <strong>grid of programmable Tensix cores</strong> connected by a network-on-chip (NoC).</p>
+      <ul class="small">
+        <li>Work is expressed on <strong>32×32 tiles</strong>, not scalars</li>
+        <li>Each core runs explicit <strong>reader / compute / writer</strong> programs</li>
+        <li>You program data movement <em>directly</em> — nothing is implicit</li>
+      </ul>
+      <div class="callout"><span class="lbl">TT-Metalium</span>The low-level C++ host + kernel API. You place buffers, define circular buffers, and launch kernels on specific cores.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 200" class="chart" style="max-width:300px">
+        <rect x="6" y="6" width="228" height="188" rx="12" fill="#0f172a"/>
+        <text x="120" y="24" text-anchor="middle" style="fill:#fff;font-weight:700;font-size:12px">Tenstorrent device</text>
+        <g fill="#3b82f6" stroke="#1d4ed8">
+          <rect x="22" y="36" width="40" height="34" rx="5"/><rect x="70" y="36" width="40" height="34" rx="5"/>
+          <rect x="118" y="36" width="40" height="34" rx="5"/><rect x="166" y="36" width="40" height="34" rx="5"/>
+          <rect x="22" y="78" width="40" height="34" rx="5"/><rect x="70" y="78" width="40" height="34" rx="5"/>
+          <rect x="118" y="78" width="40" height="34" rx="5"/><rect x="166" y="78" width="40" height="34" rx="5"/>
+          <rect x="22" y="120" width="40" height="34" rx="5"/><rect x="70" y="120" width="40" height="34" rx="5"/>
+          <rect x="118" y="120" width="40" height="34" rx="5"/><rect x="166" y="120" width="40" height="34" rx="5"/>
+        </g>
+        <text x="114" y="98" text-anchor="middle" style="fill:#fff;font-size:9px;font-weight:700">grid of Tensix cores</text>
+        <rect x="22" y="164" width="184" height="22" rx="5" fill="#22c55e" stroke="#15803d"/>
+        <text x="114" y="179" text-anchor="middle" style="fill:#052e16;font-size:10px;font-weight:700">device DRAM</text>
+      </svg>
+      <div class="src">Grid of Tensix cores + NoC, backed by device DRAM.</div>
+    </div>
+  </div>
+</section>
+
+<!-- The Tensix core -->
+<section data-background-color="#ffffff">
+  <h2>Inside One Tensix Core</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 300 220" class="chart" style="max-width:360px">
+        <rect x="6" y="6" width="288" height="208" rx="12" fill="#f8fafc" stroke="#0f172a" stroke-width="2"/>
+        <text x="150" y="24" text-anchor="middle" class="note" style="fill:#0f172a">Tensix core</text>
+        <!-- L1 SRAM -->
+        <rect x="20" y="34" width="120" height="40" rx="6" fill="#fef3c7" stroke="#f59e0b"/>
+        <text x="80" y="52" text-anchor="middle" class="lbl">L1 SRAM</text>
+        <text x="80" y="66" text-anchor="middle" class="tiny">CB tiles + kernel code</text>
+        <!-- compute engine -->
+        <rect x="160" y="34" width="120" height="40" rx="6" fill="#dbeafe" stroke="#1d4ed8"/>
+        <text x="220" y="52" text-anchor="middle" class="lbl">Tensix engine</text>
+        <text x="220" y="66" text-anchor="middle" class="tiny">matrix / vector tile ops</text>
+        <!-- five RISC-V -->
+        <g fill="#ede9fe" stroke="#8b5cf6">
+          <rect x="20" y="92" width="48" height="40" rx="5"/><rect x="72" y="92" width="48" height="40" rx="5"/>
+          <rect x="124" y="92" width="48" height="40" rx="5"/><rect x="176" y="92" width="48" height="40" rx="5"/>
+          <rect x="228" y="92" width="48" height="40" rx="5"/>
+        </g>
+        <text x="44"  y="110" text-anchor="middle" class="tiny" style="font-weight:700">RV 0</text><text x="44"  y="124" text-anchor="middle" class="tiny">reader</text>
+        <text x="96"  y="110" text-anchor="middle" class="tiny" style="font-weight:700">RV 1</text><text x="96"  y="124" text-anchor="middle" class="tiny">compute</text>
+        <text x="148" y="110" text-anchor="middle" class="tiny" style="font-weight:700">RV 2</text><text x="148" y="124" text-anchor="middle" class="tiny">compute</text>
+        <text x="200" y="110" text-anchor="middle" class="tiny" style="font-weight:700">RV 3</text><text x="200" y="124" text-anchor="middle" class="tiny">compute</text>
+        <text x="252" y="110" text-anchor="middle" class="tiny" style="font-weight:700">RV 4</text><text x="252" y="124" text-anchor="middle" class="tiny">writer</text>
+        <!-- routers -->
+        <rect x="20" y="150" width="125" height="34" rx="6" fill="#dcfce7" stroke="#16a34a"/>
+        <text x="82" y="171" text-anchor="middle" class="lbl">NoC router 0</text>
+        <rect x="155" y="150" width="125" height="34" rx="6" fill="#dcfce7" stroke="#16a34a"/>
+        <text x="217" y="171" text-anchor="middle" class="lbl">NoC router 1</text>
+      </svg>
+    </div>
+    <div>
+      <ul class="small">
+        <li><strong>L1 SRAM</strong> — fast local memory; holds CB tiles + kernel code</li>
+        <li><strong>2 NoC routers</strong> — move data L1 ↔ DRAM ↔ neighbor cores</li>
+        <li><strong>Tensix compute engine</strong> — matrix &amp; vector tile math</li>
+        <li><strong>5 RISC-V "baby" cores:</strong>
+          <ul class="tiny">
+            <li><strong>RV 0 &amp; RV 4</strong> drive the routers → reader / writer data-movement kernels</li>
+            <li><strong>RV 1–3</strong> drive the compute engine → compute kernel</li>
+          </ul>
+        </li>
+      </ul>
+      <div class="callout"><span class="lbl">Division of labor</span>Three kernel <em>roles</em> per core map onto distinct RISC-V cores running concurrently.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Host <-> device flow -->
+<section data-background-color="#ffffff">
+  <h2>Host ↔ Device Data Flow</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 360 170" class="chart">
+        <rect x="10" y="50" width="80" height="60" rx="8" fill="#e2e8f0" stroke="#475569"/>
+        <text x="50" y="76" text-anchor="middle" class="lbl">Host</text>
+        <text x="50" y="92" text-anchor="middle" class="tiny">CPU + RAM</text>
+        <rect x="135" y="50" width="80" height="60" rx="8" fill="#dcfce7" stroke="#16a34a"/>
+        <text x="175" y="76" text-anchor="middle" class="lbl">Device</text>
+        <text x="175" y="92" text-anchor="middle" class="tiny">DRAM</text>
+        <rect x="260" y="50" width="90" height="60" rx="8" fill="#dbeafe" stroke="#1d4ed8"/>
+        <text x="305" y="72" text-anchor="middle" class="lbl">Tensix</text>
+        <text x="305" y="86" text-anchor="middle" class="tiny">L1 + engine</text>
+        <text x="305" y="100" text-anchor="middle" class="tiny">core grid</text>
+        <!-- arrows -->
+        <line x1="90" y1="70" x2="133" y2="70" class="axis" marker-end="url(#ar)"/>
+        <text x="112" y="62" text-anchor="middle" class="tiny">PCIe</text>
+        <line x1="215" y1="70" x2="258" y2="70" class="axis" marker-end="url(#ar)"/>
+        <text x="236" y="62" text-anchor="middle" class="tiny">NoC</text>
+        <line x1="258" y1="92" x2="215" y2="92" class="axis" marker-end="url(#ar)"/>
+        <text x="236" y="108" text-anchor="middle" class="tiny">results</text>
+        <line x1="133" y1="92" x2="90" y2="92" class="axis" marker-end="url(#ar)"/>
+        <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#475569"/></marker></defs>
+      </svg>
+      <div class="src">Host → DRAM over PCIe → cores pull into L1 → compute → results back.</div>
+    </div>
+    <div>
+      <ol class="small">
+        <li>Host writes inputs to <strong>device DRAM</strong> over PCIe</li>
+        <li>Reader kernels pull tiles <strong>DRAM → L1</strong> via the NoC</li>
+        <li>Compute kernel processes <strong>L1 → L1</strong> on the Tensix engine</li>
+        <li>Writer kernels push results <strong>L1 → DRAM</strong></li>
+        <li>Host reads outputs back <strong>DRAM → host</strong></li>
+      </ol>
+      <div class="callout warn"><span class="lbl">Key cost</span>Device DRAM is far; <strong>L1 is near</strong>. Every lab is about moving fewer, larger tiles and reusing them in L1.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Tiles and tiled layout -->
+<section data-background-color="#ffffff">
+  <h2>Tiles &amp; the Tiled Layout</h2>
+  <div class="cols">
+    <div>
+      <p>Tensix hardware operates on <strong>32×32 tiles</strong>, not individual elements. A matrix is reshaped into a grid of tiles:</p>
+      <div class="eq small">\( M_t = M/32,\quad K_t = K/32,\quad N_t = N/32 \)</div>
+      <ul class="small">
+        <li>Tile size (bf16): \( 2 \times 32 \times 32 = 2048\) bytes</li>
+        <li>Within a tile, elements are <strong>contiguous</strong></li>
+        <li>Tiles are stored <strong>row-major</strong> across the matrix</li>
+      </ul>
+      <div class="callout"><span class="lbl">Why tiles?</span>A tile is the natural unit the engine multiplies, the NoC moves, and a CB buffers.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 200 180" class="chart" style="max-width:240px">
+        <g fill="#dbeafe" stroke="#1d4ed8">
+          <rect x="20" y="20" width="40" height="40"/><rect x="62" y="20" width="40" height="40"/><rect x="104" y="20" width="40" height="40"/>
+          <rect x="20" y="62" width="40" height="40"/><rect x="62" y="62" width="40" height="40"/><rect x="104" y="62" width="40" height="40"/>
+          <rect x="20" y="104" width="40" height="40"/><rect x="62" y="104" width="40" height="40"/><rect x="104" y="104" width="40" height="40"/>
+        </g>
+        <text x="40" y="44" text-anchor="middle" class="tiny">0</text><text x="82" y="44" text-anchor="middle" class="tiny">1</text><text x="124" y="44" text-anchor="middle" class="tiny">2</text>
+        <text x="40" y="86" text-anchor="middle" class="tiny">3</text><text x="82" y="86" text-anchor="middle" class="tiny">4</text><text x="124" y="86" text-anchor="middle" class="tiny">5</text>
+        <text x="40" y="128" text-anchor="middle" class="tiny">6</text><text x="82" y="128" text-anchor="middle" class="tiny">7</text><text x="124" y="128" text-anchor="middle" class="tiny">8</text>
+        <text x="82" y="170" text-anchor="middle" class="lbl">tile id = row·N_t + col</text>
+      </svg>
+      <div class="src">Each cell is a 32×32 tile; row-major tile ids.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Tiled matmul math -->
+<section data-background-color="#ffffff">
+  <h2>Matmul as Tile Accumulation</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 320 170" class="chart">
+        <!-- A -->
+        <rect x="10" y="40" width="90" height="40" fill="#fef3c7" stroke="#f59e0b"/>
+        <text x="55" y="35" text-anchor="middle" class="tiny">A (M_t × K_t)</text>
+        <line x1="10" y1="60" x2="100" y2="60" stroke="#f59e0b" stroke-dasharray="3 3"/>
+        <text x="115" y="64" text-anchor="middle" class="lbl">×</text>
+        <!-- B -->
+        <rect x="130" y="20" width="40" height="90" fill="#dcfce7" stroke="#16a34a"/>
+        <text x="150" y="15" text-anchor="middle" class="tiny">B (K_t × N_t)</text>
+        <line x1="150" y1="20" x2="150" y2="110" stroke="#16a34a" stroke-dasharray="3 3"/>
+        <text x="190" y="64" text-anchor="middle" class="lbl">=</text>
+        <!-- C -->
+        <rect x="210" y="40" width="40" height="40" fill="#dbeafe" stroke="#1d4ed8"/>
+        <text x="230" y="35" text-anchor="middle" class="tiny">C tile</text>
+        <text x="230" y="64" text-anchor="middle" class="tiny" style="font-weight:700">(mt,nt)</text>
+        <text x="160" y="150" text-anchor="middle" class="note">C[mt,nt] = Σ over kt of A[mt,kt] · B[kt,nt]</text>
+      </svg>
+    </div>
+    <div>
+      <p>Each output C-tile is a <strong>sum of tile-products</strong> along the K dimension:</p>
+      <div class="eq">\( C_{mt,nt} = \sum_{kt=0}^{K_t-1} A_{mt,kt}\, B_{kt,nt} \)</div>
+      <ul class="small">
+        <li>Outer loops over output tiles <code class="inline">(mt, nt)</code></li>
+        <li>Inner loop over <code class="inline">kt</code> accumulates into one register tile</li>
+        <li>A index = <code class="inline">mt*Kt + kt</code>; B index = <code class="inline">kt*Nt + nt</code></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- Circular buffers + pipeline -->
+<section data-background-color="#ffffff">
+  <h2>Circular Buffers &amp; the Reader → Compute → Writer Pipeline</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 360 150" class="chart">
+        <rect x="6" y="40" width="70" height="44" rx="6" fill="#ede9fe" stroke="#8b5cf6"/>
+        <text x="41" y="60" text-anchor="middle" class="lbl">reader</text><text x="41" y="74" text-anchor="middle" class="tiny">RV 0</text>
+        <rect x="92" y="40" width="46" height="44" rx="6" fill="#fef3c7" stroke="#f59e0b"/>
+        <text x="115" y="58" text-anchor="middle" class="tiny" style="font-weight:700">CB</text><text x="115" y="72" text-anchor="middle" class="tiny">in0/in1</text>
+        <rect x="154" y="40" width="70" height="44" rx="6" fill="#dbeafe" stroke="#1d4ed8"/>
+        <text x="189" y="60" text-anchor="middle" class="lbl">compute</text><text x="189" y="74" text-anchor="middle" class="tiny">RV 1–3</text>
+        <rect x="240" y="40" width="46" height="44" rx="6" fill="#fef3c7" stroke="#f59e0b"/>
+        <text x="263" y="58" text-anchor="middle" class="tiny" style="font-weight:700">CB</text><text x="263" y="72" text-anchor="middle" class="tiny">out</text>
+        <rect x="302" y="40" width="52" height="44" rx="6" fill="#ede9fe" stroke="#8b5cf6"/>
+        <text x="328" y="60" text-anchor="middle" class="lbl">writer</text><text x="328" y="74" text-anchor="middle" class="tiny">RV 4</text>
+        <line x1="76" y1="62" x2="91" y2="62" class="axis"/>
+        <line x1="138" y1="62" x2="153" y2="62" class="axis"/>
+        <line x1="224" y1="62" x2="239" y2="62" class="axis"/>
+        <line x1="286" y1="62" x2="301" y2="62" class="axis"/>
+        <text x="180" y="118" text-anchor="middle" class="note">DRAM → CB → engine → CB → DRAM</text>
+      </svg>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Circular buffer (CB)</span>A <strong>FIFO queue in L1</strong> connecting a producer and consumer kernel. Sized <code class="inline">2 * tile_size</code> for <strong>double-buffering</strong>.</div>
+      <ul class="small">
+        <li><strong>reader</strong>: DRAM → CB <code class="inline">(cb_reserve_back → push)</code></li>
+        <li><strong>compute</strong>: CB → engine → CB <code class="inline">(wait_front / pop)</code></li>
+        <li><strong>writer</strong>: CB → DRAM</li>
+      </ul>
+      <p class="tiny muted">CB indices by convention: <code class="inline">cb_src0=0</code>, <code class="inline">cb_src1=1</code>, <code class="inline">cb_output=16</code>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Host API lifecycle pt 1 -->
+<section data-background-color="#ffffff">
+  <h2>Host API Lifecycle — Device &amp; Buffers</h2>
+  <div class="code-label">TT-Metalium host (C++)</div>
+  <pre><code class="language-cpp" data-trim>
+// 1. Open a device and get its command queue
+auto mesh_device = MeshDevice::create_unit_mesh(device_id);
+auto&amp; cq = mesh_device-&gt;mesh_command_queue();
+
+// 2. Tile dimensions
+uint32_t Mt = M / TILE, Kt = K / TILE, Nt = N / TILE;
+uint32_t tile_size = sizeof(bfloat16) * TILE * TILE;   // 32x32
+
+// 3. DRAM buffers for src0, src1, dst
+DeviceLocalBufferConfig dram_cfg{.page_size = tile_size,
+                                 .buffer_type = BufferType::DRAM};
+auto src0 = MeshBuffer::create(dram_cfg, /*...*/, mesh_device.get());
+auto src1 = MeshBuffer::create(dram_cfg, /*...*/, mesh_device.get());
+auto dst  = MeshBuffer::create(dram_cfg, /*...*/, mesh_device.get());
+</code></pre>
+  <p class="small muted"><code class="inline">create_unit_mesh</code> gives a single-device mesh; the command queue serializes host→device work.</p>
+</section>
+
+<!-- Host API lifecycle pt 2 -->
+<section data-background-color="#ffffff">
+  <h2>Host API Lifecycle — Program, CBs &amp; Kernels</h2>
+  <div class="code-label">TT-Metalium host (C++)</div>
+  <pre><code class="language-cpp" data-trim>
+Program program{};
+CoreCoord core({0, 0});
+
+// Circular buffers (L1 FIFOs), double-buffered
+auto cb0 = CircularBufferConfig(2 * tile_size, {{cb_src0, fmt}})
+               .set_page_size(cb_src0, tile_size);
+CreateCircularBuffer(program, core, cb0);
+// ... cb_src1 (index 1) and cb_output (index 16) likewise
+
+// Kernels: reader / compute / writer
+auto reader = CreateKernel(program, "reader.cpp", core,
+    DataMovementConfig{.processor = DataMovementProcessor::RISCV_1});
+auto compute = CreateKernel(program, "mm.cpp", core,
+    ComputeConfig{.math_fidelity = MathFidelity::HiFi4,
+                  .compile_args = {Mt, Kt, Nt}});
+auto writer = CreateKernel(program, "writer.cpp", core,
+    DataMovementConfig{.processor = DataMovementProcessor::RISCV_0});
+</code></pre>
+</section>
+
+<!-- Host API lifecycle pt 3 -->
+<section data-background-color="#ffffff">
+  <h2>Host API Lifecycle — Args, Launch &amp; Read-Back</h2>
+  <div class="code-label">TT-Metalium host (C++)</div>
+  <pre><code class="language-cpp" data-trim>
+// Runtime args per kernel
+SetRuntimeArgs(program, reader,  core, {src0-&gt;address(), src1-&gt;address(), Mt, Kt, Nt});
+SetRuntimeArgs(program, compute, core, {/* compute args */});
+SetRuntimeArgs(program, writer,  core, {dst-&gt;address(), Mt, Nt});
+
+// Upload inputs, run the program, read results back
+EnqueueWriteMeshBuffer(cq, src0, a_data, /*blocking=*/false);
+EnqueueWriteMeshBuffer(cq, src1, b_data, /*blocking=*/false);
+
+MeshWorkload workload;
+workload.add_program(/*device range*/, std::move(program));
+EnqueueMeshWorkload(cq, workload, /*blocking=*/false);
+
+EnqueueReadMeshBuffer(cq, c_data, dst, /*blocking=*/true);
+</code></pre>
+  <div class="callout takeaway"><span class="lbl">Lifecycle in one line</span>
+    <strong>open device → place DRAM buffers → build a Program (CBs + kernels + args) → enqueue write / workload / read.</strong></div>
+</section>
+
+<!-- Review Module 1 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 1 — Review</h2>
+  <div class="qa">
+    <p class="q">1. What are the five RISC-V cores in a Tensix core for?</p>
+    <div class="fragment"><div class="a">RV 0 &amp; RV 4 drive the two NoC routers (reader / writer data-movement kernels); RV 1–3 drive the Tensix compute engine (compute kernel).</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. What is a circular buffer, and why is it sized 2× a tile?</p>
+    <div class="fragment"><div class="a">A FIFO queue in L1 linking a producer and consumer kernel. Sizing it for two tiles enables double-buffering so the reader can fill the next tile while the compute engine consumes the current one.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Trace the host API lifecycle from device open to result read-back.</p>
+    <div class="fragment"><div class="a">create_unit_mesh → command queue → DRAM buffers → Program with CreateCircularBuffer / CreateKernel / SetRuntimeArgs → EnqueueWriteMeshBuffer → EnqueueMeshWorkload → EnqueueReadMeshBuffer.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     LAB 1 — SINGLE-CORE MATMUL
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Lab 1</div>
+  <div class="mod-title">Single-Core Matmul</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Apply <strong>loop tiling</strong> and reason about the host/device memory model</li>
+      <li>Implement a <strong>single-core tiled matmul</strong> with reader / compute / writer kernels</li>
+      <li>Debug with <strong>DPRINT</strong>, stack traces (<strong>tt-triage</strong>), and the device profiler</li>
+      <li>Optimize data movement through <strong>circular buffers</strong> and validate vs. a CPU golden result</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Lab 1 problem + tiling -->
+<section data-background-color="#ffffff">
+  <h2>The Problem &amp; the Tiled Idea</h2>
+  <div class="cols">
+    <div>
+      <p>Compute <strong>C = A · B</strong> on one Tensix core:</p>
+      <div class="eq small">\( A_{640\times320}\cdot B_{320\times640} = C_{640\times640} \)</div>
+      <ul class="small">
+        <li>With 32×32 tiles: <code class="inline">Mt=20, Kt=10, Nt=20</code></li>
+        <li>One core produces <strong>all</strong> \(M_t\cdot N_t\) output tiles</li>
+        <li>Each output tile accumulates over <code class="inline">Kt</code> tile-products</li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Three kernels, one core</span>
+        <ul class="tiny" style="margin:.2em 0 0 .9em">
+          <li><strong>reader</strong> — streams A &amp; B tiles DRAM → CBs</li>
+          <li><strong>compute</strong> — tile matmul + accumulate → output CB</li>
+          <li><strong>writer</strong> — output CB → DRAM</li>
+        </ul>
+      </div>
+      <div class="callout takeaway"><span class="lbl">Loop tiling = locality</span>Tiling turns a giant matmul into many small ones that fit in fast L1 — the same idea as blocking for cache.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Lab 1 compute kernel -->
+<section data-background-color="#ffffff">
+  <h2>Compute Kernel — Tile Matmul</h2>
+  <div class="code-label">mm.cpp — compute kernel (C++)</div>
+  <pre><code class="language-cpp" data-trim>
+mm_init(cb_in0, cb_in1, cb_out);
+
+for (uint32_t mt = 0; mt &lt; Mt; mt++) {
+  for (uint32_t nt = 0; nt &lt; Nt; nt++) {
+    tile_regs_acquire();                 // own the dst register tile
+    for (uint32_t kt = 0; kt &lt; Kt; kt++) {
+      cb_wait_front(cb_in0, 1);          // A tile ready
+      cb_wait_front(cb_in1, 1);          // B tile ready
+      matmul_tiles(cb_in0, cb_in1, 0, 0, 0);  // C += A_kt * B_kt
+      cb_pop_front(cb_in0, 1);
+      cb_pop_front(cb_in1, 1);
+    }
+    tile_regs_commit();                  // hand dst to packer
+    tile_regs_wait();
+    pack_tile(0, cb_out);                // dst tile -> output CB
+    cb_push_back(cb_out, 1);
+    tile_regs_release();
+  }
+}
+</code></pre>
+  <p class="tiny muted">The inner <code class="inline">kt</code> loop accumulates into a single register tile before packing it out.</p>
+</section>
+
+<!-- Lab 1 reader/writer -->
+<section data-background-color="#ffffff">
+  <h2>Reader &amp; Writer — Index Math</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">reader.cpp (C++)</div>
+      <pre><code class="language-cpp" data-trim>
+// A tile id = mt*Kt + kt
+// B tile id = kt*Nt + nt
+cb_reserve_back(cb_in0, 1);
+noc_async_read_tile(mt*Kt + kt, s0,
+                    get_write_ptr(cb_in0));
+noc_async_read_barrier();
+cb_push_back(cb_in0, 1);
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label">writer.cpp (C++)</div>
+      <pre><code class="language-cpp" data-trim>
+// output tile id = m*Nt + n  (row-major)
+cb_wait_front(cb_out, 1);
+noc_async_write_tile(m*Nt + n, sd,
+                     get_read_ptr(cb_out));
+noc_async_write_barrier();
+cb_pop_front(cb_out, 1);
+</code></pre>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">Validation</span>Untilize the result and compare against a CPU bf16 <code class="inline">golden_matmul</code>; require <strong>Pearson correlation &gt; 0.97</strong> (bf16 is approximate, so we don't expect exact equality).</div>
+</section>
+
+<!-- Lab 1 exercises -->
+<section data-background-color="#ffffff">
+  <h2>The Seven Lab Exercises</h2>
+  <table>
+    <tr><th>#</th><th>Exercise</th><th>Skill</th></tr>
+    <tr><td>1</td><td>CPU <strong>tiled</strong> matmul + time it vs. a naive triple loop</td><td>loop tiling</td></tr>
+    <tr><td>2</td><td>Build &amp; run <code class="inline">lab_eltwise_binary</code> (reader→compute→writer via CBs) → "Test Passed"</td><td>build / run</td></tr>
+    <tr><td>3</td><td>Trigger and read a <strong>JIT kernel compile error</strong> at runtime</td><td>error reading</td></tr>
+    <tr><td class="hi">4</td><td>Debug a writer kernel with <strong>DPRINT</strong> (<code class="inline">TileSlice</code>, <code class="inline">TT_METAL_DPRINT_CORES=all</code>)</td><td class="hi">DPRINT</td></tr>
+    <tr><td>5</td><td><strong>tt-triage</strong> stack trace on an artificial hang (comment out <code class="inline">cb_pop_front</code>)</td><td>hang triage</td></tr>
+    <tr><td>6</td><td><strong>Device profiler</strong> (<code class="inline">TT_METAL_DEVICE_PROFILER=1</code>) → <code class="inline">profile_log_device.csv</code></td><td>profiling</td></tr>
+    <tr><td class="hi">7</td><td>Implement <code class="inline">lab1_matmul</code>: <code class="inline">mm_init</code> / <code class="inline">matmul_tiles</code>, validate, record baseline</td><td class="hi">implement</td></tr>
+  </table>
+</section>
+
+<!-- Lab 1 debug tools -->
+<section data-background-color="#ffffff">
+  <h2>Debugging &amp; Profiling Tooling</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">DPRINT a tile slice (bash + C++)</div>
+      <pre><code class="language-bash" data-trim>
+export TT_METAL_DPRINT_CORES=all
+</code></pre>
+      <pre><code class="language-cpp" data-trim>
+DPRINT &lt;&lt; TileSlice(cb_out, 0, sr) &lt;&lt; ENDL();
+</code></pre>
+      <p class="tiny muted">Prints kernel-side values from specified cores at runtime.</p>
+    </div>
+    <div>
+      <div class="code-label">Profiler + triage (bash)</div>
+      <pre><code class="language-bash" data-trim>
+# device profiler
+export TT_METAL_DEVICE_PROFILER=1
+./build/.../lab1_matmul
+# -&gt; profile_log_device.csv
+
+# stack trace on a hang
+tt-triage
+</code></pre>
+    </div>
+  </div>
+  <div class="callout warn"><span class="lbl">Common hang</span>Forgetting <code class="inline">cb_pop_front</code> (or a barrier) stalls the producer/consumer FIFO — <code class="inline">tt-triage</code> shows where each RISC-V core is stuck.</div>
+</section>
+
+<!-- Review Lab 1 -->
+<section data-background-color="#f6f8fb">
+  <h2>Lab 1 — Review</h2>
+  <div class="qa">
+    <p class="q">1. Why split the work into reader / compute / writer kernels?</p>
+    <div class="fragment"><div class="a">They map onto distinct RISC-V cores and run concurrently through circular buffers, overlapping DRAM movement with compute.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. What tile indices feed one output tile <code class="inline">(mt,nt)</code>?</p>
+    <div class="fragment"><div class="a">A tiles <code class="inline">mt*Kt+kt</code> and B tiles <code class="inline">kt*Nt+nt</code> for <code class="inline">kt = 0…Kt-1</code>, accumulated by <code class="inline">matmul_tiles</code>.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. How do we validate correctness with bf16 inputs?</p>
+    <div class="fragment"><div class="a">Untilize and compare to a CPU bf16 golden matmul using Pearson correlation, requiring &gt; 0.97 rather than exact equality.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     LAB 2 — MULTI-CORE MATMUL
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Lab 2</div>
+  <div class="mod-title">Multi-Core Matmul (SPMD)</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Explain <strong>SPMD static work assignment</strong> and how it differs from GPU dynamic scheduling</li>
+      <li>Use <strong>split_work_to_cores()</strong> to partition output tiles across a grid (incl. uneven splits)</li>
+      <li>Pass per-core tile ranges through <strong>SetRuntimeArgs</strong> over core ranges</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Lab 2 SPMD idea -->
+<section data-background-color="#ffffff">
+  <h2>SPMD: Static Work Assignment</h2>
+  <div class="cols w-64">
+    <div>
+      <p>The single core's output tiles are now <strong>partitioned across many cores</strong>. Each core runs the <em>same</em> kernels on its own slice of output tiles.</p>
+      <div class="callout warn"><span class="lbl">No dynamic scheduling</span>Unlike a GPU's block scheduler, each core gets a <strong>fixed</strong> set of tiles at launch. A core that finishes early simply <strong>idles</strong> until the next launch — there is no oversubscription or work-stealing.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 200 180" class="chart" style="max-width:240px">
+        <g stroke="#1d4ed8">
+          <rect x="20" y="20" width="40" height="40" fill="#dbeafe"/><rect x="62" y="20" width="40" height="40" fill="#bfdbfe"/><rect x="104" y="20" width="40" height="40" fill="#dbeafe"/>
+          <rect x="20" y="62" width="40" height="40" fill="#bfdbfe"/><rect x="62" y="62" width="40" height="40" fill="#dbeafe"/><rect x="104" y="62" width="40" height="40" fill="#bfdbfe"/>
+          <rect x="20" y="104" width="40" height="40" fill="#dbeafe"/><rect x="62" y="104" width="40" height="40" fill="#bfdbfe"/><rect x="104" y="104" width="40" height="40" fill="#dbeafe"/>
+        </g>
+        <text x="40" y="44" text-anchor="middle" class="tiny">c0</text><text x="82" y="44" text-anchor="middle" class="tiny">c1</text><text x="124" y="44" text-anchor="middle" class="tiny">c2</text>
+        <text x="40" y="86" text-anchor="middle" class="tiny">c3</text><text x="82" y="86" text-anchor="middle" class="tiny">c4</text><text x="124" y="86" text-anchor="middle" class="tiny">c5</text>
+        <text x="40" y="128" text-anchor="middle" class="tiny">c6</text><text x="82" y="128" text-anchor="middle" class="tiny">c7</text><text x="124" y="128" text-anchor="middle" class="tiny">c8</text>
+        <text x="82" y="170" text-anchor="middle" class="lbl">output tiles → core grid</text>
+      </svg>
+      <div class="src">Each core owns a fixed range of output tiles.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Lab 2 split_work_to_cores -->
+<section data-background-color="#ffffff">
+  <h2>split_work_to_cores() &amp; Uneven Splits</h2>
+  <div class="cols">
+    <div>
+      <p><code class="inline">split_work_to_cores()</code> distributes the \(M_t\cdot N_t\) output tiles across the available cores, returning:</p>
+      <ul class="small">
+        <li>The <strong>number of cores</strong> to use</li>
+        <li>Two <strong>core groups</strong> (primary / secondary) for uneven splits</li>
+        <li>The <strong>work-per-core</strong> for each group</li>
+      </ul>
+      <div class="callout"><span class="lbl">Example</span>81 output tiles across 11 cores → <strong>8 cores × 10 tiles</strong> + <strong>1 core × 1 tile</strong>. The two groups absorb the remainder.</div>
+    </div>
+    <div>
+      <div class="code-label">host (C++)</div>
+      <pre><code class="language-cpp" data-trim>
+auto [num_cores,
+      all_cores,
+      core_group_1,   // primary
+      core_group_2,   // remainder
+      work_per_core_1,
+      work_per_core_2] =
+    split_work_to_cores(grid, Mt * Nt);
+</code></pre>
+      <p class="tiny muted">Two groups so an uneven split needs no per-core branching at runtime.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Lab 2 per-core args -->
+<section data-background-color="#ffffff">
+  <h2>Per-Core Runtime Args Over Core Ranges</h2>
+  <div class="code-label">host (C++)</div>
+  <pre><code class="language-cpp" data-trim>
+uint32_t work_offset = 0;
+for (auto&amp; [group, work_per_core] : {std::pair{core_group_1, work_per_core_1},
+                                     std::pair{core_group_2, work_per_core_2}}) {
+  for (const CoreCoord&amp; core : corerange_to_cores(group)) {
+    SetRuntimeArgs(program, reader,  core,
+        {src0-&gt;address(), src1-&gt;address(), Mt, Kt, Nt, work_offset, work_per_core});
+    SetRuntimeArgs(program, compute, core, {work_per_core});
+    SetRuntimeArgs(program, writer,  core,
+        {dst-&gt;address(), work_per_core, work_offset});
+    work_offset += work_per_core;        // next core's start tile
+  }
+}
+</code></pre>
+  <div class="callout"><span class="lbl">What the kernels receive</span>
+    Each kernel takes a <strong>tile range</strong>: a start tile id (<code class="inline">work_offset</code>) and a count (<code class="inline">work_per_core</code>). The reader uses modulo arithmetic on the start id to recover row/col; the compute outer loop is bounded by the count (inner <code class="inline">kt</code> loop unchanged); the writer offsets its DRAM writes.</div>
+</section>
+
+<!-- Review Lab 2 -->
+<section data-background-color="#f6f8fb">
+  <h2>Lab 2 — Review</h2>
+  <div class="qa">
+    <p class="q">1. How does Tenstorrent SPMD scheduling differ from a GPU's?</p>
+    <div class="fragment"><div class="a">Work is assigned statically at launch — each core gets a fixed tile range with no dynamic scheduling, oversubscription, or work-stealing. An early-finishing core just idles.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. Why does split_work_to_cores() return two core groups?</p>
+    <div class="fragment"><div class="a">To handle uneven splits: most cores do <code class="inline">work_per_core_1</code> tiles, a remainder group does <code class="inline">work_per_core_2</code>, so no per-core conditionals are needed at runtime.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. What changes in the kernels vs. Lab 1?</p>
+    <div class="fragment"><div class="a">Each kernel takes a tile range (offset + count). The reader derives row/col by modulo, the compute outer loop is bounded by the count, and the writer offsets its output tile ids. The inner kt accumulation is unchanged.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     LAB 3 — MULTI-CORE WITH MULTICAST
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Lab 3</div>
+  <div class="mod-title">Multi-Core with Multicast</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Identify the <strong>data-reuse</strong> opportunity that motivates multicast</li>
+      <li>Explain how a <strong>sender broadcasts</strong> an input block over the NoC to many receivers</li>
+      <li>Describe <strong>semaphore synchronization</strong> and CB sizing for a CoreGrid</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Lab 3 motivation -->
+<section data-background-color="#ffffff">
+  <h2>From Reuse to Multicast</h2>
+  <div class="cols w-64">
+    <div>
+      <p>In Lab 2 many cores compute output tiles in the <strong>same row or column</strong> — and each one <em>re-reads the same A row block or B column block from DRAM</em>. That's redundant DRAM traffic.</p>
+      <ul class="small">
+        <li><strong>Reuse</strong> (<code class="inline">matmul_multicore_reuse</code>): keep a block resident and reuse it across output tiles</li>
+        <li><strong>Multicast</strong> (<code class="inline">matmul_multicore_reuse_mcast</code>): one core reads a block once, then <strong>broadcasts it over the NoC</strong> to many receiver cores</li>
+      </ul>
+      <div class="callout takeaway"><span class="lbl">Payoff</span>One DRAM read feeds a whole row/column of cores → a <strong>big cut in DRAM traffic</strong>.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 220 180" class="chart" style="max-width:260px">
+        <rect x="14" y="20" width="44" height="30" rx="5" fill="#dc2626" stroke="#991b1b"/>
+        <text x="36" y="39" text-anchor="middle" class="tiny" style="fill:#fff;font-weight:700">sender</text>
+        <g fill="#dbeafe" stroke="#1d4ed8">
+          <rect x="78" y="20" width="40" height="30" rx="5"/><rect x="124" y="20" width="40" height="30" rx="5"/><rect x="170" y="20" width="40" height="30" rx="5"/>
+        </g>
+        <text x="98" y="39" text-anchor="middle" class="tiny">recv</text><text x="144" y="39" text-anchor="middle" class="tiny">recv</text><text x="190" y="39" text-anchor="middle" class="tiny">recv</text>
+        <g class="axis"><line x1="58" y1="35" x2="78" y2="35"/><line x1="58" y1="35" x2="124" y2="32"/><line x1="58" y1="35" x2="170" y2="32"/></g>
+        <text x="110" y="70" text-anchor="middle" class="note" style="fill:#16a34a">1 read → multicast over NoC</text>
+        <rect x="40" y="120" width="140" height="26" rx="5" fill="#94a3b8" stroke="#475569"/>
+        <text x="110" y="137" text-anchor="middle" class="tiny" style="fill:#fff">vs. every core hitting DRAM</text>
+        <g class="axis"><line x1="60" y1="120" x2="40" y2="100"/><line x1="100" y1="120" x2="100" y2="100"/><line x1="150" y1="120" x2="170" y2="100"/></g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Lab 3 sender/receiver + semaphores -->
+<section data-background-color="#ffffff">
+  <h2>Sender / Receiver Kernels &amp; Semaphores</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Multicast splits the data-movement kernel into two roles:</p>
+      <ul class="small">
+        <li><strong>Sender</strong> — reads the block from DRAM once, then issues a <em>multicast</em> NoC write to all receiver cores' L1</li>
+        <li><strong>Receivers</strong> — wait for the block to arrive in their CB, then compute</li>
+      </ul>
+      <div class="callout"><span class="lbl">Semaphores</span>A semaphore synchronizes sender ↔ receivers: receivers signal "ready for data," the sender multicasts, then signals "data valid" so receivers may consume.</div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">CB sizing for a CoreGrid</span>Circular buffers are sized for the <strong>block</strong> the grid shares, not just one tile — enough L1 to hold the multicast block while it is reused.</div>
+      <div class="callout ok"><span class="lbl">Optional fusion</span>The compute kernel can <strong>fuse a bias add + activation</strong> after the matmul accumulation, avoiding an extra DRAM round-trip.</div>
+      <p class="tiny muted">A multidimensional systolic variant is "coming soon" in the upstream examples.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Lab 3 run -->
+<section data-background-color="#ffffff">
+  <h2>Building &amp; Running Lab 3</h2>
+  <div class="code-label">bash</div>
+  <pre><code class="language-bash" data-trim>
+# select the target architecture, then run the optimized example
+export ARCH_NAME=&lt;arch&gt;
+./build/programming_examples/matmul_multicore_reuse_mcast
+</code></pre>
+  <div class="callout"><span class="lbl">Progression</span>
+    <code class="inline">matmul_multi_core</code> (Lab 2) → <code class="inline">matmul_multicore_reuse</code> → <code class="inline">matmul_multicore_reuse_mcast</code> (Lab 3). Each step removes redundant DRAM traffic while keeping the engines busy.</div>
+  <p class="small muted">Lab 3 stays conceptual here: the upstream kernels are detailed, but the takeaway is the multicast/reuse pattern, not the full source.</p>
+</section>
+
+<!-- Review Lab 3 -->
+<section data-background-color="#f6f8fb">
+  <h2>Lab 3 — Review</h2>
+  <div class="qa">
+    <p class="q">1. What redundancy does multicast eliminate?</p>
+    <div class="fragment"><div class="a">Many cores re-reading the same A row block or B column block from DRAM. With multicast, one sender reads it once and broadcasts it over the NoC to all receivers.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. What role do semaphores play?</p>
+    <div class="fragment"><div class="a">They synchronize the sender and receivers: receivers signal readiness, the sender multicasts the block, then signals that the data is valid before receivers consume it.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Why are CBs sized for the CoreGrid here?</p>
+    <div class="fragment"><div class="a">The CB must hold the shared multicast block (not a single tile) so it can be reused across the grid's output tiles; compute may additionally fuse bias + activation.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     SUMMARY
+     ================================================================== -->
+<section data-background-color="#ffffff">
+  <h2>Unit Summary &amp; Takeaways</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Architecture</span>A grid of Tensix cores (L1 + 2 routers + engine + 5 RISC-V) on a NoC, fed from device DRAM over PCIe; work in 32×32 tiles via CBs.</div>
+    <div class="callout"><span class="lbl">Labs 1 → 2</span>Single-core tiled matmul, then SPMD static splitting of output tiles across cores with per-core runtime args.</div>
+    <div class="callout"><span class="lbl">Lab 3</span>Multicast reuse: broadcast input blocks over the NoC to cut DRAM traffic, synchronized with semaphores.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The connecting theme</span>
+    Like the GPU unit, Tenstorrent is a <strong>throughput accelerator whose performance is bounded by data movement</strong>. The labs progressively move <em>fewer, more-reused</em> tiles — and they build toward the course's <strong>CUDA SpMV comparison</strong>, contrasting two ways to keep many simple engines fed.</div>
+  <p class="center muted small">You can now read TT-Metalium kernels, place buffers, and reason about why each optimization helps.</p>
+  <aside class="notes">Tie back to the GPU unit: both are throughput machines; the difference is that TT-Metalium makes data movement fully explicit (reader/compute/writer + CBs + multicast), whereas CUDA hides more of it. The SpMV comparison later in the course revisits these trade-offs.</aside>
+</section>
+
+</div>
+
+<!-- deck-level fixed footer (course + unit); slide number is reveal-native -->
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Tenstorrent — TT-Metalium Matmul Labs</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.04,
+    minScale: 0.2, maxScale: 1.6,
+    center: false,                 // top-align content so the NC State header bar sits at the slide top
+    hash: true, slideNumber: 'c/t', history: true,
+    transition: 'slide', transitionSpeed: 'fast',
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      {left:'\\(', right:'\\)', display:false},
+      {left:'$$', right:'$$', display:true}
+    ]},
+  });
+</script>
+<script>
+/* Auto-fit: shrink any slide whose content would exceed the 720px slide (and be
+   cut off in true 16:9 fullscreen). Scales content via --nc-fit; the header bar
+   is px-based and unaffected. */
+(function(){
+  function fit(s){ if(!s) return;
+    s.style.setProperty('--nc-fit','1');           // reset, then measure natural height
+    var h=s.scrollHeight;
+    if(h>724){ var k=Math.max(0.6, Math.min(1, 720/h));
+      s.style.setProperty('--nc-fit', k.toFixed(3)); }
+  }
+  if(window.Reveal){
+    Reveal.on('ready', function(e){ fit(e.currentSlide); });
+    Reveal.on('slidechanged', function(e){ fit(e.currentSlide); });
+    try{ if(Reveal.isReady && Reveal.isReady()) fit(Reveal.getCurrentSlide()); }catch(e){}
+  }
+})();
+</script>
+</body>
+</html>
