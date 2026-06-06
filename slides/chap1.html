@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSC/ECE 506 · Chapter 1 — Perspectives on Parallel Architecture</title>
+
+<!-- reveal.js core (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<!-- code highlighting + math -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+<!-- fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<!-- course theme -->
+<link rel="stylesheet" href="assets/theme.css?v=3">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============================ TITLE ============================ -->
+<section class="title-slide" data-background-color="#ffffff">
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <h1>Chapter 1</h1>
+  <div class="sub">Perspectives — Why Multicore, the Power Wall, and Parallel Computers</div>
+  <div class="meta">
+    Fall Semester · Based on Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em><br>
+    <span class="muted">Use ← → to navigate · <strong>S</strong> for speaker notes · <strong>F</strong> fullscreen · <strong>ESC</strong> overview</span>
+  </div>
+  <aside class="notes">
+    Welcome to CSC/ECE 506. Chapter 1 sets up the central question of the course:
+    why did the entire industry pivot to parallel (multicore) hardware around 2005,
+    and what does that force programmers and architects to do differently?
+    Three modules: (1.1) the switch to multicore, (1.2) the power wall that caused it,
+    (1.3) a taxonomy of parallel computers.
+  </aside>
+</section>
+
+<!-- Roadmap -->
+<section data-background-color="#ffffff">
+  <h2>Chapter Roadmap</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Module 1.1</span><strong>The Switch to Multicore</strong><br>
+      <span class="small">What a core/multicore is, and the <em>low-hanging-fruit</em> theory that explains the pivot from ILP to TLP.</span></div>
+    <div class="callout"><span class="lbl">Module 1.2</span><strong>The Power Wall</strong><br>
+      <span class="small">Energy vs. power, dynamic + static power, Dennard scaling and why frequency stalled ~2005.</span></div>
+    <div class="callout"><span class="lbl">Module 1.3</span><strong>Parallel Computers</strong><br>
+      <span class="small">What makes a machine "parallel," and Flynn's taxonomy: SISD / SIMD / MISD / MIMD.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The thread that ties it together</span>
+    Hardware went parallel because <strong>physics removed the free lunch</strong> — and that pushes the burden of performance onto <strong>software and architecture</strong>. That tension is the whole course.</div>
+</section>
+
+<!-- ==================================================================
+     MODULE 1.1 — THE SWITCH TO MULTICORE
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 1.1</div>
+  <div class="mod-title">The Switch to Multicore</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Define <strong>core</strong>, <strong>multicore</strong>, and <strong>parallel architecture</strong> precisely</li>
+      <li>Explain the <strong>low-hanging-fruit</strong> theory of architectural progress</li>
+      <li>Contrast <strong>ILP</strong> and <strong>TLP</strong>, and say why we ran out of cheap ILP</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Definitions -->
+<section data-background-color="#ffffff">
+  <h2>Definitions</h2>
+  <div class="callout"><span class="lbl">Parallel architecture</span>
+    An architecture where <strong>CPUs are integrated tightly enough that they can cooperate to solve a single problem</strong>.</div>
+  <p><strong>What is a CPU (a "core")?</strong> A processing element that can <em>independently</em> fetch and execute instructions from at least one instruction stream.</p>
+  <ul>
+    <li>Contains: instruction-fetch unit, program counter, scheduler, functional units, register file…</li>
+    <li>Does it include the L1 cache? the L2 cache? <span class="pill gray">Yes and no</span> — depends on context</li>
+  </ul>
+  <div class="callout takeaway"><span class="lbl">Course convention</span>
+    A <strong>core</strong> is the logic that independently runs an instruction stream. We generally <em>exclude</em> caches from the definition.</div>
+  <aside class="notes">The "yes and no" is deliberate: vendors draw the boundary differently. For this course, when we say "core" we mean the execution logic, and we'll talk about caches as a separate (shared or private) resource.</aside>
+</section>
+
+<!-- What is a multicore -->
+<section data-background-color="#ffffff">
+  <h2>What is a Multicore?</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">Multicore</span>A single chip (die) containing <strong>multiple CPUs / cores</strong>.</div>
+      <p class="small"><strong>Terminology used in this course:</strong></p>
+      <ul class="small">
+        <li><code class="inline">Processor = CPU = core</code></li>
+        <li><code class="inline">Processor chip</code> = the chip that holds the cores</li>
+      </ul>
+      <p class="small">Most multicores <em>are</em> parallel architectures; parallel architectures often use multicores as the building block.</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 220 160" class="chart" style="max-width:280px">
+        <rect x="6" y="6" width="208" height="148" rx="14" fill="#f0fdf4" stroke="#22c55e" stroke-width="2"/>
+        <text x="110" y="26" text-anchor="middle" class="note" style="fill:#15803d">Parallel Architecture</text>
+        <rect x="34" y="40" width="152" height="100" rx="12" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+        <text x="110" y="58" text-anchor="middle" class="note" style="fill:#1d4ed8">Multicore</text>
+        <rect x="48" y="70" width="48" height="32" rx="6" fill="#fff" stroke="#1d4ed8"/><text x="72" y="90" text-anchor="middle" class="lbl">core</text>
+        <rect x="124" y="70" width="48" height="32" rx="6" fill="#fff" stroke="#1d4ed8"/><text x="148" y="90" text-anchor="middle" class="lbl">core</text>
+        <rect x="48" y="108" width="48" height="24" rx="6" fill="#fff" stroke="#1d4ed8"/><text x="72" y="124" text-anchor="middle" class="lbl">core</text>
+        <rect x="124" y="108" width="48" height="24" rx="6" fill="#fff" stroke="#1d4ed8"/><text x="148" y="124" text-anchor="middle" class="lbl">core</text>
+      </svg>
+      <div class="src">Multicore ⊂ Parallel architecture (usually)</div>
+    </div>
+  </div>
+</section>
+
+<!-- Recent multicores -->
+<section data-background-color="#ffffff">
+  <h2>Recent Multicores</h2>
+  <div class="cols">
+    <div>
+      <p><strong>From a handful to many dozens of cores</strong>, most running multiple hardware threads per core (SMT).</p>
+      <ul>
+        <li>Typically <strong>3 levels</strong> of cache hierarchy</li>
+        <li>Large shared <strong>L3 / last-level cache</strong> — tens to hundreds of MB</li>
+        <li>On-die interconnect (mesh / ring) links cores + cache banks + memory controllers</li>
+      </ul>
+    </div>
+    <div>
+      <table>
+        <tr><th>Example (modern)</th><th>Cores</th><th>LLC</th></tr>
+        <tr><td>AMD EPYC "Zen 5"</td><td>up to 128–192</td><td>hundreds of MB</td></tr>
+        <tr><td>Intel Xeon (server)</td><td>up to 60+</td><td>tens of MB</td></tr>
+        <tr><td>Apple M-series</td><td>10–16+</td><td>shared SLC</td></tr>
+        <tr><td class="hi">Oracle SPARC T5</td><td class="hi">16</td><td class="hi">8 L3 banks</td></tr>
+      </table>
+      <div class="src">Solihin's original example was the Oracle T5 — we use it next as a "closer look."</div>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">Updated for today</span>Core counts and cache sizes shown here are refreshed beyond the textbook's 6–16 core era — the trend (more cores, bigger shared LLC) is the point.</div>
+</section>
+
+<!-- T5 closer look -->
+<section data-background-color="#ffffff">
+  <h2>A Closer Look: Oracle SPARC T5</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 260 200" class="chart" style="max-width:340px">
+        <rect x="6" y="6" width="248" height="188" rx="12" fill="#0f172a"/>
+        <text x="130" y="24" text-anchor="middle" style="fill:#fff;font-weight:700">SPARC T5 die — 16 cores</text>
+        <!-- 16 cores in 2 rows of 8 -->
+        <g>
+          <!-- top row -->
+          <g fill="#3b82f6">
+            <rect x="20" y="36" width="24" height="34" rx="4"/><rect x="48" y="36" width="24" height="34" rx="4"/>
+            <rect x="76" y="36" width="24" height="34" rx="4"/><rect x="104" y="36" width="24" height="34" rx="4"/>
+            <rect x="132" y="36" width="24" height="34" rx="4"/><rect x="160" y="36" width="24" height="34" rx="4"/>
+            <rect x="188" y="36" width="24" height="34" rx="4"/><rect x="216" y="36" width="24" height="34" rx="4"/>
+          </g>
+          <!-- L3 banks middle -->
+          <g fill="#22c55e">
+            <rect x="20" y="86" width="52" height="26" rx="4"/><rect x="76" y="86" width="52" height="26" rx="4"/>
+            <rect x="132" y="86" width="52" height="26" rx="4"/><rect x="188" y="86" width="52" height="26" rx="4"/>
+            <rect x="20" y="116" width="52" height="26" rx="4"/><rect x="76" y="116" width="52" height="26" rx="4"/>
+            <rect x="132" y="116" width="52" height="26" rx="4"/><rect x="188" y="116" width="52" height="26" rx="4"/>
+          </g>
+          <text x="130" y="103" text-anchor="middle" style="fill:#052e16;font-weight:700;font-size:12px">8 shared L3 cache banks</text>
+          <!-- bottom row -->
+          <g fill="#3b82f6">
+            <rect x="20" y="158" width="24" height="34" rx="4"/><rect x="48" y="158" width="24" height="34" rx="4"/>
+            <rect x="76" y="158" width="24" height="34" rx="4"/><rect x="104" y="158" width="24" height="34" rx="4"/>
+            <rect x="132" y="158" width="24" height="34" rx="4"/><rect x="160" y="158" width="24" height="34" rx="4"/>
+            <rect x="188" y="158" width="24" height="34" rx="4"/><rect x="216" y="158" width="24" height="34" rx="4"/>
+          </g>
+        </g>
+      </svg>
+    </div>
+    <div>
+      <ul>
+        <li><strong>16 cores</strong> (blue)</li>
+        <li><strong>8 shared L3 cache banks</strong> (green)</li>
+        <li>L1 &amp; L2 are <em>implied</em> inside each core block</li>
+      </ul>
+      <div class="callout warn"><span class="lbl">The big question</span>
+        Starting ~2001–2005, every chipmaker turned to the multicore approach.
+        <strong>Why then? Why not earlier or later?</strong></div>
+      <p class="small muted">Module 1.1 answers the "why now"; Module 1.2 gives the physics.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Feature size scaling chart -->
+<section data-background-color="#ffffff">
+  <h2>Feature Size Scaling</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 420 250" class="chart">
+        <!-- axes -->
+        <line class="axis" x1="55" y1="20" x2="55" y2="210"/>
+        <line class="axis" x1="55" y1="210" x2="400" y2="210"/>
+        <!-- y labels (log) -->
+        <text x="48" y="34" text-anchor="end" class="lbl">10</text>
+        <text x="48" y="98" text-anchor="end" class="lbl">1</text>
+        <text x="48" y="162" text-anchor="end" class="lbl">0.1</text>
+        <text x="48" y="208" text-anchor="end" class="lbl">0.01</text>
+        <line class="grid" x1="55" y1="94" x2="400" y2="94"/>
+        <line class="grid" x1="55" y1="158" x2="400" y2="158"/>
+        <!-- x labels -->
+        <text x="70"  y="226" text-anchor="middle" class="lbl">1971</text>
+        <text x="180" y="226" text-anchor="middle" class="lbl">1990</text>
+        <text x="290" y="226" text-anchor="middle" class="lbl">2005</text>
+        <text x="390" y="226" text-anchor="middle" class="lbl">now</text>
+        <!-- scatter dots (approx) -->
+        <g class="dot">
+          <circle cx="70" cy="30" r="4"/><circle cx="95" cy="42" r="4"/><circle cx="120" cy="55" r="4"/>
+          <circle cx="150" cy="70" r="4"/><circle cx="178" cy="90" r="4"/><circle cx="205" cy="110" r="4"/>
+          <circle cx="235" cy="128" r="4"/><circle cx="265" cy="145" r="4"/><circle cx="300" cy="162" r="4"/>
+          <circle cx="335" cy="178" r="4"/><circle cx="370" cy="192" r="4"/>
+        </g>
+        <!-- trend (steeper after 1990) -->
+        <path class="trend" d="M70,30 L178,90 L390,196"/>
+        <text x="120" y="50"  class="note">Shrinks 30% / 3 yrs</text>
+        <text x="250" y="150" class="note">Shrinks 30% / 1.5 yrs</text>
+      </svg>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Moore's Law, visualized</span>
+        Transistor feature size fell from <strong>~10 µm (1971)</strong> toward the <strong>nanometer</strong> scale today.</div>
+      <ul class="small">
+        <li>~<strong>2,300</strong> transistors (Intel 4004, 1971)</li>
+        <li>→ <strong>billions</strong> of transistors per chip today (3 nm / 2 nm-class nodes)</li>
+        <li>Pace <em>accelerated</em> after 1990 (~30% every 1.5 yrs)</li>
+      </ul>
+      <p class="src">Abundant transistors are <em>not</em> the same as abundant performance — that's the twist in Module 1.2.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Evolution table -->
+<section data-background-color="#ffffff">
+  <h2>Evolution in Microprocessors</h2>
+  <p class="small muted">Table 1.1 — Intel processors. Each new <span class="pill">ILP feature</span> was an architect "picking the next fruit."</p>
+  <table>
+    <tr><th>Year</th><th>Processor</th><th>Notable specs</th><th>New feature</th></tr>
+    <tr><td>1971</td><td>4004</td><td>740 KHz, 2,300 transistors, 10 µm</td><td>—</td></tr>
+    <tr><td>1982</td><td>80286</td><td>8–12.5 MHz</td><td>Virtual memory, protection</td></tr>
+    <tr><td>1985</td><td>386</td><td>32-bit, 16–33 MHz, 275K transistors</td><td class="hi">Pipelining</td></tr>
+    <tr><td>1989</td><td>486</td><td>25–100 MHz, 1.2M transistors</td><td>FPU integration</td></tr>
+    <tr><td>1993</td><td>Pentium</td><td>60–200 MHz</td><td class="hi">On-chip L1 caches, SMP</td></tr>
+    <tr><td>1995</td><td>Pentium Pro</td><td>5.5M transistors</td><td class="hi">Out-of-order execution</td></tr>
+    <tr><td>1999</td><td>Pentium III</td><td>256K L2 on chip, 28M transistors</td><td>SSE (SIMD)</td></tr>
+    <tr><td>2000</td><td>Pentium 4</td><td>1.4–3.8 GHz</td><td class="hi">Hyper-pipelining, SMT</td></tr>
+    <tr><td>2006</td><td>Core Duo</td><td>2 GHz, 167M transistors</td><td class="hi">Dual core</td></tr>
+    <tr><td>2011→</td><td>Sandy Bridge → today</td><td>up to 20+ MB L3, integrated GPU</td><td>Many cores, TurboBoost</td></tr>
+  </table>
+  <div class="callout"><span class="lbl">Read the last column top-to-bottom</span>Pipelining → caches → OoO → SMT → <strong>multicore</strong>. Why exactly that order? Next slide.</div>
+</section>
+
+<!-- Low hanging fruit -->
+<section data-background-color="#ffffff">
+  <h2>Why That Order? The Low-Hanging-Fruit Theory</h2>
+  <div class="cols">
+    <div>
+      <p>More transistors became available steadily. So "single core → multicore" feels inevitable…</p>
+      <p><strong>But why did pipelining, branch prediction, superscalar, and caches all come <em>before</em> multicore?</strong></p>
+      <div class="callout takeaway"><span class="lbl">The theory</span>
+        A farmer picks the <strong>low-hanging fruit first</strong> — it takes the least effort — <em>until they run out</em>.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 220 200" class="chart" style="max-width:260px">
+        <ellipse cx="110" cy="60" rx="95" ry="55" fill="#16a34a" opacity="0.85"/>
+        <rect x="105" y="110" width="10" height="80" fill="#7c4a02"/>
+        <!-- low fruit (easy) -->
+        <circle cx="70" cy="95" r="11" fill="#dc2626"/><text x="70" y="99" text-anchor="middle" style="fill:#fff;font-size:9px;font-weight:700">ILP</text>
+        <circle cx="150" cy="92" r="11" fill="#dc2626"/><text x="150" y="96" text-anchor="middle" style="fill:#fff;font-size:9px;font-weight:700">cache</text>
+        <!-- high fruit (hard) -->
+        <circle cx="105" cy="38" r="12" fill="#991b1b"/><text x="105" y="42" text-anchor="middle" style="fill:#fff;font-size:8px;font-weight:700">TLP</text>
+        <text x="110" y="185" text-anchor="middle" class="lbl">low = easy ILP first, then reach for hard TLP</text>
+      </svg>
+    </div>
+  </div>
+  <aside class="notes">This metaphor is the spine of the whole chapter. Architects exploited the techniques that gave performance with the least programmer effort first (ILP, caches — invisible to the programmer). Multicore is "high-hanging" because it demands parallel programming.</aside>
+</section>
+
+<!-- ILP vs TLP -->
+<section data-background-color="#ffffff">
+  <h2>Multicore Is <em>Not</em> Low-Hanging</h2>
+  <div class="flynn">
+    <div class="cell on">
+      <h4>TLP — Thread-Level Parallelism</h4>
+      <ul class="small">
+        <li>Split program into multiple <strong>threads</strong></li>
+        <li>Coordinate with <strong>synchronization</strong></li>
+        <li><strong>Communicate</strong> data across threads</li>
+      </ul>
+      <p class="tag">Cost: real parallel-programming effort 😓</p>
+    </div>
+    <div class="cell">
+      <h4 style="color:var(--accent)">ILP — Instruction-Level Parallelism</h4>
+      <ul class="small">
+        <li>Hardware finds parallelism <em>automatically</em></li>
+        <li>Programmer keeps the <strong>sequential</strong> mental model</li>
+      </ul>
+      <p class="tag">Cost: little to none for the programmer 🙂</p>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">So why switch?</span>
+    We switched from ILP to TLP only because we <strong>ran out of low-hanging ILP fruit</strong>. Multicore wasn't chosen for love — it was chosen out of necessity.</div>
+</section>
+
+<!-- ILP fruits list -->
+<section data-background-color="#ffffff">
+  <h2>The ILP Fruits</h2>
+  <div class="cols">
+    <div>
+      <h3>Pipelining &amp; issue</h3>
+      <ul class="small">
+        <li>Pipelining (RISC; CISC with a RISC backend)</li>
+        <li>Superscalar (multiple issue / cycle)</li>
+        <li>Out-of-order execution</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Memory hierarchy</h3>
+      <ul class="small">
+        <li>Caches exploit <strong>spatial</strong> &amp; <strong>temporal</strong> locality</li>
+        <li>Multiple cache levels (L1/L2/L3)</li>
+      </ul>
+    </div>
+  </div>
+  <p class="muted small">Next: three quick ILP techniques (pipelining, superscalar) and three flavors of parallelism we can expose instead.</p>
+</section>
+
+<!-- Pipelining diagram -->
+<section data-background-color="#ffffff">
+  <h2>ILP Technique: Pipelining</h2>
+  <p class="small">Overlap successive instructions in a 5-stage pipeline (<strong>IF · ID · EX · MEM · WB</strong>). One instruction <em>finishes</em> every cycle at steady state.</p>
+  <div class="pipe">
+    <div class="row"><div class="lbl">A (a load)</div><div class="cell IF">IF</div><div class="cell ID">ID</div><div class="cell EX">EX</div><div class="cell MEM">MEM</div><div class="cell WB">WB</div><div class="cell" style="visibility:hidden"></div><div class="cell" style="visibility:hidden"></div><div class="cell" style="visibility:hidden"></div><div class="cell" style="visibility:hidden"></div></div>
+    <div class="row"><div class="lbl">B</div><div class="cell" style="visibility:hidden"></div><div class="cell IF">IF</div><div class="cell ID">ID</div><div class="cell EX">EX</div><div class="cell MEM">MEM</div><div class="cell WB">WB</div><div class="cell" style="visibility:hidden"></div><div class="cell" style="visibility:hidden"></div><div class="cell" style="visibility:hidden"></div></div>
+    <div class="row"><div class="lbl">C</div><div class="cell" style="visibility:hidden"></div><div class="cell" style="visibility:hidden"></div><div class="cell IF">IF</div><div class="cell ID">ID</div><div class="cell EX">EX</div><div class="cell MEM">MEM</div><div class="cell WB">WB</div><div class="cell" style="visibility:hidden"></div><div class="cell" style="visibility:hidden"></div></div>
+    <div class="row"><div class="lbl" style="color:var(--muted)">cycle →</div><div class="cell tiny">1</div><div class="cell tiny">2</div><div class="cell tiny">3</div><div class="cell tiny">4</div><div class="cell tiny">5</div><div class="cell tiny">6</div><div class="cell tiny">7</div><div class="cell tiny" style="visibility:hidden"></div><div class="cell tiny" style="visibility:hidden"></div></div>
+  </div>
+  <div class="callout"><span class="lbl">Why it's "low-hanging"</span>The programmer writes ordinary sequential code; the hardware overlaps it. Free performance — <em>until</em> latching overhead and deep-pipeline penalties bite (we'll see this limit shortly).</div>
+</section>
+
+<!-- Superscalar -->
+<section data-background-color="#ffffff">
+  <h2>ILP Technique: Superscalar</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Original (sequential issue)</div>
+      <pre><code class="language-asm" data-trim>
+LD    F0, 34(R2)
+ADDD  F4, F0, F2
+LD    F7, 45(R3)
+ADDD  F8, F7, F6
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label">Scheduled (2-wide issue)</div>
+      <pre><code class="language-asm" data-trim>
+LD   F0,34(R2)  │  LD   F7,45(R3)
+ADDD F4,F0,F2   │  ADDD F8,F7,F6
+</code></pre>
+    </div>
+  </div>
+  <ul class="small">
+    <li>Moderate parallelism: theoretically ~50 inst/cycle, realistically <strong>~2</strong></li>
+    <li>Requires <strong>fast (register-level) communication</strong> between functional units</li>
+  </ul>
+</section>
+
+<!-- TLP: loop parallelism -->
+<section data-background-color="#ffffff">
+  <h2>TLP Technique: Loop Parallelism</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Parallel — iterations independent</div>
+      <pre><code class="language-c" data-trim>
+for (i = 0; i < 8; i++)
+    a[i] = b[i] + c[i];
+</code></pre>
+      <p class="small ok-text" style="color:var(--ok)">✓ Each iteration is independent → split across threads.</p>
+    </div>
+    <div>
+      <div class="code-label">NOT parallel — loop-carried dependence</div>
+      <pre><code class="language-c" data-trim>
+for (i = 0; i < 8; i++)
+    a[i] = b[i] + a[i-1];
+</code></pre>
+      <p class="small" style="color:var(--warn)">✗ <code class="inline">a[i]</code> depends on <code class="inline">a[i-1]</code>.</p>
+    </div>
+  </div>
+  <div class="cols">
+    <div class="callout ok"><span class="lbl">Pros</span>Very high parallelism (&gt; 1K); often easy load balance.</div>
+    <div class="callout warn"><span class="lbl">Cons</span>Needs splitting into instruction streams; some loops aren't parallel; some apps have few loops.</div>
+  </div>
+</section>
+
+<!-- TLP: function parallelism -->
+<section data-background-color="#ffffff">
+  <h2>TLP Technique: Function Parallelism</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Arbitrary independent code segments run concurrently.</p>
+      <div class="code-label">Across loops / subroutines</div>
+      <pre><code class="language-c" data-trim>
+Cost = getCost();    // independent
+A    = computeSum(); // work
+B    = A + Cost;     // joins them
+</code></pre>
+      <p class="small">e.g. an editor: GUI · printing · parsing as separate threads.</p>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">Pros</span>Larger granularity → lower overhead &amp; communication.</div>
+      <div class="callout warn"><span class="lbl">Cons</span>Low degree of parallelism; hard to load-balance.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Program level parallelism -->
+<section data-background-color="#ffffff">
+  <h2>Program-Level Parallelism</h2>
+  <p class="small">Independent <em>programs</em> run together — e.g. a parallel <code class="inline">make</code>:</p>
+  <pre><code class="language-bash" data-trim>
+gcc -c code1.c     # → proc 1
+gcc -c code2.c     # → proc 2
+gcc -c main.c      # → proc 3
+gcc main.o code1.o code2.o
+</code></pre>
+  <div class="cols">
+    <div class="callout ok"><span class="lbl">Pro</span>No communication between the compile jobs.</div>
+    <div class="callout warn"><span class="lbl">Con</span>Hard to balance; relatively few opportunities.</div>
+  </div>
+</section>
+
+<!-- ILP no longer low hanging -->
+<section data-background-color="#ffffff">
+  <h2>ILP: No Longer Low-Hanging</h2>
+  <div class="cols">
+    <div>
+      <h3>Deeper pipelines backfire <span class="src">[Hartstein &amp; Puzak, 2002]</span></h3>
+      <ul class="small">
+        <li>Latching overhead grows significant</li>
+        <li>Too little useful logic per stage</li>
+        <li>Critical loops (branch mispredict, data dependence, cache miss) scale <em>with</em> depth</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Wider issue is quadratic <span class="src">[Palacharla &amp; Smith, 1996]</span></h3>
+      <ul class="small">
+        <li>Dependence checking, wakeup/select, register ports, bypass logic…</li>
+        <li>Complexity ↑ quadratically with width</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Verdict</span>
+    More ILP now costs <strong>more power and complexity than it returns</strong>. The cheap fruit is gone — time to climb to TLP. <em>But what physically forced the issue? → the Power Wall.</em></div>
+</section>
+
+<!-- Review Q 1.1 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 1.1 — Review</h2>
+  <div class="qa">
+    <p class="q">1. What does Processor / CPU / Core mean in this course?</p>
+    <div class="fragment"><div class="a">Logic that can independently fetch and execute an instruction stream. It <em>excludes</em> caches.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. State the low-hanging-fruit theory and how it explains the rise of multicore.</p>
+    <div class="fragment"><div class="a">Easy performance is taken first. ILP techniques were lower-hanging than multicore. Multicore needs TLP, and TLP needs parallel programming — so it came last, once ILP fruit ran out.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Using the theory, predict the future of multicore.</p>
+    <div class="fragment"><div class="a">Other approaches (e.g. specialization / accelerators) take over once parallel programming on multicore delivers diminishing returns.</div></div>
+  </div>
+  <p class="src">Click / press → to reveal each answer.</p>
+</section>
+
+<!-- ==================================================================
+     MODULE 1.2 — POWER WALL
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 1.2</div>
+  <div class="mod-title">The Power Wall</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Distinguish <strong>energy</strong> from <strong>power</strong>, and define EPI, EDP, ED²P</li>
+      <li>Decompose power into <strong>dynamic</strong> (CV²f) and <strong>static</strong> (leakage)</li>
+      <li>Explain why <strong>voltage stopped scaling</strong> and frequency stalled ~2005</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Power and energy basics -->
+<section data-background-color="#ffffff">
+  <h2>Basics of Power &amp; Energy</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Energy</span>Ability to do work — unit <strong>joule</strong>.<br>
+        <span class="small">1 J ≈ lift an apple to shoulder height · 4 J ≈ heat a teaspoon of water by 1 °C.</span></div>
+      <div class="callout"><span class="lbl">Power</span>Rate of energy transfer — <strong>1 watt = 1 J/s</strong>. &nbsp; \(P = V \cdot I\)</div>
+    </div>
+    <div>
+      <p class="small">For a capacitor: \(E_{stored} = \tfrac{1}{2} C V^2\)</p>
+      <p class="small">Charged/drained <em>f</em> times per second:</p>
+      <div class="eq">\( P_{dynamic} = 2 \cdot \tfrac12 C V^2 \cdot f = C V^2 f \)</div>
+      <p class="small muted">This <strong>dynamic power</strong> term drives everything in this module.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Energy efficiency + metrics -->
+<section data-background-color="#ffffff">
+  <h2>Efficiency Metrics</h2>
+  <div class="cols">
+    <div>
+      <h3>Energy efficiency</h3>
+      <ul class="small">
+        <li>Energy per work — e.g. <strong>EPI</strong> (energy/instruction)</li>
+        <li>Power per throughput — e.g. Watt/IPS, Watt/FLOPS</li>
+      </ul>
+      <div class="eq small">\( \frac{W}{IPS}=\frac{J/s}{inst/s}=\frac{J}{inst}=EPI \)</div>
+    </div>
+    <div>
+      <h3>Weighting performance in</h3>
+      <ul class="small">
+        <li><strong>EDP</strong> = Energy × Delay</li>
+        <li><strong>ED²P</strong> = Energy × Delay² — emphasizes <em>speed</em> even more</li>
+      </ul>
+      <div class="callout small"><span class="lbl">Why?</span>Two systems both use 1 J: A = 0.5 W for 2 s, B = 1 W for 1 s. Most prefer <strong>B</strong> — so we weight energy by delay.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Power wall problem: dynamic + static -->
+<section data-background-color="#ffffff">
+  <h2>The Power Wall Problem</h2>
+  <p class="small">Total power is capped by packaging (e.g. ~65–150 W desktop). It has two parts:</p>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Dynamic power</span>Charging/discharging capacitive loads
+      <div class="eq small">\( P_{dyn} = A\,C\,V^2 f \)</div>
+      <span class="tiny">A = fraction of gates switching · C = capacitance · V = supply voltage · f = frequency</span></div>
+    <div class="callout warn"><span class="lbl">Static power</span>Leakage even when idle
+      <div class="eq small">\( P_{stat} = V \cdot I_{leak} \)</div>
+      <span class="tiny">\(I_{leak}\) grows fast as transistors shrink — the modern villain.</span></div>
+  </div>
+</section>
+
+<!-- Threshold voltage dilemma + curves -->
+<section data-background-color="#ffffff">
+  <h2>The Threshold-Voltage Dilemma</h2>
+  <div class="cols">
+    <div class="center">
+      <svg viewBox="0 0 300 180" class="chart">
+        <line class="axis" x1="40" y1="20" x2="40" y2="150"/>
+        <line class="axis" x1="40" y1="150" x2="285" y2="150"/>
+        <text x="160" y="172" text-anchor="middle" class="lbl">threshold voltage  V_thd →</text>
+        <!-- fmax ~ linear with lower Vthd: line going up as Vthd decreases (left) -->
+        <line x1="55" y1="40" x2="270" y2="120" stroke="#2563eb" stroke-width="3"/>
+        <text x="60" y="36" class="note" style="fill:#2563eb">f_max (≈linear)</text>
+        <!-- leakage exponential: rises steeply at left (low Vthd) -->
+        <path d="M55,35 C95,60 130,135 270,145" stroke="#CC0000" stroke-width="3" fill="none"/>
+        <text x="120" y="80" class="note" style="fill:#CC0000">leakage (exp!)</text>
+      </svg>
+      <div class="src">Lower V_thd (left) → faster… but leakage explodes.</div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Lower V<sub>thd</sub></span>↑ max frequency <em>almost linearly</em> (good for performance).</div>
+      <div class="callout warn"><span class="lbl">…but lower V<sub>thd</sub></span>↑ leakage current <strong>exponentially</strong> → static power blows up.</div>
+      <div class="callout takeaway"><span class="lbl">The dilemma</span>You cannot keep lowering V<sub>thd</sub> to chase speed — leakage punishes you. So <strong>V can no longer scale down freely.</strong></div>
+    </div>
+  </div>
+</section>
+
+<!-- Old vs new scaling rule -->
+<section data-background-color="#ffffff">
+  <h2>Old vs. New Scaling Rule</h2>
+  <p class="small muted">Per generation, gate length scales by <strong>S = 0.7</strong>.</p>
+  <div class="cols">
+    <div class="callout ok"><span class="lbl">Old rule — Dennard scaling</span>
+      <ul class="tiny" style="margin-left:.9em">
+        <li>C ↓ by S=0.7 · area ↓ by S²=0.5 → <strong>2× transistors</strong></li>
+        <li>V ↓ by S=0.7 · f ↑ by 1/S=1.4</li>
+      </ul>
+      <div class="eq tiny">\(P = ACV^2f \Rightarrow\) <strong>chip power constant</strong> 🎉</div>
+    </div>
+    <div class="callout warn"><span class="lbl">New rule — leakage-limited</span>
+      <ul class="tiny" style="margin-left:.9em">
+        <li>C ↓ by 0.7 · still <strong>2× transistors</strong></li>
+        <li><strong>V can't scale</strong> (would need lower V_thd → leakage)</li>
+        <li>f ↑ by 1.4</li>
+      </ul>
+      <div class="eq tiny">\(V\) fixed \(\Rightarrow\) <strong>chip power doubles every generation!</strong> 🔥</div>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">This is the wall</span>Dennard scaling ended (~2005). More transistors no longer come "for free" in power — so we can't just crank frequency anymore.</div>
+</section>
+
+<!-- Implications -->
+<section data-background-color="#ffffff">
+  <h2>Implications for Architecture Design</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Frequency</span>Cranking the clock has hit a <strong>dead end</strong>.</div>
+    <div class="callout"><span class="lbl">Resources</span><strong>Area is abundant, power is scarce</strong> — the inversion.</div>
+    <div class="callout"><span class="lbl">Per-core budget</span>Declining power budget <em>per core</em>.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">New objective function</span>
+    Architectures must improve <strong>energy efficiency</strong>. The dominant metric becomes <strong>performance / watt</strong> (ops / joule) — and the answer is many simpler, cooler cores: <strong>multicore</strong>.</div>
+</section>
+
+<!-- Empirical: frequency stagnation -->
+<section data-background-color="#ffffff">
+  <h2>The Evidence: Frequency Went Flat (~2001–2005)</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 400 220" class="chart">
+        <line class="axis" x1="45" y1="20" x2="45" y2="185"/>
+        <line class="axis" x1="45" y1="185" x2="385" y2="185"/>
+        <text x="215" y="208" text-anchor="middle" class="lbl">year →</text>
+        <text x="20" y="100" text-anchor="middle" class="lbl" transform="rotate(-90 20 100)">clock freq</text>
+        <!-- rising then plateau -->
+        <path class="trend" d="M55,180 C120,150 180,60 230,45 C270,42 330,44 380,46" />
+        <line x1="230" y1="20" x2="230" y2="185" stroke="#94a3b8" stroke-dasharray="4 4"/>
+        <text x="234" y="34" class="note">~2005: plateau</text>
+        <text x="60" y="200" class="lbl">2001</text><text x="225" y="200" class="lbl">2005</text><text x="360" y="200" class="lbl">today</text>
+      </svg>
+      <div class="src">source: CPU DB (schematic)</div>
+    </div>
+    <div>
+      <p>Three empirical signatures of the wall, all hitting <strong>2001–2005</strong> — the same window as the multicore transition:</p>
+      <ul class="small">
+        <li><strong>Clock frequency</strong> stops climbing</li>
+        <li><strong>Logic per pipeline stage</strong> stops shrinking (pipelining reverses)</li>
+        <li><strong>Power-saving</strong> techniques (clock gating, DVFS, power gating) become essential</li>
+      </ul>
+      <div class="callout"><span class="lbl">Not a coincidence</span>The power wall and the multicore pivot are the <strong>same event</strong> seen from two angles.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Worked exercise -->
+<section data-background-color="#f6f8fb">
+  <h2>Worked Exercise</h2>
+  <div class="callout"><span class="lbl">Q1</span>If Moore's law slows so gate length scales at <strong>S = 0.8</strong> (instead of 0.7), find dynamic power for the next generation under <em>unlimited</em> vs. <em>limited</em> voltage scaling.</div>
+  <div class="cols">
+    <div class="fragment"><div class="callout ok"><span class="lbl">Old / unlimited scaling</span>
+      <span class="tiny">C↓0.8 · area↓0.64 → 1.56× transistors · V↓0.8 · f↑1.25</span>
+      <div class="eq tiny">\(P' = 1.56 \cdot 0.8 \cdot 0.8^2 \cdot 1.25 \approx 1.0\) → <strong>constant</strong></div></div></div>
+    <div class="fragment"><div class="callout warn"><span class="lbl">New / leakage-limited</span>
+      <span class="tiny">V fixed, f↑1.25, 1.56× transistors</span>
+      <div class="eq tiny">\(P' = 1.56 \cdot 0.8 \cdot 1.25 \approx 1.56\) → <strong>+56% / gen</strong></div></div></div>
+  </div>
+  <div class="qa fragment">
+    <p class="q">Q2 — Keep dynamic power constant with V, f fixed by shrinking die area. By how much?</p>
+    <div class="a">With S=0.7: 2× transistors at fixed V,f. To hold power constant, reduce area so the factor cancels → die area shrinks by <strong>≈ 30%</strong> (1 − 1.4/2.0).</div>
+  </div>
+</section>
+
+<!-- Review 1.2 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 1.2 — Review</h2>
+  <div class="qa"><p class="q">1. Difference between energy and power?</p>
+    <div class="fragment"><div class="a">Power is the <em>rate</em> of energy consumption (J/s = W).</div></div></div>
+  <div class="qa"><p class="q">2. Impact of threshold-voltage choice on static vs. dynamic power as transistors shrink?</p>
+    <div class="fragment"><div class="a">Lowering V<sub>thd</sub> lets you lower V → dynamic power drops (≈linearly), but static/leakage power rises (exponentially).</div></div></div>
+  <div class="qa"><p class="q">3. How has processor design adapted to the power wall?</p>
+    <div class="fragment"><div class="a">Stalled frequency growth, went multicore, and added power management: clock gating, V/f scaling (DVFS), power gating.</div></div></div>
+</section>
+
+<!-- ==================================================================
+     MODULE 1.3 — PARALLEL COMPUTERS
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 1.3</div>
+  <div class="mod-title">Parallel Computers</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Unpack the definition of a parallel computer (communicate + cooperate)</li>
+      <li>Explain why parallel machines were niche until multicore</li>
+      <li>Classify any system with <strong>Flynn's taxonomy</strong>: SISD / SIMD / MISD / MIMD</li>
+    </ul>
+  </div>
+</section>
+
+<!-- What is a parallel architecture -->
+<section data-background-color="#ffffff">
+  <h2>What Is a Parallel Architecture?</h2>
+  <blockquote style="font-size:1.15em;border-left:5px solid var(--wolf-red);padding:.4em 0 .4em 1em;margin:.5em 0;color:var(--ink-soft)">
+    "A parallel computer is a collection of processing elements that can <strong>communicate</strong> and <strong>cooperate</strong> to solve a large problem fast."
+    <div class="src" style="margin-top:.4em">— Almasi &amp; Gottlieb</div>
+  </blockquote>
+  <p>Three design axes hide in that sentence — we unpack each next.</p>
+  <div class="callout small" style="background:#fff7f7;border-color:var(--wolf-red)"><span class="lbl">☺ aside</span>Q: Why did the parallel computers refuse to work together? &nbsp; A: Too many "threads" of disagreement.</div>
+</section>
+
+<!-- Unpacking the definition -->
+<section data-background-color="#ffffff">
+  <h2>Unpacking the Definition</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Collection of PEs</span>
+      <span class="small">What is a PE? How many? How powerful each? <br><em>Few powerful</em> (Altix) vs. <em>many small</em> (BlueGene).</span></div>
+    <div class="callout"><span class="lbl">Communicate</span>
+      <span class="small">Shared memory vs. message passing. Interconnect: bus / crossbar / multistage. Sets cost, latency, throughput, scalability, fault tolerance.</span></div>
+    <div class="callout"><span class="lbl">Cooperate</span>
+      <span class="small">Synchronization sequences operations for correctness. Granularity &amp; mechanism affect latency, load balance, fairness.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">"…solve a large problem fast"</span>
+    General- vs. special-purpose: any machine solves <em>some</em> problems well. These axes — PEs, communication, cooperation — recur for the rest of the course.</div>
+</section>
+
+<!-- Usage -->
+<section data-background-color="#ffffff">
+  <h2>Where Are Parallel Computers Used?</h2>
+  <div class="cols c3">
+    <div class="callout ok"><span class="lbl">Embarrassingly parallel</span>Many scientific codes — scale easily.</div>
+    <div class="callout"><span class="lbl">Medium parallel</span>Engineering apps: finite-elements, VLSI-CAD.</div>
+    <div class="callout warn"><span class="lbl">Not parallel</span>Compilers, editors — limited parallelism.</div>
+  </div>
+  <div class="callout"><span class="lbl">Modern reality</span>AI/ML training &amp; inference, data analytics, and graphics are now the dominant <em>embarrassingly-parallel</em> workloads driving GPUs and accelerators.</div>
+</section>
+
+<!-- Why parallel / why not until multicore -->
+<section data-background-color="#ffffff">
+  <h2>Why Parallel — and Why Not Until Multicore?</h2>
+  <div class="cols">
+    <div>
+      <h3>Why parallel?</h3>
+      <ul class="small">
+        <li><strong>Absolute performance</strong>: protein folding = years on one CPU, days on a parallel machine; weather forecasts must be timely</li>
+        <li><strong>Cost-/power-adjusted</strong> performance, esp. small 2–8 chip systems — the smallest of which is a multicore</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Why niche before ~2005?</h3>
+      <ul class="small">
+        <li>Low-hanging ILP made single-thread perf scale cheaply</li>
+        <li>Parallel systems were costly &amp; slow to design</li>
+        <li>ILP gains <em>eclipsed</em> parallel gains within a few years</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- Illustration -->
+<section data-background-color="#ffffff">
+  <h2>Illustration: ILP Catches Up</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 360 200" class="chart">
+        <line class="axis" x1="40" y1="20" x2="40" y2="165"/>
+        <line class="axis" x1="40" y1="165" x2="345" y2="165"/>
+        <text x="190" y="188" text-anchor="middle" class="lbl">years →</text>
+        <!-- 100-proc constant high, single-proc rising to catch up -->
+        <line x1="40" y1="40" x2="345" y2="40" stroke="#2563eb" stroke-width="3" stroke-dasharray="6 4"/>
+        <text x="120" y="34" class="note" style="fill:#2563eb">100-proc system (fixed)</text>
+        <path class="trend" d="M40,160 C140,150 240,90 345,42"/>
+        <text x="150" y="130" class="note">single proc (ILP)</text>
+        <circle cx="330" cy="44" r="5" fill="#CC0000"/>
+        <text x="250" y="58" class="note">catches up!</text>
+      </svg>
+    </div>
+    <div>
+      <p class="small">100-processor system, <em>perfect</em> speedup, vs. one improving single processor:</p>
+      <ul class="tiny">
+        <li>Yr 1: 100× → Yr 2: 62.5× → Yr 3: 39× → … → Yr 10: 0.9×</li>
+      </ul>
+      <div class="callout warn"><span class="lbl">Even worse</span>Multiprocessors take longer to build · low volume → high prices · high prices delay adoption · perfect speedup is unattainable.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Flynn taxonomy intro -->
+<section data-background-color="#ffffff">
+  <h2>Flynn's Taxonomy <span class="src">[1972]</span></h2>
+  <p>Classify machines by two independent dimensions:</p>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Instruction stream</span>Instructions fetched from a <strong>single program counter</strong>.</div>
+    <div class="callout"><span class="lbl">Data stream</span>Data items accessed by a <strong>single instruction</strong>.</div>
+  </div>
+  <table style="margin-top:.4em">
+    <tr><th></th><th>Single Data</th><th>Multiple Data</th></tr>
+    <tr><td><strong>Single Instruction</strong></td><td><strong>SISD</strong> — classic uniprocessor</td><td><strong>SIMD</strong> — vector, GPU</td></tr>
+    <tr><td><strong>Multiple Instruction</strong></td><td><strong>MISD</strong> — systolic (rare)</td><td class="hi"><strong>MIMD</strong> — multicore, clusters</td></tr>
+  </table>
+</section>
+
+<!-- Instruction stream example -->
+<section data-background-color="#ffffff">
+  <h2>What's an "Instruction Stream"?</h2>
+  <div class="cols">
+    <div>
+      <p class="small">One PC points to one instruction; executed logically one at a time; PC advances.</p>
+      <div class="code-label">C source</div>
+      <pre><code class="language-c" data-trim>
+void MyFunction() {
+  int a, b, c;
+  a = 10; b = 5; c = 2;
+}
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label">→ one instruction stream (x86)</div>
+      <pre><code class="language-asm" data-trim>
+push ebp
+mov  ebp, esp
+sub  esp, 12
+mov  [ebp-4], 10
+mov  [ebp-8], 5
+mov  [ebp-12], 2
+</code></pre>
+    </div>
+  </div>
+</section>
+
+<!-- SISD / SIMD diagrams -->
+<section data-background-color="#ffffff">
+  <h2>SISD &amp; SIMD</h2>
+  <div class="cols">
+    <div>
+      <h3>SISD</h3>
+      <svg viewBox="0 0 200 130" class="chart" style="max-width:240px">
+        <rect x="70" y="8" width="60" height="26" rx="6" class="blk" fill="#ede9fe" stroke="#8b5cf6"/><text x="100" y="25" text-anchor="middle" class="lbl">CU</text>
+        <line x1="100" y1="34" x2="100" y2="54" class="axis"/>
+        <rect x="60" y="54" width="80" height="30" rx="6" fill="#dbeafe" stroke="#3b82f6"/><text x="100" y="73" text-anchor="middle" class="lbl">DPU</text>
+        <line x1="100" y1="84" x2="100" y2="104" class="axis"/>
+        <rect x="60" y="104" width="80" height="22" rx="6" fill="#fef3c7" stroke="#f59e0b"/><text x="100" y="119" text-anchor="middle" class="lbl">data</text>
+      </svg>
+      <p class="tiny">One PC; each instruction touches one data set. The classic uniprocessor / a single core today.</p>
+    </div>
+    <div>
+      <h3>SIMD</h3>
+      <svg viewBox="0 0 240 130" class="chart" style="max-width:280px">
+        <rect x="90" y="8" width="60" height="24" rx="6" fill="#ede9fe" stroke="#8b5cf6"/><text x="120" y="24" text-anchor="middle" class="lbl">CU</text>
+        <g fill="#dbeafe" stroke="#3b82f6">
+          <rect x="20" y="50" width="40" height="26" rx="5"/><rect x="80" y="50" width="40" height="26" rx="5"/>
+          <rect x="140" y="50" width="40" height="26" rx="5"/><rect x="200" y="50" width="30" height="26" rx="5"/>
+        </g>
+        <g class="axis"><line x1="120" y1="32" x2="40" y2="50"/><line x1="120" y1="32" x2="100" y2="50"/><line x1="120" y1="32" x2="160" y2="50"/><line x1="120" y1="32" x2="215" y2="50"/></g>
+        <g fill="#fef3c7" stroke="#f59e0b">
+          <rect x="20" y="92" width="40" height="22" rx="5"/><rect x="80" y="92" width="40" height="22" rx="5"/>
+          <rect x="140" y="92" width="40" height="22" rx="5"/><rect x="200" y="92" width="30" height="22" rx="5"/>
+        </g>
+      </svg>
+      <p class="tiny"><strong>One instruction, many data lanes.</strong> Exploits data parallelism. Examples: vector processors, multimedia extensions (SSE), <strong>GPUs</strong>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- SSE code -->
+<section data-background-color="#ffffff">
+  <h2>SIMD in Code: SSE</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">SISD style — scalar loop</div>
+      <pre><code class="language-c" data-trim>
+// C = A + B, element by element
+for (i = 0; i < 4; i++)
+    C[i] = A[i] + B[i];
+</code></pre>
+      <p class="tiny">Four separate add instructions.</p>
+    </div>
+    <div>
+      <div class="code-label">SIMD style — 4×32-bit in a 128-bit reg</div>
+      <pre><code class="language-asm" data-trim>
+MOVUPS XMM0, [EAX]   ; load A[0..3]
+MOVUPS XMM1, [EBX]   ; load B[0..3]
+ADDPS  XMM0, XMM1    ; 4 adds at once
+MOVUPS [Ret], XMM0   ; store C[0..3]
+</code></pre>
+      <p class="tiny"><code class="inline">ADDPS</code> = one instruction, four parallel adds.</p>
+    </div>
+  </div>
+</section>
+
+<!-- MISD / systolic -->
+<section data-background-color="#ffffff">
+  <h2>MISD &amp; Systolic Arrays</h2>
+  <div class="cols w-64">
+    <div>
+      <p><strong>MISD</strong> = multiple instruction streams, single data stream. The rarest class.</p>
+      <ul class="small">
+        <li>Systolic arrays <span class="src">[Kung &amp; Leiserson '79]</span> — data "pulses" through a grid of PEs, each applying its own operation</li>
+        <li>Examples: space-shuttle computers (1984), Intel iWARP (1990)</li>
+      </ul>
+      <div class="callout"><span class="lbl">Comeback</span>The systolic idea is alive in modern <strong>AI accelerators</strong> — Google's TPU matrix unit is a systolic array.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 180 150" class="chart" style="max-width:220px">
+        <g fill="#dbeafe" stroke="#3b82f6">
+          <rect x="20" y="20" width="34" height="34" rx="6"/><rect x="70" y="20" width="34" height="34" rx="6"/><rect x="120" y="20" width="34" height="34" rx="6"/>
+          <rect x="20" y="70" width="34" height="34" rx="6"/><rect x="70" y="70" width="34" height="34" rx="6"/><rect x="120" y="70" width="34" height="34" rx="6"/>
+        </g>
+        <g class="axis" marker-end="url(#ar)">
+          <line x1="54" y1="37" x2="70" y2="37"/><line x1="104" y1="37" x2="120" y2="37"/>
+          <line x1="54" y1="87" x2="70" y2="87"/><line x1="104" y1="87" x2="120" y2="87"/>
+          <line x1="37" y1="54" x2="37" y2="70"/><line x1="87" y1="54" x2="87" y2="70"/><line x1="137" y1="54" x2="137" y2="70"/>
+        </g>
+        <text x="87" y="135" text-anchor="middle" class="lbl">data flows through the grid</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- MIMD + variants -->
+<section data-background-color="#ffffff">
+  <h2>MIMD &amp; Its Variants</h2>
+  <div class="cols w-64">
+    <div>
+      <p><strong>MIMD</strong> = independent PEs, each with its <em>own</em> instruction and data stream. <span class="pill">Most CPU parallel computers today</span></p>
+      <p class="small">Variants differ by <strong>which level of the memory hierarchy is shared</strong>:</p>
+      <ul class="small">
+        <li>Shared main memory (SMP / multicore)</li>
+        <li>Shared cache (cores on one die)</li>
+        <li>Nothing shared (clusters / distributed memory)</li>
+      </ul>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 220 150" class="chart" style="max-width:260px">
+        <g>
+          <rect x="14" y="14" width="42" height="26" rx="5" fill="#ede9fe" stroke="#8b5cf6"/><text x="35" y="31" text-anchor="middle" class="lbl">CU₁</text>
+          <rect x="92" y="14" width="42" height="26" rx="5" fill="#ede9fe" stroke="#8b5cf6"/><text x="113" y="31" text-anchor="middle" class="lbl">CU₂</text>
+          <rect x="170" y="14" width="42" height="26" rx="5" fill="#ede9fe" stroke="#8b5cf6"/><text x="191" y="31" text-anchor="middle" class="lbl">CU₃</text>
+          <rect x="14" y="50" width="42" height="26" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="35" y="67" text-anchor="middle" class="lbl">PE₁</text>
+          <rect x="92" y="50" width="42" height="26" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="113" y="67" text-anchor="middle" class="lbl">PE₂</text>
+          <rect x="170" y="50" width="42" height="26" rx="5" fill="#dbeafe" stroke="#3b82f6"/><text x="191" y="67" text-anchor="middle" class="lbl">PE₃</text>
+          <line x1="35" y1="40" x2="35" y2="50" class="axis"/><line x1="113" y1="40" x2="113" y2="50" class="axis"/><line x1="191" y1="40" x2="191" y2="50" class="axis"/>
+          <rect x="14" y="98" width="198" height="30" rx="6" fill="#fef3c7" stroke="#f59e0b"/><text x="113" y="117" text-anchor="middle" class="lbl">shared interconnect / memory</text>
+          <line x1="35" y1="76" x2="35" y2="98" class="axis"/><line x1="113" y1="76" x2="113" y2="98" class="axis"/><line x1="191" y1="76" x2="191" y2="98" class="axis"/>
+        </g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Today -->
+<section data-background-color="#ffffff">
+  <h2>The Taxonomy Today</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">SISD</span>Lives inside a single core — handles ILP.</div>
+    <div class="callout blue" style="border-color:var(--accent)"><span class="lbl" style="color:var(--accent)">SIMD</span>Thrives in <strong>GPUs &amp; TPUs</strong> — data parallelism for HPC, blockchain, <strong>AI</strong>.</div>
+    <div class="callout"><span class="lbl">MIMD</span>Multicore CPUs — TLP &amp; complex parallelism.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">MISD</span>Still a niche — but systolic arrays power AI matrix engines.
+    <br><strong>Real systems combine all of them:</strong> a cloud/HPC server is SISD cores, SIMD GPUs, in a MIMD fabric.</div>
+</section>
+
+<!-- Top500 -->
+<section data-background-color="#ffffff">
+  <h2>The TOP500 &amp; the Race to Exascale</h2>
+  <div class="cols">
+    <div>
+      <p class="small"><a href="https://www.top500.org">top500.org</a> ranks the fastest machines (by Linpack). It changes fast — <em>Earth Simulator</em> went #1 (2004) → #10 in two years.</p>
+      <table>
+        <tr><th>Era</th><th>#1 system</th><th>Peak</th></tr>
+        <tr><td>2004</td><td>Earth Simulator</td><td>~40 TFLOP/s</td></tr>
+        <tr><td>2013</td><td>Tianhe-2 (China)</td><td>~33.8 PFLOP/s</td></tr>
+        <tr><td>2022</td><td>Frontier (ORNL)</td><td>first <strong>exascale</strong></td></tr>
+        <tr><td class="hi">2024→</td><td class="hi">El Capitan (LLNL)</td><td class="hi">~1.7 EFLOP/s</td></tr>
+      </table>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Engineering marvels</span>These machines consume <strong>as much power as a small city</strong> (tens of MW). Cooling, plumbing &amp; the building are co-designed with the computer.</div>
+      <ul class="tiny">
+        <li><strong>Tianhe-2</strong>: 3.12M cores, 16K nodes, ~18 MW</li>
+        <li><strong>El Capitan / Frontier</strong>: AMD CPU+GPU (APU) nodes — <em>CPU/GPU combo</em> is now standard at the top</li>
+      </ul>
+      <div class="callout takeaway"><span class="lbl">The pattern</span>The top of the list is now <strong>heterogeneous</strong>: MIMD CPUs orchestrating massive SIMD GPU arrays.</div>
+    </div>
+  </div>
+  <aside class="notes">Earth Simulator: $40M to build, $15M/yr maintenance, ~1 processor failure per week, 640 nodes on a single-stage crossbar. Tianhe-2 cost ~$100M. Updated the top of the list to the exascale era: Frontier (2022, first exascale) and El Capitan (2024, ~1.7 EFLOP/s).</aside>
+</section>
+
+<!-- Review 1.3 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 1.3 — Review</h2>
+  <div class="qa"><p class="q">1. Name the four categories of computers in Flynn's taxonomy.</p>
+    <div class="fragment"><div class="a">SISD, SIMD, MISD, MIMD.</div></div></div>
+  <div class="qa"><p class="q">2. Classify each system:</p>
+    <ul class="small">
+      <li>A single core in a multicore</li>
+      <li>GPU / Xeon-Phi-style co-processor</li>
+      <li>A multicore chip in a server</li>
+      <li>A server farm of cheap PCs</li>
+    </ul>
+    <div class="fragment"><div class="a">single core → <strong>SISD</strong> · GPU/co-processor → <strong>SIMD</strong> (or SIMD/MIMD) · multicore chip → <strong>MIMD</strong> · server farm → <strong>distributed system</strong> (MIMD, no shared memory).</div></div></div>
+</section>
+
+<!-- Chapter summary -->
+<section data-background-color="#ffffff">
+  <h2>Chapter 1 — Big Picture</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">1.1 Switch</span>We ran out of cheap ILP fruit → had to climb to TLP / multicore.</div>
+    <div class="callout"><span class="lbl">1.2 Power wall</span>Dennard scaling ended (~2005): V stopped scaling, frequency stalled, power became the budget.</div>
+    <div class="callout"><span class="lbl">1.3 Taxonomy</span>Flynn classifies machines; today's systems blend SISD + SIMD + MIMD.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">One sentence</span>
+    <strong>Physics ended the free lunch, so performance is now the responsibility of parallel software and energy-aware architecture.</strong> The rest of CSC/ECE 506 is about how to meet that responsibility.</div>
+  <p class="center muted small">Next up → <strong>Chapter 2:</strong> the parallel programming model &amp; how we actually express TLP.</p>
+</section>
+
+</div>
+
+<!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 1 — Perspectives</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.04,
+    minScale: 0.2, maxScale: 1.6,
+    center: false,                 // top-align content so the NC State header bar sits at the slide top
+    hash: true, slideNumber: 'c/t', history: true,
+    transition: 'slide', transitionSpeed: 'fast',
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      {left:'\\(', right:'\\)', display:false},
+      {left:'$$', right:'$$', display:true}
+    ]},
+  });
+</script>
+</body>
+</html>

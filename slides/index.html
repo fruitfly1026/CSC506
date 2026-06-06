@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSC/ECE 506 — Parallel Computer Architecture · Lecture Decks</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{ --red:#CC0000; --red-d:#990000; --ink:#16181d; --muted:#6b7280; --line:#e3e6ec; --bg:#f6f8fb; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Inter",system-ui,sans-serif;color:var(--ink);background:var(--bg);}
+  header{background:var(--red);color:#fff;padding:48px 32px 40px;}
+  header .bar{background:url('assets/ncstate-bar.jpg') left center/cover,var(--red);height:46px;margin:-48px -32px 26px;}
+  header .wrap{max-width:1040px;margin:0 auto;}
+  header .eyebrow{letter-spacing:.16em;text-transform:uppercase;font-weight:800;font-size:13px;opacity:.85;}
+  header h1{margin:.2em 0 .1em;font-size:38px;font-weight:800;letter-spacing:-.02em;}
+  header p{margin:0;opacity:.92;font-size:17px;}
+  main{max-width:1040px;margin:-24px auto 60px;padding:0 32px;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:18px;margin-top:40px;}
+  a.card{display:block;text-decoration:none;color:inherit;background:#fff;border:1px solid var(--line);
+    border-radius:16px;padding:22px;transition:.15s;box-shadow:0 2px 8px rgba(15,23,42,.04);}
+  a.card:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(204,0,0,.12);border-color:var(--red);}
+  a.card .num{font-size:13px;font-weight:800;color:var(--red);letter-spacing:.05em;}
+  a.card h3{margin:.3em 0 .2em;font-size:19px;font-weight:700;}
+  a.card p{margin:0;color:var(--muted);font-size:14px;line-height:1.4;}
+  a.card.todo{opacity:.55;pointer-events:none;border-style:dashed;}
+  a.card.todo .num{color:var(--muted);}
+  .badge{display:inline-block;background:#dcfce7;color:#15803d;font-size:11px;font-weight:700;
+    padding:.15em .55em;border-radius:999px;margin-top:10px;}
+  .note{margin-top:34px;background:#fff;border:1px solid var(--line);border-left:4px solid var(--red);
+    border-radius:0 12px 12px 0;padding:14px 18px;color:var(--muted);font-size:14px;}
+  footer{max-width:1040px;margin:0 auto;padding:0 32px 50px;color:var(--muted);font-size:13px;}
+</style>
+</head>
+<body>
+<header><div class="bar"></div><div class="wrap">
+  <div class="eyebrow">North Carolina State University · Fall Semester</div>
+  <h1>CSC / ECE 506 — Parallel Computer Architecture</h1>
+  <p>Interactive HTML lecture decks · based on Solihin, <em>Fundamentals of Parallel Multicore Architecture</em></p>
+</div></header>
+
+<main>
+  <div class="grid">
+    <a class="card" href="chap1.html">
+      <div class="num">CHAPTER 1</div>
+      <h3>Perspectives</h3>
+      <p>The switch to multicore, the power wall, and Flynn's taxonomy of parallel computers.</p>
+      <span class="badge">✓ Redesigned</span>
+    </a>
+    <a class="card todo"><div class="num">CHAPTER 2</div><h3>Parallel Programming Models</h3><p>Coming soon.</p></a>
+    <a class="card todo"><div class="num">CHAPTER 3</div><h3>Shared Memory Programming</h3><p>Coming soon.</p></a>
+    <a class="card todo"><div class="num">CHAPTER 4</div><h3>Parallel Programming Issues</h3><p>Coming soon.</p></a>
+    <a class="card todo"><div class="num">CHAPTER 5</div><h3>Parallel Programming for Linked Data</h3><p>Coming soon.</p></a>
+    <a class="card todo"><div class="num">CHAPTER 6</div><h3>Memory Hierarchy</h3><p>Coming soon.</p></a>
+    <a class="card todo"><div class="num">CHAPTER 7</div><h3>Cache Coherence</h3><p>Coming soon.</p></a>
+    <a class="card todo"><div class="num">CHAPTER 8</div><h3>Memory Consistency</h3><p>Coming soon.</p></a>
+    <a class="card todo"><div class="num">CHAPTER 9</div><h3>Interconnection Networks</h3><p>Coming soon.</p></a>
+    <a class="card todo"><div class="num">CHAPTER 10</div><h3>Advanced Coherence / SC</h3><p>Coming soon.</p></a>
+    <a class="card todo"><div class="num">CHAPTER 11</div><h3>Advanced Topics</h3><p>Coming soon.</p></a>
+  </div>
+
+  <div class="note">
+    <strong>Pilot:</strong> Chapter 1 is the first fully-redesigned deck. Once you sign off on the style,
+    the remaining chapters will be converted to match. Open a deck and press <strong>S</strong> for speaker
+    notes, <strong>F</strong> for fullscreen, <strong>ESC</strong> for the slide overview, and <strong>→</strong> to reveal answers in review slides.
+  </div>
+</main>
+<footer>CSC/ECE 506 · HTML lecture decks · built with reveal.js</footer>
+</body>
+</html>

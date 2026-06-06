@@ -1,0 +1,247 @@
+/* =====================================================================
+   CSC/ECE 506 — Parallel Computer Architecture
+   reveal.js theme matching the official NC State PowerPoint template
+   "ncstate-ppt-template-16x9-horizontal-left-brick":
+     · red (#CC0000) header bar with the NC STATE UNIVERSITY wordmark
+     · white body, left-aligned title beneath the bar
+   Load AFTER reveal's reset.css + reveal.css.
+   ===================================================================== */
+
+:root {
+  --wolf-red:   #CC0000;   /* NC State brand "Wolfpack Red" (PMS 186) */
+  --wolf-red-d: #990000;
+  --ink:        #16181d;
+  --ink-soft:   #3a3f4b;
+  --muted:      #6b7280;
+  --line:       #e3e6ec;
+  --bg:         #ffffff;
+  --bg-alt:     #f6f8fb;
+  --accent:     #2563eb;
+  --accent-2:   #0d9488;
+  --warn:       #b45309;
+  --ok:         #15803d;
+  --code-bg:    #0f172a;
+  --r:          14px;
+  --bar-h:      64px;      /* 0.5in of 5.625in slide → 8.9% × 720px canvas */
+}
+
+/* ---------- base deck ---------- */
+.reveal {
+  font-family: "Inter", "Helvetica Neue", Arial, system-ui, sans-serif;
+  font-size: 28px;
+  color: var(--ink);
+  font-weight: 400;
+}
+.reveal .slides { text-align: left; }
+.reveal .slides section { line-height: 1.34; }
+
+/* Every slide carries the NC State red header bar + wordmark at the top.
+   center:false keeps sections top-aligned so the bar sits at the canvas edge. */
+.reveal .slides > section {
+  min-height: 720px;
+  box-sizing: border-box;
+  padding: calc(var(--bar-h) + 30px) 56px 56px;
+}
+.reveal .slides > section::before {
+  content: "";
+  position: absolute; top: 0; left: 0; right: 0; height: var(--bar-h);
+  background: var(--wolf-red) url("ncstate-bar.jpg") left center / cover no-repeat;
+  z-index: 5;
+}
+
+.reveal h1, .reveal h2, .reveal h3, .reveal h4 {
+  font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+  color: var(--ink);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-transform: none;
+  line-height: 1.1;
+  margin: 0 0 .5em 0;
+}
+.reveal h1 { font-size: 2.1em; }
+.reveal h2 { font-size: 1.4em; }
+.reveal h3 { font-size: 1.06em; }
+
+/* slide title: left-aligned beneath the bar, slim red underline accent */
+.reveal section > h2:first-child,
+.reveal section > h3:first-child {
+  padding-bottom: .22em;
+  border-bottom: 3px solid var(--wolf-red);
+  display: inline-block;
+  margin-bottom: .7em;
+}
+
+.reveal p { margin: .5em 0; }
+.reveal strong { color: var(--wolf-red-d); font-weight: 700; }
+.reveal em { color: var(--ink-soft); }
+.reveal a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(37,99,235,.35); }
+
+/* ---------- lists ---------- */
+.reveal ul, .reveal ol { margin: .3em 0 .3em 1.1em; }
+.reveal li { margin: .3em 0; }
+.reveal ul > li::marker { color: var(--wolf-red); }
+.reveal ul ul > li::marker { color: var(--muted); content: "–  "; }
+.reveal li li { font-size: .92em; color: var(--ink-soft); }
+
+/* ---------- deck-level footer / slide number ---------- */
+.reveal .deck-footer {
+  position: absolute; bottom: 14px; left: 56px; z-index: 30;
+  display: flex; align-items: center; gap: .45em;
+  font-size: 13px; color: var(--muted); pointer-events: none;
+}
+.reveal .deck-footer .tag { color: var(--wolf-red); font-weight: 800; letter-spacing: .05em; }
+.reveal .deck-footer .sep { opacity: .5; }
+.reveal .slide-number { background: transparent; color: var(--muted); font-size: 13px; right: 24px; bottom: 12px; }
+
+/* ---------- title slide (red bar + large title in body) ---------- */
+.reveal .slides > section.title-slide { padding-top: 200px; }   /* balance the block vertically */
+.reveal .title-slide { text-align: left; }
+.reveal .title-slide .eyebrow {
+  color: var(--wolf-red); font-weight: 800; letter-spacing: .12em;
+  text-transform: uppercase; font-size: .58em; margin-bottom: .5em;
+}
+.reveal .title-slide h1 { font-size: 2.5em; margin-bottom: .12em; color: var(--ink); }
+.reveal .title-slide .sub { color: var(--ink-soft); font-size: .82em; max-width: 22em; }
+.reveal .title-slide .meta {
+  margin-top: 1.3em; color: var(--muted); font-size: .56em;
+  border-top: 2px solid var(--wolf-red); padding-top: .9em; display: inline-block;
+}
+
+/* ---------- section / module dividers (NC State "Section Header" style) ---------- */
+.reveal section.divider .mod-num {
+  font-size: .72em; font-weight: 800; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--wolf-red); margin-bottom: .1em;
+}
+.reveal section.divider .mod-title {
+  font-size: 2.2em; font-weight: 800; line-height: 1.04; color: var(--ink);
+  letter-spacing: -.02em; margin-bottom: .5em;
+}
+
+/* ---------- callout boxes ---------- */
+.callout {
+  border-left: 5px solid var(--accent);
+  background: var(--bg-alt);
+  border-radius: 0 var(--r) var(--r) 0;
+  padding: .7em 1em; margin: .6em 0;
+  font-size: .92em;
+}
+.callout .lbl { display:block; font-weight:800; font-size:.7em; letter-spacing:.1em;
+  text-transform: uppercase; color: var(--accent); margin-bottom:.2em; }
+.callout.takeaway { border-color: var(--wolf-red); }
+.callout.takeaway .lbl { color: var(--wolf-red); }
+.callout.warn { border-color: var(--warn); background:#fffbeb; }
+.callout.warn .lbl { color: var(--warn); }
+.callout.ok { border-color: var(--ok); background:#f0fdf4; }
+.callout.ok .lbl { color: var(--ok); }
+
+/* learning objectives card */
+.objectives {
+  background: var(--bg-alt); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 1em 1.2em; margin-top:.4em;
+}
+.objectives h4 { color: var(--wolf-red); margin-bottom:.4em; font-size:.95em; }
+
+/* ---------- two/three column layout ---------- */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2em; align-items: start; }
+.cols.c3 { grid-template-columns: 1fr 1fr 1fr; }
+.cols.w-37 { grid-template-columns: 3fr 7fr; }
+.cols.w-64 { grid-template-columns: 6fr 4fr; }
+
+/* ---------- code ---------- */
+.reveal pre {
+  width: 100%; box-shadow: 0 6px 24px rgba(15,23,42,.18);
+  border-radius: 10px; margin: .5em 0; font-size: .56em;
+}
+.reveal pre code {
+  font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  padding: 1em 1.2em; border-radius: 10px; line-height: 1.45;
+  background: var(--code-bg); max-height: none;
+}
+.reveal code.inline {
+  font-family: "JetBrains Mono", monospace; background: var(--bg-alt);
+  color: var(--wolf-red-d); padding: .08em .35em; border-radius: 5px; font-size: .82em;
+}
+.code-label { font-size:.62em; font-weight:700; color: var(--muted); letter-spacing:.05em;
+  text-transform: uppercase; margin-bottom:-.2em; }
+
+/* ---------- tables ---------- */
+.reveal table { font-size: .62em; border-collapse: collapse; width: 100%; }
+.reveal table th {
+  background: var(--ink); color:#fff; text-align:left; padding:.5em .7em; font-weight:700;
+}
+.reveal table td { padding: .42em .7em; border-bottom: 1px solid var(--line); }
+.reveal table tr:nth-child(even) td { background: var(--bg-alt); }
+.reveal table .hi { background: #fff1f1 !important; color: var(--wolf-red-d); font-weight:700; }
+
+/* ---------- pills / badges ---------- */
+.pill { display:inline-block; background: var(--wolf-red); color:#fff; font-weight:700;
+  font-size:.6em; padding:.18em .6em; border-radius: 999px; letter-spacing:.04em;
+  vertical-align: middle; }
+.pill.blue { background: var(--accent); }
+.pill.teal { background: var(--accent-2); }
+.pill.gray { background: var(--muted); }
+
+/* ---------- Q&A (click to reveal answer) ---------- */
+.qa { margin:.5em 0; }
+.qa .q { font-weight:700; }
+.qa .a {
+  margin-top:.3em; padding:.55em .8em; background:#f0fdf4; border-left:4px solid var(--ok);
+  border-radius:0 10px 10px 0; font-size:.9em; color: var(--ink-soft);
+}
+.qa .a::before { content:"✓  "; color: var(--ok); font-weight:800; }
+
+/* ---------- KaTeX sizing ---------- */
+.reveal .katex { font-size: 1.05em; }
+.eq { background: var(--bg-alt); border:1px solid var(--line); border-radius:10px;
+  padding:.5em .8em; margin:.5em 0; text-align:center; }
+
+/* =====================================================================
+   Re-usable diagram primitives (pure CSS/SVG, no images)
+   ===================================================================== */
+
+/* pipeline grid */
+.pipe { display:grid; gap:4px; font-family:"JetBrains Mono",monospace; font-size:.6em; margin:.4em 0; }
+.pipe .row { display:grid; grid-template-columns: 90px repeat(9, 1fr); gap:4px; align-items:center; }
+.pipe .lbl { font-weight:700; font-style:italic; text-align:right; padding-right:.4em; }
+.pipe .cell { background:var(--bg-alt); border:1px solid var(--line); border-radius:6px;
+  text-align:center; padding:.45em 0; }
+.pipe .cell.f { background:#dbeafe; border-color:#bfdbfe; }
+.pipe .cell.IF{background:#dbeafe}.pipe .cell.ID{background:#dcfce7}
+.pipe .cell.EX{background:#fef9c3}.pipe .cell.MEM{background:#fee2e2}.pipe .cell.WB{background:#ede9fe}
+
+/* generic block (chip / core / box) */
+.blk { border:2px solid var(--ink); border-radius:10px; padding:.5em .7em; text-align:center;
+  background:#fff; font-weight:600; font-size:.8em; }
+.blk.core { background:#dbeafe; border-color:#3b82f6; }
+.blk.cache{ background:#dcfce7; border-color:#22c55e; }
+.blk.mem  { background:#fef3c7; border-color:#f59e0b; }
+.blk.cu   { background:#ede9fe; border-color:#8b5cf6; }
+.grid-blk { display:grid; gap:8px; }
+
+/* Flynn 2x2 diagram cells */
+.flynn { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.flynn .cell { border:2px solid var(--line); border-radius:12px; padding:.7em .9em; background:#fff; }
+.flynn .cell h4 { color: var(--wolf-red); margin:0 0 .2em 0; }
+.flynn .cell.on { border-color: var(--wolf-red); box-shadow:0 6px 20px rgba(204,0,0,.12); }
+.flynn .tag { font-size:.7em; color:var(--muted); }
+
+/* simple bar/line svg charts inherit currentColor */
+.chart { width:100%; height:auto; }
+.chart text { font-family:"Inter",sans-serif; fill: var(--ink-soft); }
+.chart .grid { stroke:var(--line); stroke-width:1; }
+.chart .axis { stroke:var(--ink); stroke-width:1.5; }
+.chart .trend { stroke:var(--wolf-red); stroke-width:3; fill:none; }
+.chart .dot { fill:var(--accent); opacity:.7; }
+.chart .lbl { font-size:13px; }
+.chart .note { fill:var(--ink); font-weight:700; font-size:14px; }
+
+/* fragment helper: dim */
+.reveal .fragment.dim-in { opacity:1; }
+
+/* small helpers */
+.center { text-align:center; }
+.muted { color: var(--muted); }
+.small { font-size:.82em; }
+.tiny  { font-size:.68em; }
+.src { font-size:.6em; color:var(--muted); font-style:italic; }
+.nowrap{ white-space:nowrap; }
