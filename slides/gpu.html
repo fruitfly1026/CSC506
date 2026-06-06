@@ -402,7 +402,7 @@ __global__ void vecAdd(float* A, float* B,
 {
     int i = blockIdx.x * blockDim.x
           + threadIdx.x;
-    if (i < n)
+    if (i &lt; n)
         C[i] = A[i] + B[i];
 }
 </code></pre>
@@ -428,7 +428,7 @@ __global__ void vecAdd(float* A, float* B,
 int threadsPerBlock = 256;
 int blocks = (n + threadsPerBlock - 1) / threadsPerBlock;   // ceil(n / 256)
 
-vecAdd<<<blocks, threadsPerBlock>>>(d_A, d_B, d_C, n);       // launch on GPU
+vecAdd&lt;&lt;&lt;blocks, threadsPerBlock&gt;&gt;&gt;(d_A, d_B, d_C, n);       // launch on GPU
 
 cudaDeviceSynchronize();   // wait for the GPU to finish
 </code></pre>

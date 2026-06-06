@@ -151,11 +151,11 @@ void unlock(int *lockvar) {
     <div>
       <div class="code-label">In machine language</div>
       <pre><code class="language-x86asm" data-trim>
-lock:   ld  R1, &lockvar  ; R1 = MEM[&lockvar]
+lock:   ld  R1, &amp;lockvar  ; R1 = MEM[&amp;lockvar]
         bnz R1, lock      ; loop if R1 != 0
-        sti &lockvar, #1  ; MEM[&lockvar] = 1
+        sti &amp;lockvar, #1  ; MEM[&amp;lockvar] = 1
         ret
-unlock: sti &lockvar, #0  ; MEM[&lockvar] = 0
+unlock: sti &amp;lockvar, #0  ; MEM[&amp;lockvar] = 0
         ret
 </code></pre>
     </div>
@@ -208,11 +208,11 @@ unlock: sti &lockvar, #0  ; MEM[&lockvar] = 0
     <div>
       <div class="code-label">test&amp;set lock / unlock</div>
       <pre><code class="language-x86asm" data-trim>
-lock:   t&s R1, &lockvar  ; R1 = MEM[&lockvar];
-                          ; if (R1==0) MEM[&lockvar]=1
+lock:   t&amp;s R1, &amp;lockvar  ; R1 = MEM[&amp;lockvar];
+                          ; if (R1==0) MEM[&amp;lockvar]=1
         bnz R1, lock      ; loop if R1 != 0
         ret
-unlock: st  &lockvar, #0  ; MEM[&lockvar] = 0
+unlock: st  &amp;lockvar, #0  ; MEM[&amp;lockvar] = 0
         ret
 </code></pre>
     </div>
@@ -231,20 +231,20 @@ unlock: st  &lockvar, #0  ; MEM[&lockvar] = 0
     <div>
       <div class="code-label">Thread 0 — succeeds first</div>
       <pre><code class="language-x86asm" data-trim>
-t&s R1, &lockvar   ; successful
+t&amp;s R1, &amp;lockvar   ; successful
 bnz R1, lock
   ... critical section ...
-st  &lockvar, #0   ; release
+st  &amp;lockvar, #0   ; release
 </code></pre>
     </div>
     <div>
       <div class="code-label">Thread 1 — spins, then wins</div>
       <pre><code class="language-x86asm" data-trim>
-t&s R1, &lockvar   ; failed
+t&amp;s R1, &amp;lockvar   ; failed
 bnz R1, lock
-t&s R1, &lockvar   ; failed
+t&amp;s R1, &amp;lockvar   ; failed
 bnz R1, lock
-t&s R1, &lockvar   ; successful (after T0 release)
+t&amp;s R1, &amp;lockvar   ; successful (after T0 release)
   ... critical section ...
 </code></pre>
     </div>
@@ -295,12 +295,12 @@ t&s R1, &lockvar   ; successful (after T0 release)
     <div>
       <div class="code-label">TTSL — read-spin, then t&amp;s</div>
       <pre><code class="language-x86asm" data-trim>
-lock:   ld  R1, &lockvar   ; ordinary load (spin)
+lock:   ld  R1, &amp;lockvar   ; ordinary load (spin)
         bnz R1, lock       ; loop while held
-        t&s R1, &lockvar   ; try to grab it
+        t&amp;s R1, &amp;lockvar   ; try to grab it
         bnz R1, lock       ; lost the race? spin again
         ret
-unlock: st  &lockvar, #0
+unlock: st  &amp;lockvar, #0
         ret
 </code></pre>
     </div>
@@ -406,13 +406,13 @@ unlock: st  &lockvar, #0
     <div>
       <div class="code-label">LL/SC lock / unlock</div>
       <pre><code class="language-x86asm" data-trim>
-lock:   LL  R1, &lockvar   ; R1=MEM[&lockvar]; LINK=&lockvar
+lock:   LL  R1, &amp;lockvar   ; R1=MEM[&amp;lockvar]; LINK=&amp;lockvar
         bnz R1, lock       ; held? spin
         addi R1, #1        ; R1 = 1
-        SC  R1, &lockvar   ; MEM[&lockvar]=R1 if link valid
+        SC  R1, &amp;lockvar   ; MEM[&amp;lockvar]=R1 if link valid
         bnz R1, lock       ; SC failed? retry
         ret
-unlock: st  &lockvar, #0
+unlock: st  &amp;lockvar, #0
         ret
 </code></pre>
     </div>
@@ -477,10 +477,10 @@ unlock: st  &lockvar, #0
     <div>
       <div class="code-label">One solution</div>
       <pre><code class="language-x86asm" data-trim>
-CAS:  LL  R3, &L        ; R3 = MEM[L]; LINK = &L
-      bne R3, R1, done  ; MEM[L] != R1 -> no swap
-      SC  R2, &L        ; try MEM[L] = R2
-      beqz R2, CAS      ; SC failed -> retry
+CAS:  LL  R3, &amp;L        ; R3 = MEM[L]; LINK = &amp;L
+      bne R3, R1, done  ; MEM[L] != R1 -&gt; no swap
+      SC  R2, &amp;L        ; try MEM[L] = R2
+      beqz R2, CAS      ; SC failed -&gt; retry
       mov R2, R3        ; return old MEM[L] in R2
 done: ret
 </code></pre>
@@ -574,7 +574,7 @@ void ticketLock_release(int *next_ticket, int *now_serving) {
       <pre><code class="language-c" data-trim>
 void ABQL_init(int *next_ticket, int *can_serve) {
   *next_ticket = 0;
-  for (i = 1; i < MAXSIZE; i++) can_serve[i] = 0;
+  for (i = 1; i &lt; MAXSIZE; i++) can_serve[i] = 0;
   can_serve[0] = 1;
 }
 void ABQL_acquire(int *next_ticket, int *can_serve) {
@@ -690,13 +690,13 @@ lock_type barLock = 0;
 int canGo = 0;
 
 void barrier() {
-  lock(&barLock);
+  lock(&amp;barLock);
     if (numArrived == 0) canGo = 0;  // first resets flag
     numArrived++;
     myCount = numArrived;
-  unlock(&barLock);
+  unlock(&amp;barLock);
 
-  if (myCount < NUM_THREADS)
+  if (myCount &lt; NUM_THREADS)
     while (canGo == 0) {};   // wait for last thread
   else {                     // last to arrive
     numArrived = 0;          // reset for next barrier
@@ -724,12 +724,12 @@ int canGo = 0;
 
 void barrier() {
   valueToWait = 1 - valueToWait;  // toggle (per-thread)
-  lock(&barLock);
+  lock(&amp;barLock);
     numArrived++;
     myCount = numArrived;
-  unlock(&barLock);
+  unlock(&amp;barLock);
 
-  if (myCount < NUM_THREADS)
+  if (myCount &lt; NUM_THREADS)
     while (canGo != valueToWait) {};  // wait
   else {                              // last to arrive
     numArrived = 0;

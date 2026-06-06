@@ -158,9 +158,9 @@ S4: z = 6;
   </div>
   <div class="code-label">A 1-D loop</div>
   <pre><code class="language-c" data-trim>
-for (i = 1; i < n; i++) {
-  S1: a[i] = a[i-1] + 1;   // S1[i] T S1[i+1]  -> loop-carried
-  S2: b[i] = a[i];         // S1[i] T S2[i]    -> loop-independent
+for (i = 1; i &lt; n; i++) {
+  S1: a[i] = a[i-1] + 1;   // S1[i] T S1[i+1]  -&gt; loop-carried
+  S2: b[i] = a[i];         // S1[i] T S2[i]    -&gt; loop-independent
 }
 </code></pre>
   <p class="small"><code class="inline">a[i]</code> depends on <code class="inline">a[i-1]</code> from the <em>previous</em> iteration (carried); <code class="inline">b[i]</code> uses <code class="inline">a[i]</code> from the <em>same</em> iteration (independent).</p>
@@ -173,8 +173,8 @@ for (i = 1; i < n; i++) {
     <div>
       <div class="code-label">Carried on the j loop</div>
       <pre><code class="language-c" data-trim>
-for (i = 1; i < n; i++)
-  for (j = 1; j < n; j++)
+for (i = 1; i &lt; n; i++)
+  for (j = 1; j &lt; n; j++)
     S3: a[i][j] = a[i][j-1] + 1;
 </code></pre>
       <p class="small"><code class="inline">S3[i,j] T S3[i,j+1]</code> → carried on <strong>j</strong>. <strong>No</strong> carried dependence on the <code class="inline">i</code> loop → <em>i is parallel.</em></p>
@@ -182,8 +182,8 @@ for (i = 1; i < n; i++)
     <div>
       <div class="code-label">Carried on the i loop</div>
       <pre><code class="language-c" data-trim>
-for (i = 1; i < n; i++)
-  for (j = 1; j < n; j++)
+for (i = 1; i &lt; n; i++)
+  for (j = 1; j &lt; n; j++)
     S4: a[i][j] = a[i-1][j] + 1;
 </code></pre>
       <p class="small"><code class="inline">S4[i,j] T S4[i+1,j]</code> → carried on <strong>i</strong>. <strong>No</strong> carried dependence on the <code class="inline">j</code> loop → <em>j is parallel.</em></p>
@@ -205,8 +205,8 @@ for (i = 1; i < n; i++)
       </ul>
       <div class="code-label">Example</div>
       <pre><code class="language-c" data-trim>
-for (i=1; i<4; i++)
-  for (j=1; j<4; j++)
+for (i=1; i&lt;4; i++)
+  for (j=1; j&lt;4; j++)
     S3: a[i][j]=a[i][j-1]+1;
 </code></pre>
       <p class="small muted">Row-major traversal: finish a row of <code class="inline">j</code>, then drop to the next <code class="inline">i</code>.</p>
@@ -291,8 +291,8 @@ for (i=1; i<4; i++)
     <div>
       <div class="code-label">Loop nest</div>
       <pre><code class="language-c" data-trim>
-for (i=1; i<=n; i++)
-  for (j=1; j<=n; j++)
+for (i=1; i&lt;=n; i++)
+  for (j=1; j&lt;=n; j++)
     S1: a[i][j] = a[i][j-1] + a[i][j+1]
                + a[i-1][j] + a[i+1][j];
 </code></pre>
@@ -366,7 +366,7 @@ for (i=1; i<=n; i++)
     <div>
       <div class="code-label">Stride-2 dependence</div>
       <pre><code class="language-c" data-trim>
-for (i=2; i<=n; i++)
+for (i=2; i&lt;=n; i++)
   S: a[i] = a[i-2];
 </code></pre>
       <p class="small"><code class="inline">a[i]</code> depends only on <code class="inline">a[i-2]</code> → even and odd indices never touch.</p>
@@ -374,9 +374,9 @@ for (i=2; i<=n; i++)
     <div>
       <div class="code-label">Split into two independent tasks</div>
       <pre><code class="language-c" data-trim>
-for (i=2; i<=n; i+=2)   // even chain
+for (i=2; i&lt;=n; i+=2)   // even chain
   S: a[i] = a[i-2];
-for (i=3; i<=n; i+=2)   // odd chain
+for (i=3; i&lt;=n; i+=2)   // odd chain
   S: a[i] = a[i-2];
 </code></pre>
       <p class="small ok-text" style="color:var(--ok)">✓ Two independent chains → run them on two threads.</p>
@@ -396,10 +396,10 @@ for (i=3; i<=n; i+=2)   // odd chain
       <div class="code-label">Restructured shape</div>
       <pre><code class="language-c" data-trim>
 // 2n-1 anti-diagonals, computed in order
-for (i = 1; i <= 2*n-1; i++) {
+for (i = 1; i &lt;= 2*n-1; i++) {
   // count points on this anti-diagonal,
   // find its first (row,col)
-  for_all (k = 1; k <= points; k++) {
+  for_all (k = 1; k &lt;= points; k++) {
     a[row][col] = ...;   // independent!
     row--; col++;
   }
@@ -441,14 +441,14 @@ for (i = 1; i <= 2*n-1; i++) {
   <p class="small">Parallelize the inner (within-anti-diagonal) loop; <code class="inline">row</code>/<code class="inline">col</code> are computed per thread.</p>
   <div class="code-label">OpenMP — parallel inner loop</div>
   <pre><code class="language-c" data-trim>
-for (i = 1; i <= 2*n - 1; i++) {          // serial over anti-diagonals
+for (i = 1; i &lt;= 2*n - 1; i++) {          // serial over anti-diagonals
   int points, row, col;
-  if (i <= n) { points = i;     row = i; col = 1; }
+  if (i &lt;= n) { points = i;     row = i; col = 1; }
   else        { points = 2*n-i; row = n; col = i-n+1; }
 
   #pragma omp parallel for default(shared) \
                            private(k) firstprivate(row, col)
-  for (int k = 1; k <= points; k++) {
+  for (int k = 1; k &lt;= points; k++) {
     a[row - (k-1)][col + (k-1)] = /* stencil update */ ;
   }
 }
@@ -464,7 +464,7 @@ for (i = 1; i <= 2*n - 1; i++) {          // serial over anti-diagonals
     <div>
       <div class="code-label">Sequential — carried on a[]</div>
       <pre><code class="language-c" data-trim>
-for (i=1; i<=N; i++) {
+for (i=1; i&lt;=N; i++) {
   S: a[i] = a[i-1] + b[i]*c[i];
 }
 </code></pre>
@@ -473,9 +473,9 @@ for (i=1; i<=N; i++) {
     <div>
       <div class="code-label">Split out the independent work</div>
       <pre><code class="language-c" data-trim>
-for (i=1; i<=N; i++)        // DOALL
+for (i=1; i&lt;=N; i++)        // DOALL
   S1: temp[i] = b[i]*c[i];
-for (i=1; i<=N; i++)        // serial
+for (i=1; i&lt;=N; i++)        // serial
   S2: a[i] = a[i-1] + temp[i];
 </code></pre>
       <p class="small">First loop parallel; time <code class="inline">N·(T<sub>S1</sub>+T<sub>S2</sub>)</code> → <code class="inline">T<sub>S1</sub>+N·T<sub>S2</sub></code>. But <code class="inline">temp[]</code> adds storage.</p>
@@ -499,7 +499,7 @@ for (i=1; i<=N; i++)        // serial
       <pre><code class="language-c" data-trim>
 post(0);
 #pragma omp parallel for ordered
-for (i=1; i<=N; i++) {
+for (i=1; i&lt;=N; i++) {
   S1: temp = b[i]*c[i];   // independent
   wait(i-1);              // need a[i-1]
   S2: a[i] = a[i-1] + temp;
@@ -519,7 +519,7 @@ for (i=1; i<=N; i++) {
     <div>
       <div class="code-label">One loop, several statements</div>
       <pre><code class="language-c" data-trim>
-for (i=0; i<n; i++) {
+for (i=0; i&lt;n; i++) {
   S1: a[i] = b[i+1]*a[i-1];
   S2: b[i] = b[i]*coef;
   S3: c[i] = 0.5*(c[i]+a[i]);
@@ -531,12 +531,12 @@ for (i=0; i<n; i++) {
     <div>
       <div class="code-label">After loop distribution</div>
       <pre><code class="language-c" data-trim>
-for (i=0; i<n; i++) {     // task A
+for (i=0; i&lt;n; i++) {     // task A
   S1: a[i] = b[i+1]*a[i-1];
   S2: b[i] = b[i]*coef;
   S3: c[i] = 0.5*(c[i]+a[i]);
 }
-for (i=0; i<n; i++)       // task B
+for (i=0; i&lt;n; i++)       // task B
   S4: d[i] = d[i-1]*d[i];
 </code></pre>
       <p class="small ok-text" style="color:var(--ok)">✓ Each loop is a parallel <strong>task</strong> — run A and B concurrently.</p>
@@ -573,7 +573,7 @@ for (i=0; i<n; i++)       // task B
     <div>
       <div class="code-label">Sequential</div>
       <pre><code class="language-c" data-trim>
-for (i=2; i<=N; i++) {
+for (i=2; i&lt;=N; i++) {
   S1: a[i] = a[i-1] + b[i];
   S2: c[i] = c[i] + a[i];
 }
@@ -585,11 +585,11 @@ for (i=2; i<=N; i++) {
     <div>
       <div class="code-label">DOPIPE — two pipelined stages</div>
       <pre><code class="language-c" data-trim>
-for (i=2; i<=N; i++) {    // stage 1
+for (i=2; i&lt;=N; i++) {    // stage 1
   a[i] = a[i-1] + b[i];
   post(i);
 }
-for (i=2; i<=N; i++) {    // stage 2
+for (i=2; i&lt;=N; i++) {    // stage 2
   wait(i);
   c[i] = c[i] + a[i];
 }
@@ -643,8 +643,8 @@ for (i=2; i<=N; i++) {    // stage 2
     <div>
       <div class="code-label">The Gauss-Seidel-style sweep</div>
       <pre><code class="language-c" data-trim>
-for (I=1; I<=N; I++)
-  for (j=1; j<=N; j++) {
+for (I=1; I&lt;=N; I++)
+  for (j=1; j&lt;=N; j++) {
     S1: temp = A[I][j];
     S2: A[I][j] = 0.2*(A[I][j]+A[I][j-1]
                  + A[I-1][j]+A[I][j+1]+A[I+1][j]);
@@ -746,8 +746,8 @@ while (!converged) {
   </div>
   <div class="code-label">Example — task = each "for i" iteration</div>
   <pre><code class="language-c" data-trim>
-for (i=1; i<=n; i++)
-  for (j=1; j<=n; j++) {
+for (i=1; i&lt;=n; i++)
+  for (j=1; j&lt;=n; j++) {
     S2: a[i][j] = b[i][j] + c[i][j];
     S3: b[i][j] = a[i][j-1] * d[i][j];
   }
@@ -789,7 +789,7 @@ for (i=1; i<=n; i++)
       <pre><code class="language-c" data-trim>
 double sum = 0.0;
 #pragma omp parallel for reduction(+:sum)
-for (i = 0; i < n; i++)
+for (i = 0; i &lt; n; i++)
     sum += a[i];
 </code></pre>
       <p class="small">Each thread keeps a private <code class="inline">sum</code>; OpenMP combines them with <code class="inline">+</code> at the join.</p>
@@ -826,8 +826,8 @@ for (i = 0; i < n; i++)
         default(none) \
         shared(n, a, b, c, d) \
         private(i, j)
-for (i=1; i<=n; i++)
-  for (j=1; j<=n; j++) {
+for (i=1; i&lt;=n; i++)
+  for (j=1; j&lt;=n; j++) {
     a[i][j] = b[i][j] + c[i][j];
     b[i][j] = a[i][j-1] * d[i][j];
   }
@@ -889,7 +889,7 @@ for (i=1; i<=n; i++)
       <div class="code-label">Race — unsynchronized</div>
       <pre><code class="language-c" data-trim>
 // inside a parallel region
-for (i=start; i<end; i++)
+for (i=start; i&lt;end; i++)
     sum = sum + a[i];   // lost updates!
 </code></pre>
       <p class="small" style="color:var(--warn)">✗ Concurrent read-modify-write on the shared <code class="inline">sum</code> → lost updates.</p>
@@ -898,10 +898,10 @@ for (i=start; i<end; i++)
       <div class="code-label">Correct — with a lock (pthreads)</div>
       <pre><code class="language-c" data-trim>
 pthread_mutex_t x = PTHREAD_MUTEX_INITIALIZER;
-for (i=start; i<end; i++) {
-    pthread_mutex_lock(&x);
+for (i=start; i&lt;end; i++) {
+    pthread_mutex_lock(&amp;x);
     sum = sum + a[i];
-    pthread_mutex_unlock(&x);
+    pthread_mutex_unlock(&amp;x);
 }
 </code></pre>
       <p class="small ok-text" style="color:var(--ok)">✓ Only one thread updates <code class="inline">sum</code> at a time.</p>

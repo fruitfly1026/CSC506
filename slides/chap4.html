@@ -186,10 +186,10 @@ typedef IntList *pIntList;
     <div>
       <div class="code-label">Sequential traversal</div>
       <pre><code class="language-c" data-trim>
-p = pList->head;
+p = pList-&gt;head;
 while (p != NULL) {
   compute(p);       // the work
-  p = p->next;      // the traversal
+  p = p-&gt;next;      // the traversal
 }
 </code></pre>
       <ul class="small">
@@ -284,7 +284,7 @@ while (p != NULL) {
       {
         compute(p);   // runs on some thread
       }
-      p = p->next;    // traversal continues
+      p = p-&gt;next;    // traversal continues
     }
   }
 }
@@ -329,9 +329,9 @@ while (p != NULL) {
 int search_tree(pNode p, int key) {
   int out_left, out_right;
   if (p == NULL)  return 0;
-  if (p->key == key) return 1;
-  out_left  = search_tree(p->left,  key);
-  out_right = search_tree(p->right, key);
+  if (p-&gt;key == key) return 1;
+  out_left  = search_tree(p-&gt;left,  key);
+  out_right = search_tree(p-&gt;right, key);
   return (out_left | out_right);
 }
 </code></pre>
@@ -354,13 +354,13 @@ int search_tree(pNode p, int key) {
 int search_tree(pNode p, int key) {
   int out_left, out_right;
   if (p == NULL)  return 0;
-  if (p->key == key) return 1;
+  if (p-&gt;key == key) return 1;
 
   #pragma omp task shared(out_left)
-  out_left  = search_tree(p->left,  key);
+  out_left  = search_tree(p-&gt;left,  key);
 
   #pragma omp task shared(out_right)
-  out_right = search_tree(p->right, key);
+  out_right = search_tree(p-&gt;right, key);
 
   #pragma omp taskwait
   return (out_left | out_right);
@@ -430,14 +430,14 @@ void Insert(pIntList pList, int key) {
   pIntListNode prev = NULL, p, newNode;
   newNode = IntListNode_Create(key);
   /* find where to insert */
-  p = pList->head;
-  while (p != NULL && p->key < newNode->key) {
+  p = pList-&gt;head;
+  while (p != NULL &amp;&amp; p-&gt;key &lt; newNode-&gt;key) {
     prev = p;
-    p = p->next;
+    p = p-&gt;next;
   }
-  newNode->next = p;            /* link forward  */
-  if (prev != NULL) prev->next = newNode;
-  else pList->head = newNode;   /* new head      */
+  newNode-&gt;next = p;            /* link forward  */
+  if (prev != NULL) prev-&gt;next = newNode;
+  else pList-&gt;head = newNode;   /* new head      */
 }
 </code></pre>
     </div>
@@ -446,14 +446,14 @@ void Insert(pIntList pList, int key) {
       <pre><code class="language-c" data-trim>
 void Delete(pIntList pList, int key) {
   pIntListNode prev = NULL, p;
-  p = pList->head;
-  while (p != NULL && p->key != key) {
+  p = pList-&gt;head;
+  while (p != NULL &amp;&amp; p-&gt;key != key) {
     prev = p;
-    p = p->next;
+    p = p-&gt;next;
   }
   if (p == NULL) return;        /* not found */
-  if (prev == NULL) pList->head = p->next;
-  else prev->next = p->next;    /* unlink    */
+  if (prev == NULL) pList-&gt;head = p-&gt;next;
+  else prev-&gt;next = p-&gt;next;    /* unlink    */
   free(p);
 }
 </code></pre>
@@ -1061,16 +1061,16 @@ void IntList_Insert(pIntList l, node *p) {
       <div class="code-label">read-locked search (lock coupling)</div>
       <pre><code class="language-c" data-trim>
 prev = NULL;
-read_lock(pList->head);
-p = pList->head;
+read_lock(pList-&gt;head);
+p = pList-&gt;head;
 while (p != NULL) {
-  if (p->key == key) {
+  if (p-&gt;key == key) {
     printf("Found node\n");
     unlock(p);
     break;
   } else {
     prev = p;
-    p = p->next;
+    p = p-&gt;next;
     if (p != NULL) read_lock(p);  /* grab next */
     if (prev != NULL) unlock(prev); /* release prev */
   }

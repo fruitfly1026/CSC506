@@ -835,9 +835,9 @@ acquire:
   cmp    r, 0 ; bne acquire
   stwcx. one, 0, lock    ; store-conditional
   bne    acquire
-  isync                  ; <-- acquire fence
+  isync                  ; &lt;-- acquire fence
   ; ... critical section ...
-  lwsync                 ; <-- release fence
+  lwsync                 ; &lt;-- release fence
   st     lock, 0         ; release the lock
 </code></pre>
     </div>

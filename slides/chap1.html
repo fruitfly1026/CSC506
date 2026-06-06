@@ -378,7 +378,7 @@ ADDD F4,F0,F2   │  ADDD F8,F7,F6
     <div>
       <div class="code-label">Parallel — iterations independent</div>
       <pre><code class="language-c" data-trim>
-for (i = 0; i < 8; i++)
+for (i = 0; i &lt; 8; i++)
     a[i] = b[i] + c[i];
 </code></pre>
       <p class="small ok-text" style="color:var(--ok)">✓ Each iteration is independent → split across threads.</p>
@@ -386,7 +386,7 @@ for (i = 0; i < 8; i++)
     <div>
       <div class="code-label">NOT parallel — loop-carried dependence</div>
       <pre><code class="language-c" data-trim>
-for (i = 0; i < 8; i++)
+for (i = 0; i &lt; 8; i++)
     a[i] = b[i] + a[i-1];
 </code></pre>
       <p class="small" style="color:var(--warn)">✗ <code class="inline">a[i]</code> depends on <code class="inline">a[i-1]</code>.</p>
@@ -857,7 +857,7 @@ mov  [ebp-12], 2
       <div class="code-label">SISD style — scalar loop</div>
       <pre><code class="language-c" data-trim>
 // C = A + B, element by element
-for (i = 0; i < 4; i++)
+for (i = 0; i &lt; 4; i++)
     C[i] = A[i] + B[i];
 </code></pre>
       <p class="tiny">Four separate add instructions.</p>
