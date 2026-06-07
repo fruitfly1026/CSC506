@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <!-- course theme -->
-<link rel="stylesheet" href="assets/theme.css?v=7">
+<link rel="stylesheet" href="assets/theme.css?v=8">
 </head>
 <body>
 <div class="reveal">
@@ -26,10 +26,6 @@
   <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
   <h1>GPU Programming &amp; Architecture</h1>
   <div class="sub">Throughput-oriented computing — fundamentals &amp; CUDA examples</div>
-  <div class="meta">
-    A four-lecture unit · Based on Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em> + NVIDIA CUDA<br>
-    <span class="muted">Use ← → to navigate · <strong>S</strong> for speaker notes · <strong>F</strong> fullscreen · <strong>ESC</strong> overview</span>
-  </div>
   <aside class="notes">
     Welcome to the GPU unit. We introduce GPUs early — before classic multicore coherence — because
     Program 2 (CUDA SpMV) builds directly on these ideas. Four modules: (1) architecture &amp; design
@@ -900,6 +896,17 @@ else
   <p class="center muted small">Next up → <strong>multicore memory hierarchy</strong>, then cache coherence &amp; consistency.</p>
 </section>
 
+
+<!-- References -->
+<section data-background-color="#f6f8fb">
+  <h2>References</h2>
+  <ol class="small" style="line-height:1.5">
+    <li>Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em>, Chapman &amp; Hall/CRC, 2015 &mdash; course textbook.</li>
+    <li>NVIDIA, <em>CUDA C++ Programming Guide</em>. https://docs.nvidia.com/cuda/cuda-c-programming-guide/</li>
+    <li>NVIDIA, <em>NVIDIA H100 Tensor Core GPU Architecture</em> (Hopper) white paper, 2022.</li>
+  </ol>
+  <p class="src">This unit adapts the CSC/ECE 506 GPU teaching unit; the vector-add example follows the standard CUDA programming model.</p>
+</section>
 </div>
 
 <!-- deck-level fixed footer (course + unit); slide number is reveal-native -->

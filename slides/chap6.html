@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <!-- course theme -->
-<link rel="stylesheet" href="assets/theme.css?v=7">
+<link rel="stylesheet" href="assets/theme.css?v=8">
 </head>
 <body>
 <div class="reveal">
@@ -26,10 +26,6 @@
   <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
   <h1>Chapter 6</h1>
   <div class="sub">Introduction to Shared Memory Multiprocessors</div>
-  <div class="meta">
-    Fall Semester · Based on Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em><br>
-    <span class="muted">Use ← → to navigate · <strong>S</strong> for speaker notes · <strong>F</strong> fullscreen · <strong>ESC</strong> overview</span>
-  </div>
   <aside class="notes">
     This chapter introduces the shared-memory abstraction: any processor can touch any address with
     an ordinary load/store. That convenience hides three hard support problems we will spend the rest
@@ -661,6 +657,15 @@ while(turn==0 &amp;&amp; interested[1]) {};
   <p class="center muted small">Next up → <strong>Chapter 7:</strong> how cache coherence protocols actually work (snooping &amp; directories).</p>
 </section>
 
+
+<!-- References -->
+<section data-background-color="#f6f8fb">
+  <h2>References</h2>
+  <div class="callout"><span class="lbl">Course textbook</span>
+    Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em>, Chapman &amp; Hall/CRC, 2015.
+    These slides follow and adapt the corresponding chapter of the text.</div>
+  <p class="src">Diagrams and examples were re-drawn for these slides; see the textbook for the full treatment, derivations, and exercises.</p>
+</section>
 </div>
 
 <!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
