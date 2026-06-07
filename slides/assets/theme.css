@@ -248,6 +248,12 @@
 .chart .dot { fill:var(--accent); opacity:.7; }
 .chart .lbl { font-size:13px; }
 .chart .note { fill:var(--ink); font-weight:700; font-size:14px; }
+/* SVG text must use px sizes — the em-based .tiny/.small/.src deck classes
+   blow up to ~18px inside a small viewBox and overlap. Scope them for charts. */
+.reveal .chart text { font-size:12px; }
+.reveal .chart text.tiny { font-size:9px; }
+.reveal .chart text.small { font-size:11px; }
+.reveal .chart text.src { font-size:9px; }
 
 /* fragment helper: dim */
 .reveal .fragment.dim-in { opacity:1; }

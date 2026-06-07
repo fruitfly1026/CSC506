@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <!-- course theme -->
-<link rel="stylesheet" href="assets/theme.css?v=6">
+<link rel="stylesheet" href="assets/theme.css?v=7">
 </head>
 <body>
 <div class="reveal">
@@ -25,17 +25,17 @@
 <section class="title-slide" data-background-color="#ffffff">
   <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
   <h1>Tenstorrent &amp; TT-Metalium</h1>
-  <div class="sub">Tensix architecture and three matrix-multiplication labs</div>
+  <div class="sub">Architecture, programming stack, and matrix-multiplication labs</div>
   <div class="meta">
     Tenstorrent Unit · A throughput accelerator for the post-GPU era<br>
     <span class="muted">Use ← → to navigate · <strong>S</strong> for speaker notes · <strong>F</strong> fullscreen · <strong>ESC</strong> overview</span>
   </div>
   <aside class="notes">
-    This unit introduces Tenstorrent's Tensix architecture and the low-level TT-Metalium
-    programming model, then builds matrix multiplication up through three labs:
-    single-core, multi-core (SPMD), and multi-core with NoC multicast. It parallels the
-    GPU unit's themes — tiles, data movement, and many simple compute engines — and feeds
-    into the course's CUDA SpMV comparison.
+    This unit introduces Tenstorrent's Tensix architecture in depth, then surveys the
+    open-source programming stack (TT-Metalium, TT-NN, TT-Forge / TT-MLIR), and finally
+    builds matrix multiplication up through two TT-Metalium labs: single-core and
+    multi-core (SPMD). It parallels the GPU unit's themes — tiles, explicit data movement,
+    and many simple compute engines — and feeds into the course's CUDA SpMV comparison.
   </aside>
 </section>
 
@@ -43,46 +43,46 @@
 <section data-background-color="#ffffff">
   <h2>Unit Roadmap</h2>
   <div class="cols c3">
-    <div class="callout"><span class="lbl">Module 1</span><strong>Architecture &amp; Model</strong><br>
-      <span class="small">The Tensix core, the grid + NoC, tiles &amp; circular buffers, and the TT-Metalium host API lifecycle.</span></div>
-    <div class="callout"><span class="lbl">Labs 1 &amp; 2</span><strong>Single- &amp; Multi-Core</strong><br>
+    <div class="callout"><span class="lbl">Module 1</span><strong>Architecture</strong><br>
+      <span class="small">The Tensix core, the grid + NoC, the deliberate <em>no-cache</em> design, generations, scale-out, and data formats.</span></div>
+    <div class="callout"><span class="lbl">Module 2</span><strong>Programming Stack</strong><br>
+      <span class="small">From bare-metal TT-Metalium up through TT-NN and the TT-Forge / TT-MLIR compiler — and where the labs sit.</span></div>
+    <div class="callout"><span class="lbl">Labs 1 &amp; 2</span><strong>Matmul on Metalium</strong><br>
       <span class="small">Tiled matmul on one core, then SPMD static work-splitting across a grid of cores.</span></div>
-    <div class="callout"><span class="lbl">Lab 3</span><strong>Multicast Reuse</strong><br>
-      <span class="small">Broadcast input blocks over the NoC to cut DRAM traffic; sender/receiver kernels + semaphores.</span></div>
   </div>
   <div class="callout takeaway"><span class="lbl">The thread that ties it together</span>
-    A Tenstorrent device is a <strong>grid of small RISC-V-driven tile engines</strong> wired by a network-on-chip. Performance comes from <strong>keeping those engines fed</strong> — exactly the data-movement story we saw with GPUs.</div>
+    A Tenstorrent device is a <strong>grid of small RISC-V-driven tile engines</strong> wired by a network-on-chip, with <strong>no cache hierarchy</strong> — performance comes from <strong>explicitly keeping those engines fed</strong>, exactly the data-movement story we saw with GPUs.</div>
 </section>
 
 <!-- ==================================================================
-     MODULE 1 — ARCHITECTURE & TT-METALIUM MODEL
+     MODULE 1 — TENSTORRENT ARCHITECTURE
      ================================================================== -->
 <section class="divider" data-background-color="#ffffff">
   <div class="mod-num">Module 1</div>
-  <div class="mod-title">Tenstorrent Architecture &amp; the TT-Metalium Model</div>
+  <div class="mod-title">Tenstorrent Architecture</div>
   <div class="objectives" style="margin-top:1em;">
     <h4>By the end you can…</h4>
     <ul>
-      <li>Describe the <strong>Tensix core</strong>: L1 SRAM, two NoC routers, compute engine, five RISC-V cores</li>
-      <li>Explain the <strong>grid + NoC</strong> and the host ↔ device DRAM data flow over PCIe</li>
-      <li>Reason about <strong>32×32 tiles</strong>, tiled layout, and <strong>circular buffers</strong> (L1 FIFOs)</li>
-      <li>Walk the <strong>TT-Metalium host API lifecycle</strong> from device open to result read-back</li>
+      <li>State the <strong>design philosophy</strong>: a grid of Tensix cores on a NoC, tile-based, with <strong>no cache hierarchy</strong></li>
+      <li>Describe the <strong>Tensix core internals</strong>: 5 RISC-V cores, FPU / SFPU / ThCon engines, 2 NoC routers, L1 SRAM</li>
+      <li>Compare the <strong>Grayskull / Wormhole / Blackhole</strong> generations and the Ethernet scale-out story</li>
+      <li>Explain <strong>distributed directly-addressable SRAM</strong>, the 2-D torus NoC, and the AI <strong>data formats</strong></li>
     </ul>
   </div>
 </section>
 
-<!-- What kind of accelerator -->
+<!-- Design philosophy -->
 <section data-background-color="#ffffff">
-  <h2>A Tile-Based Throughput Accelerator</h2>
+  <h2>Design Philosophy: A Grid, Not a Hierarchy</h2>
   <div class="cols w-64">
     <div>
-      <p>Tenstorrent is a <strong>PCIe accelerator</strong> with its own DRAM, separate from host memory — like a GPU, but the compute fabric is a <strong>grid of programmable Tensix cores</strong> connected by a network-on-chip (NoC).</p>
+      <p>Tenstorrent is a <strong>throughput AI accelerator</strong> built from a homogeneous <strong>grid of Tensix cores</strong> on a 2-D <strong>Network-on-Chip (NoC)</strong>. Work is expressed on <strong>32×32 tiles</strong>, not scalars.</p>
       <ul class="small">
-        <li>Work is expressed on <strong>32×32 tiles</strong>, not scalars</li>
-        <li>Each core runs explicit <strong>reader / compute / writer</strong> programs</li>
-        <li>You program data movement <em>directly</em> — nothing is implicit</li>
+        <li><strong>No cache hierarchy</strong> — a deliberate choice. There is no L2/L3, no coherence protocol.</li>
+        <li>Instead: large <strong>distributed SRAM</strong>, directly addressable across the chip — any component can read any core's SRAM over the NoC.</li>
+        <li>Data movement is <strong>explicit and programmer-controlled</strong>, never implicit caching.</li>
       </ul>
-      <div class="callout"><span class="lbl">TT-Metalium</span>The low-level C++ host + kernel API. You place buffers, define circular buffers, and launch kernels on specific cores.</div>
+      <div class="callout"><span class="lbl">Why drop caches?</span>Caches spend area and power guessing reuse. For dense tensor work the reuse pattern is <em>known</em>, so the programmer schedules it directly.</div>
     </div>
     <div class="center">
       <svg viewBox="0 0 240 200" class="chart" style="max-width:300px">
@@ -98,167 +98,507 @@
         </g>
         <text x="114" y="98" text-anchor="middle" style="fill:#fff;font-size:9px;font-weight:700">grid of Tensix cores</text>
         <rect x="22" y="164" width="184" height="22" rx="5" fill="#22c55e" stroke="#15803d"/>
-        <text x="114" y="179" text-anchor="middle" style="fill:#052e16;font-size:10px;font-weight:700">device DRAM</text>
+        <text x="114" y="179" text-anchor="middle" style="fill:#052e16;font-size:10px;font-weight:700">device DRAM + Ethernet edges</text>
       </svg>
-      <div class="src">Grid of Tensix cores + NoC, backed by device DRAM.</div>
+      <div class="src">Grid of Tensix cores + NoC, backed by device DRAM, with Ethernet links at the edges.</div>
     </div>
   </div>
 </section>
 
-<!-- The Tensix core -->
+<!-- No-cache contrast -->
+<section data-background-color="#ffffff">
+  <h2>No Cache: Distributed SRAM over the NoC</h2>
+  <div class="cols">
+    <div class="center">
+      <svg viewBox="0 0 230 200" class="chart" style="max-width:280px">
+        <text x="115" y="16" text-anchor="middle" class="note" style="fill:#0f172a">CPU / GPU</text>
+        <rect x="40" y="26" width="150" height="22" rx="4" fill="#e2e8f0" stroke="#475569"/>
+        <text x="115" y="41" text-anchor="middle" class="tiny">cores</text>
+        <rect x="55" y="56" width="120" height="20" rx="4" fill="#dbeafe" stroke="#1d4ed8"/>
+        <text x="115" y="70" text-anchor="middle" class="tiny">L1 / L2</text>
+        <rect x="70" y="84" width="90" height="20" rx="4" fill="#bfdbfe" stroke="#1d4ed8"/>
+        <text x="115" y="98" text-anchor="middle" class="tiny">L3 (shared, coherent)</text>
+        <rect x="55" y="112" width="120" height="20" rx="4" fill="#94a3b8" stroke="#475569"/>
+        <text x="115" y="126" text-anchor="middle" class="tiny" style="fill:#fff">DRAM</text>
+        <text x="115" y="150" text-anchor="middle" class="tiny" style="fill:#991b1b">implicit caching + coherence</text>
+      </svg>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 230 200" class="chart" style="max-width:280px">
+        <text x="115" y="16" text-anchor="middle" class="note" style="fill:#0f172a">Tenstorrent</text>
+        <g fill="#fef3c7" stroke="#f59e0b">
+          <rect x="24" y="28" width="56" height="34" rx="5"/><rect x="88" y="28" width="56" height="34" rx="5"/><rect x="152" y="28" width="56" height="34" rx="5"/>
+          <rect x="24" y="70" width="56" height="34" rx="5"/><rect x="88" y="70" width="56" height="34" rx="5"/><rect x="152" y="70" width="56" height="34" rx="5"/>
+        </g>
+        <text x="52"  y="48" text-anchor="middle" class="tiny">L1 SRAM</text><text x="116" y="48" text-anchor="middle" class="tiny">L1 SRAM</text><text x="180" y="48" text-anchor="middle" class="tiny">L1 SRAM</text>
+        <text x="52"  y="90" text-anchor="middle" class="tiny">L1 SRAM</text><text x="116" y="90" text-anchor="middle" class="tiny">L1 SRAM</text><text x="180" y="90" text-anchor="middle" class="tiny">L1 SRAM</text>
+        <rect x="24" y="120" width="184" height="20" rx="4" fill="#dcfce7" stroke="#16a34a"/>
+        <text x="116" y="134" text-anchor="middle" class="tiny" style="font-weight:700">2-D NoC — any core reads any SRAM</text>
+        <text x="116" y="158" text-anchor="middle" class="tiny" style="fill:#16a34a">explicit, programmer-scheduled moves</text>
+      </svg>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The trade</span>A CPU/GPU hides the memory hierarchy behind caches and coherence. Tenstorrent <strong>exposes a flat sea of SRAM</strong> over the NoC — more programmer work, but full control and no coherence overhead.</div>
+</section>
+
+<!-- Tensix core internals -->
 <section data-background-color="#ffffff">
   <h2>Inside One Tensix Core</h2>
   <div class="cols w-64">
     <div class="center">
-      <svg viewBox="0 0 300 220" class="chart" style="max-width:360px">
-        <rect x="6" y="6" width="288" height="208" rx="12" fill="#f8fafc" stroke="#0f172a" stroke-width="2"/>
-        <text x="150" y="24" text-anchor="middle" class="note" style="fill:#0f172a">Tensix core</text>
+      <svg viewBox="0 0 300 232" class="chart" style="max-width:360px">
+        <rect x="6" y="6" width="288" height="220" rx="12" fill="#f8fafc" stroke="#0f172a" stroke-width="2"/>
+        <text x="150" y="22" text-anchor="middle" class="note" style="fill:#0f172a">Tensix core</text>
         <!-- L1 SRAM -->
-        <rect x="20" y="34" width="120" height="40" rx="6" fill="#fef3c7" stroke="#f59e0b"/>
-        <text x="80" y="52" text-anchor="middle" class="lbl">L1 SRAM</text>
-        <text x="80" y="66" text-anchor="middle" class="tiny">CB tiles + kernel code</text>
+        <rect x="20" y="30" width="120" height="36" rx="6" fill="#fef3c7" stroke="#f59e0b"/>
+        <text x="80" y="46" text-anchor="middle" class="lbl">L1 SRAM ~1–1.5 MB</text>
+        <text x="80" y="60" text-anchor="middle" class="tiny">CB tiles + kernel code</text>
         <!-- compute engine -->
-        <rect x="160" y="34" width="120" height="40" rx="6" fill="#dbeafe" stroke="#1d4ed8"/>
-        <text x="220" y="52" text-anchor="middle" class="lbl">Tensix engine</text>
-        <text x="220" y="66" text-anchor="middle" class="tiny">matrix / vector tile ops</text>
+        <rect x="160" y="30" width="120" height="36" rx="6" fill="#dbeafe" stroke="#1d4ed8"/>
+        <text x="220" y="46" text-anchor="middle" class="lbl">compute engine</text>
+        <text x="220" y="60" text-anchor="middle" class="tiny">FPU · SFPU · ThCon</text>
+        <!-- engine breakdown -->
+        <g fill="#bfdbfe" stroke="#1d4ed8">
+          <rect x="20" y="74" width="84" height="30" rx="5"/><rect x="108" y="74" width="84" height="30" rx="5"/><rect x="196" y="74" width="84" height="30" rx="5"/>
+        </g>
+        <text x="62"  y="88" text-anchor="middle" class="tiny" style="font-weight:700">FPU</text><text x="62"  y="100" text-anchor="middle" class="tiny">matrix 32×32</text>
+        <text x="150" y="88" text-anchor="middle" class="tiny" style="font-weight:700">SFPU</text><text x="150" y="100" text-anchor="middle" class="tiny">vector</text>
+        <text x="238" y="88" text-anchor="middle" class="tiny" style="font-weight:700">ThCon</text><text x="238" y="100" text-anchor="middle" class="tiny">scalar/pack</text>
         <!-- five RISC-V -->
         <g fill="#ede9fe" stroke="#8b5cf6">
-          <rect x="20" y="92" width="48" height="40" rx="5"/><rect x="72" y="92" width="48" height="40" rx="5"/>
-          <rect x="124" y="92" width="48" height="40" rx="5"/><rect x="176" y="92" width="48" height="40" rx="5"/>
-          <rect x="228" y="92" width="48" height="40" rx="5"/>
+          <rect x="20" y="112" width="48" height="40" rx="5"/><rect x="72" y="112" width="48" height="40" rx="5"/>
+          <rect x="124" y="112" width="48" height="40" rx="5"/><rect x="176" y="112" width="48" height="40" rx="5"/>
+          <rect x="228" y="112" width="48" height="40" rx="5"/>
         </g>
-        <text x="44"  y="110" text-anchor="middle" class="tiny" style="font-weight:700">RV 0</text><text x="44"  y="124" text-anchor="middle" class="tiny">reader</text>
-        <text x="96"  y="110" text-anchor="middle" class="tiny" style="font-weight:700">RV 1</text><text x="96"  y="124" text-anchor="middle" class="tiny">compute</text>
-        <text x="148" y="110" text-anchor="middle" class="tiny" style="font-weight:700">RV 2</text><text x="148" y="124" text-anchor="middle" class="tiny">compute</text>
-        <text x="200" y="110" text-anchor="middle" class="tiny" style="font-weight:700">RV 3</text><text x="200" y="124" text-anchor="middle" class="tiny">compute</text>
-        <text x="252" y="110" text-anchor="middle" class="tiny" style="font-weight:700">RV 4</text><text x="252" y="124" text-anchor="middle" class="tiny">writer</text>
+        <text x="44"  y="130" text-anchor="middle" class="tiny" style="font-weight:700">RV 0</text><text x="44"  y="144" text-anchor="middle" class="tiny">reader</text>
+        <text x="96"  y="130" text-anchor="middle" class="tiny" style="font-weight:700">RV 1</text><text x="96"  y="144" text-anchor="middle" class="tiny">compute</text>
+        <text x="148" y="130" text-anchor="middle" class="tiny" style="font-weight:700">RV 2</text><text x="148" y="144" text-anchor="middle" class="tiny">compute</text>
+        <text x="200" y="130" text-anchor="middle" class="tiny" style="font-weight:700">RV 3</text><text x="200" y="144" text-anchor="middle" class="tiny">compute</text>
+        <text x="252" y="130" text-anchor="middle" class="tiny" style="font-weight:700">RV 4</text><text x="252" y="144" text-anchor="middle" class="tiny">writer</text>
         <!-- routers -->
-        <rect x="20" y="150" width="125" height="34" rx="6" fill="#dcfce7" stroke="#16a34a"/>
-        <text x="82" y="171" text-anchor="middle" class="lbl">NoC router 0</text>
-        <rect x="155" y="150" width="125" height="34" rx="6" fill="#dcfce7" stroke="#16a34a"/>
-        <text x="217" y="171" text-anchor="middle" class="lbl">NoC router 1</text>
+        <rect x="20" y="160" width="125" height="34" rx="6" fill="#dcfce7" stroke="#16a34a"/>
+        <text x="82" y="181" text-anchor="middle" class="lbl">NoC router 0</text>
+        <rect x="155" y="160" width="125" height="34" rx="6" fill="#dcfce7" stroke="#16a34a"/>
+        <text x="217" y="181" text-anchor="middle" class="lbl">NoC router 1</text>
       </svg>
     </div>
     <div>
       <ul class="small">
-        <li><strong>L1 SRAM</strong> — fast local memory; holds CB tiles + kernel code</li>
-        <li><strong>2 NoC routers</strong> — move data L1 ↔ DRAM ↔ neighbor cores</li>
-        <li><strong>Tensix compute engine</strong> — matrix &amp; vector tile math</li>
-        <li><strong>5 RISC-V "baby" cores:</strong>
-          <ul class="tiny">
-            <li><strong>RV 0 &amp; RV 4</strong> drive the routers → reader / writer data-movement kernels</li>
-            <li><strong>RV 1–3</strong> drive the compute engine → compute kernel</li>
-          </ul>
-        </li>
+        <li><strong>5 "baby" RISC-V cores:</strong> RV 0 = data-in / <em>reader</em>, RV 4 = data-out / <em>writer</em>, RV 1–3 drive the <em>compute</em> engine</li>
+        <li><strong>Compute engine, 3 units:</strong> <strong>FPU</strong> = matrix engine (32×32 tile matmul), <strong>SFPU</strong> = vector engine, <strong>ThCon</strong> = scalar / packer-unpacker</li>
+        <li><strong>2 NoC routers</strong> — two independent NoCs for L1 ↔ DRAM ↔ neighbor traffic</li>
+        <li><strong>~1–1.5 MB local SRAM</strong> (L1) — no per-core cache</li>
       </ul>
-      <div class="callout"><span class="lbl">Division of labor</span>Three kernel <em>roles</em> per core map onto distinct RISC-V cores running concurrently.</div>
+      <div class="callout"><span class="lbl">Division of labor</span>Three kernel <em>roles</em> (reader / compute / writer) map onto distinct RISC-V cores running concurrently.</div>
     </div>
   </div>
 </section>
 
-<!-- Host <-> device flow -->
+<!-- Generations -->
 <section data-background-color="#ffffff">
-  <h2>Host ↔ Device Data Flow</h2>
+  <h2>Three Generations</h2>
+  <table>
+    <tr><th>Generation</th><th>Core</th><th>Tensix cores</th><th>Node</th><th>What it added</th></tr>
+    <tr><td><strong>Grayskull</strong> (1st)</td><td>Tensix</td><td>~120</td><td>12 nm</td><td>First Tensix grid; PCIe accelerator</td></tr>
+    <tr><td class="hi"><strong>Wormhole</strong> (2nd)</td><td>Tensix+</td><td>~80</td><td>12 nm</td><td class="hi"><strong>16 × 100 GbE</strong> ports → chip-to-chip <strong>scale-out</strong></td></tr>
+    <tr><td><strong>Blackhole</strong> (3rd)</td><td>Tensix++</td><td>~140</td><td>6 nm</td><td><strong>16 "big" RISC-V cores</strong> so the chip manages its own data movement</td></tr>
+  </table>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Scale-out, not scale-up</span>Rather than one giant die, Wormhole adds Ethernet so many chips link into meshes — a deliberate scale-OUT philosophy.</div>
+    <div class="callout ok"><span class="lbl">Self-managing host path</span>Blackhole's big RISC-V cores cut host round-trips: the device can orchestrate more of its own data movement.</div>
+  </div>
+  <div class="center" style="margin-top:.4em">
+    <svg viewBox="0 0 520 70" class="chart" style="max-width:640px">
+      <line x1="20" y1="40" x2="500" y2="40" class="axis"/>
+      <circle cx="90" cy="40" r="7" fill="#3b82f6"/><text x="90" y="26" text-anchor="middle" class="tiny" style="font-weight:700">Grayskull</text><text x="90" y="60" text-anchor="middle" class="tiny">12 nm · PCIe</text>
+      <circle cx="260" cy="40" r="7" fill="#dc2626"/><text x="260" y="26" text-anchor="middle" class="tiny" style="font-weight:700">Wormhole</text><text x="260" y="60" text-anchor="middle" class="tiny">+ 100 GbE scale-out</text>
+      <circle cx="430" cy="40" r="7" fill="#16a34a"/><text x="430" y="26" text-anchor="middle" class="tiny" style="font-weight:700">Blackhole</text><text x="430" y="60" text-anchor="middle" class="tiny">6 nm · + big RISC-V</text>
+    </svg>
+  </div>
+</section>
+
+<!-- Grid + NoC -->
+<section data-background-color="#ffffff">
+  <h2>The Grid &amp; the 2-D Torus NoC</h2>
   <div class="cols w-64">
-    <div class="center">
-      <svg viewBox="0 0 360 170" class="chart">
-        <rect x="10" y="50" width="80" height="60" rx="8" fill="#e2e8f0" stroke="#475569"/>
-        <text x="50" y="76" text-anchor="middle" class="lbl">Host</text>
-        <text x="50" y="92" text-anchor="middle" class="tiny">CPU + RAM</text>
-        <rect x="135" y="50" width="80" height="60" rx="8" fill="#dcfce7" stroke="#16a34a"/>
-        <text x="175" y="76" text-anchor="middle" class="lbl">Device</text>
-        <text x="175" y="92" text-anchor="middle" class="tiny">DRAM</text>
-        <rect x="260" y="50" width="90" height="60" rx="8" fill="#dbeafe" stroke="#1d4ed8"/>
-        <text x="305" y="72" text-anchor="middle" class="lbl">Tensix</text>
-        <text x="305" y="86" text-anchor="middle" class="tiny">L1 + engine</text>
-        <text x="305" y="100" text-anchor="middle" class="tiny">core grid</text>
-        <!-- arrows -->
-        <line x1="90" y1="70" x2="133" y2="70" class="axis" marker-end="url(#ar)"/>
-        <text x="112" y="62" text-anchor="middle" class="tiny">PCIe</text>
-        <line x1="215" y1="70" x2="258" y2="70" class="axis" marker-end="url(#ar)"/>
-        <text x="236" y="62" text-anchor="middle" class="tiny">NoC</text>
-        <line x1="258" y1="92" x2="215" y2="92" class="axis" marker-end="url(#ar)"/>
-        <text x="236" y="108" text-anchor="middle" class="tiny">results</text>
-        <line x1="133" y1="92" x2="90" y2="92" class="axis" marker-end="url(#ar)"/>
-        <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#475569"/></marker></defs>
-      </svg>
-      <div class="src">Host → DRAM over PCIe → cores pull into L1 → compute → results back.</div>
-    </div>
     <div>
-      <ol class="small">
-        <li>Host writes inputs to <strong>device DRAM</strong> over PCIe</li>
-        <li>Reader kernels pull tiles <strong>DRAM → L1</strong> via the NoC</li>
-        <li>Compute kernel processes <strong>L1 → L1</strong> on the Tensix engine</li>
-        <li>Writer kernels push results <strong>L1 → DRAM</strong></li>
-        <li>Host reads outputs back <strong>DRAM → host</strong></li>
-      </ol>
-      <div class="callout warn"><span class="lbl">Key cost</span>Device DRAM is far; <strong>L1 is near</strong>. Every lab is about moving fewer, larger tiles and reusing them in L1.</div>
+      <p>A device is a 2-D grid of elements — e.g. roughly <strong>10×12</strong> on Wormhole, of which ~80 are designated <strong>Tensix compute cores</strong> (the rest are DRAM, Ethernet, and PCIe tiles).</p>
+      <ul class="small">
+        <li>A <strong>2-D torus NoC</strong> wraps edges so traffic has no dead ends</li>
+        <li>It moves <strong>tiles</strong> between cores and between cores and DRAM</li>
+        <li>Every core can reach <strong>any SRAM on the chip</strong> — the basis for Lab 2's multi-core split and reuse patterns</li>
+      </ul>
+      <div class="callout"><span class="lbl">Two NoCs</span>The two routers per core form <strong>two independent NoCs</strong>, so reads and writes can use separate networks and run in opposite directions.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 220 200" class="chart" style="max-width:260px">
+        <g fill="#dbeafe" stroke="#1d4ed8">
+          <rect x="30" y="30" width="34" height="34" rx="4"/><rect x="74" y="30" width="34" height="34" rx="4"/><rect x="118" y="30" width="34" height="34" rx="4"/><rect x="162" y="30" width="34" height="34" rx="4"/>
+          <rect x="30" y="74" width="34" height="34" rx="4"/><rect x="74" y="74" width="34" height="34" rx="4"/><rect x="118" y="74" width="34" height="34" rx="4"/><rect x="162" y="74" width="34" height="34" rx="4"/>
+          <rect x="30" y="118" width="34" height="34" rx="4"/><rect x="74" y="118" width="34" height="34" rx="4"/><rect x="118" y="118" width="34" height="34" rx="4"/><rect x="162" y="118" width="34" height="34" rx="4"/>
+        </g>
+        <g stroke="#16a34a" stroke-width="1.5" fill="none">
+          <line x1="47" y1="64" x2="47" y2="74"/><line x1="91" y1="64" x2="91" y2="74"/><line x1="135" y1="64" x2="135" y2="74"/><line x1="179" y1="64" x2="179" y2="74"/>
+          <line x1="47" y1="108" x2="47" y2="118"/><line x1="91" y1="108" x2="91" y2="118"/><line x1="135" y1="108" x2="135" y2="118"/><line x1="179" y1="108" x2="179" y2="118"/>
+          <line x1="64" y1="47" x2="74" y2="47"/><line x1="108" y1="47" x2="118" y2="47"/><line x1="152" y1="47" x2="162" y2="47"/>
+          <line x1="64" y1="135" x2="74" y2="135"/><line x1="108" y1="135" x2="118" y2="135"/><line x1="152" y1="135" x2="162" y2="135"/>
+        </g>
+        <!-- torus wrap arcs -->
+        <path d="M30 47 C12 47 12 135 30 135" stroke="#dc2626" stroke-dasharray="3 3" fill="none"/>
+        <path d="M196 47 C214 47 214 135 196 135" stroke="#dc2626" stroke-dasharray="3 3" fill="none"/>
+        <text x="113" y="178" text-anchor="middle" class="lbl">2-D torus NoC</text>
+      </svg>
+      <div class="src">Cores wired by a torus NoC; red dashed = wrap-around edges.</div>
     </div>
   </div>
 </section>
 
-<!-- Tiles and tiled layout -->
+<!-- Scale-out / Galaxy -->
 <section data-background-color="#ffffff">
-  <h2>Tiles &amp; the Tiled Layout</h2>
+  <h2>Ethernet Scale-Out &amp; Galaxy</h2>
+  <div class="cols w-64">
+    <div>
+      <p>Starting with Wormhole, each chip carries <strong>16 × 100 Gb Ethernet</strong> ports. Chips link directly into large 2-D meshes — the on-chip NoC effectively extends <strong>across chips</strong>.</p>
+      <ul class="small">
+        <li>A core on one chip can stream tiles to a core on another over Ethernet</li>
+        <li>Many chips combine into <strong>"Galaxy"</strong> systems for very large models</li>
+        <li>Philosophy: <strong>scale OUT</strong> with commodity links, not a single giant die</li>
+      </ul>
+      <div class="callout takeaway"><span class="lbl">One programming model, many scales</span>The same tile + NoC abstraction spans a single core, a full chip, and a multi-chip Galaxy.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 220 180" class="chart" style="max-width:260px">
+        <g fill="#dbeafe" stroke="#1d4ed8">
+          <rect x="20" y="24" width="64" height="48" rx="6"/><rect x="136" y="24" width="64" height="48" rx="6"/>
+          <rect x="20" y="104" width="64" height="48" rx="6"/><rect x="136" y="104" width="64" height="48" rx="6"/>
+        </g>
+        <text x="52"  y="52" text-anchor="middle" class="tiny">chip</text><text x="168" y="52" text-anchor="middle" class="tiny">chip</text>
+        <text x="52" y="132" text-anchor="middle" class="tiny">chip</text><text x="168" y="132" text-anchor="middle" class="tiny">chip</text>
+        <g stroke="#16a34a" stroke-width="2">
+          <line x1="84" y1="48" x2="136" y2="48"/><line x1="84" y1="128" x2="136" y2="128"/>
+          <line x1="52" y1="72" x2="52" y2="104"/><line x1="168" y1="72" x2="168" y2="104"/>
+        </g>
+        <text x="110" y="40" text-anchor="middle" class="tiny" style="fill:#16a34a">100 GbE</text>
+        <text x="110" y="172" text-anchor="middle" class="lbl">mesh → "Galaxy"</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Data formats -->
+<section data-background-color="#ffffff">
+  <h2>Flexible AI Data Formats</h2>
   <div class="cols">
     <div>
-      <p>Tensix hardware operates on <strong>32×32 tiles</strong>, not individual elements. A matrix is reshaped into a grid of tiles:</p>
-      <div class="eq small">\( M_t = M/32,\quad K_t = K/32,\quad N_t = N/32 \)</div>
+      <p>The engines support a wide range of precisions so models trade accuracy for throughput and SRAM footprint:</p>
       <ul class="small">
-        <li>Tile size (bf16): \( 2 \times 32 \times 32 = 2048\) bytes</li>
-        <li>Within a tile, elements are <strong>contiguous</strong></li>
-        <li>Tiles are stored <strong>row-major</strong> across the matrix</li>
+        <li><strong>Float:</strong> FP32, TF32, FP16, BF16, FP8</li>
+        <li><strong>Integer:</strong> INT8, INT32</li>
+        <li><strong>Block-float:</strong> BLOCKFP2 / 4 / 8 — a shared exponent across a tile block for compact storage</li>
       </ul>
-      <div class="callout"><span class="lbl">Why tiles?</span>A tile is the natural unit the engine multiplies, the NoC moves, and a CB buffers.</div>
+      <div class="callout"><span class="lbl">Why it matters for the labs</span>The labs use <strong>BF16</strong> inputs, so results are <em>approximate</em> — we validate with a Pearson-correlation threshold, not bit-exact equality.</div>
     </div>
     <div class="center">
-      <svg viewBox="0 0 200 180" class="chart" style="max-width:240px">
-        <g fill="#dbeafe" stroke="#1d4ed8">
-          <rect x="20" y="20" width="40" height="40"/><rect x="62" y="20" width="40" height="40"/><rect x="104" y="20" width="40" height="40"/>
-          <rect x="20" y="62" width="40" height="40"/><rect x="62" y="62" width="40" height="40"/><rect x="104" y="62" width="40" height="40"/>
-          <rect x="20" y="104" width="40" height="40"/><rect x="62" y="104" width="40" height="40"/><rect x="104" y="104" width="40" height="40"/>
-        </g>
-        <text x="40" y="44" text-anchor="middle" class="tiny">0</text><text x="82" y="44" text-anchor="middle" class="tiny">1</text><text x="124" y="44" text-anchor="middle" class="tiny">2</text>
-        <text x="40" y="86" text-anchor="middle" class="tiny">3</text><text x="82" y="86" text-anchor="middle" class="tiny">4</text><text x="124" y="86" text-anchor="middle" class="tiny">5</text>
-        <text x="40" y="128" text-anchor="middle" class="tiny">6</text><text x="82" y="128" text-anchor="middle" class="tiny">7</text><text x="124" y="128" text-anchor="middle" class="tiny">8</text>
-        <text x="82" y="170" text-anchor="middle" class="lbl">tile id = row·N_t + col</text>
-      </svg>
-      <div class="src">Each cell is a 32×32 tile; row-major tile ids.</div>
+      <table class="small">
+        <tr><th>Format</th><th>Bits</th><th>Use</th></tr>
+        <tr><td>FP32</td><td>32</td><td>reference / accumulate</td></tr>
+        <tr><td>TF32</td><td>19</td><td>fast matmul</td></tr>
+        <tr><td class="hi">BF16</td><td class="hi">16</td><td class="hi">labs' default</td></tr>
+        <tr><td>FP16</td><td>16</td><td>inference</td></tr>
+        <tr><td>FP8</td><td>8</td><td>low-precision</td></tr>
+        <tr><td>BlockFP</td><td>2/4/8</td><td>compact tiles</td></tr>
+      </table>
     </div>
   </div>
 </section>
 
-<!-- Tiled matmul math -->
+<!-- Tiles + tiled matmul -->
 <section data-background-color="#ffffff">
-  <h2>Matmul as Tile Accumulation</h2>
-  <div class="cols w-64">
+  <h2>Tiles &amp; Matmul as Tile Accumulation</h2>
+  <div class="cols">
+    <div>
+      <p>Tensix hardware operates on <strong>32×32 tiles</strong>. A matrix is reshaped into a grid of tiles:</p>
+      <div class="eq small">\( M_t = M/32,\quad K_t = K/32,\quad N_t = N/32 \)</div>
+      <p class="small">Each output C-tile is a <strong>sum of tile-products</strong> along K:</p>
+      <div class="eq">\( C_{mt,nt} = \sum_{kt=0}^{K_t-1} A_{mt,kt}\, B_{kt,nt} \)</div>
+      <ul class="small">
+        <li>A tile (bf16) = \( 2 \times 32 \times 32 = 2048\) bytes; tiles stored row-major</li>
+        <li>A index = <code class="inline">mt*Kt + kt</code>; B index = <code class="inline">kt*Nt + nt</code></li>
+      </ul>
+    </div>
     <div class="center">
-      <svg viewBox="0 0 320 170" class="chart">
-        <!-- A -->
-        <rect x="10" y="40" width="90" height="40" fill="#fef3c7" stroke="#f59e0b"/>
-        <text x="55" y="35" text-anchor="middle" class="tiny">A (M_t × K_t)</text>
-        <line x1="10" y1="60" x2="100" y2="60" stroke="#f59e0b" stroke-dasharray="3 3"/>
-        <text x="115" y="64" text-anchor="middle" class="lbl">×</text>
-        <!-- B -->
-        <rect x="130" y="20" width="40" height="90" fill="#dcfce7" stroke="#16a34a"/>
-        <text x="150" y="15" text-anchor="middle" class="tiny">B (K_t × N_t)</text>
-        <line x1="150" y1="20" x2="150" y2="110" stroke="#16a34a" stroke-dasharray="3 3"/>
-        <text x="190" y="64" text-anchor="middle" class="lbl">=</text>
-        <!-- C -->
-        <rect x="210" y="40" width="40" height="40" fill="#dbeafe" stroke="#1d4ed8"/>
-        <text x="230" y="35" text-anchor="middle" class="tiny">C tile</text>
-        <text x="230" y="64" text-anchor="middle" class="tiny" style="font-weight:700">(mt,nt)</text>
-        <text x="160" y="150" text-anchor="middle" class="note">C[mt,nt] = Σ over kt of A[mt,kt] · B[kt,nt]</text>
+      <svg viewBox="0 0 320 180" class="chart">
+        <rect x="10" y="50" width="90" height="40" fill="#fef3c7" stroke="#f59e0b"/>
+        <text x="55" y="45" text-anchor="middle" class="tiny">A (M_t × K_t)</text>
+        <line x1="10" y1="70" x2="100" y2="70" stroke="#f59e0b" stroke-dasharray="3 3"/>
+        <text x="115" y="74" text-anchor="middle" class="lbl">×</text>
+        <rect x="130" y="30" width="40" height="90" fill="#dcfce7" stroke="#16a34a"/>
+        <text x="150" y="25" text-anchor="middle" class="tiny">B (K_t × N_t)</text>
+        <line x1="150" y1="30" x2="150" y2="120" stroke="#16a34a" stroke-dasharray="3 3"/>
+        <text x="190" y="74" text-anchor="middle" class="lbl">=</text>
+        <rect x="210" y="50" width="40" height="40" fill="#dbeafe" stroke="#1d4ed8"/>
+        <text x="230" y="45" text-anchor="middle" class="tiny">C tile</text>
+        <text x="230" y="74" text-anchor="middle" class="tiny" style="font-weight:700">(mt,nt)</text>
+        <text x="160" y="160" text-anchor="middle" class="note">C[mt,nt] = Σ over kt of A[mt,kt] · B[kt,nt]</text>
+      </svg>
+      <div class="src">Inner loop over kt accumulates into one register tile.</div>
+    </div>
+  </div>
+</section>
+
+<!-- CPU/GPU vs Tenstorrent contrast -->
+<section data-background-color="#ffffff">
+  <h2>CPU / GPU vs. Tenstorrent</h2>
+  <table>
+    <tr><th></th><th>CPU</th><th>GPU</th><th>Tenstorrent</th></tr>
+    <tr><td><strong>Compute unit</strong></td><td>few fat cores</td><td>many SIMT lanes</td><td class="hi">grid of Tensix tile engines</td></tr>
+    <tr><td><strong>On-chip memory</strong></td><td>L1/L2/L3 cache</td><td>cache + shared mem</td><td class="hi">distributed SRAM, no cache</td></tr>
+    <tr><td><strong>Coherence</strong></td><td>hardware protocol</td><td>limited</td><td class="hi">none — flat SRAM over NoC</td></tr>
+    <tr><td><strong>Data movement</strong></td><td>implicit (caching)</td><td>mostly implicit</td><td class="hi">explicit, programmer-controlled</td></tr>
+    <tr><td><strong>Scheduling</strong></td><td>OS / OoO</td><td>dynamic block scheduler</td><td class="hi">static SPMD at launch</td></tr>
+    <tr><td><strong>Scale-out</strong></td><td>NUMA sockets</td><td>NVLink / PCIe</td><td class="hi">on-chip NoC over Ethernet</td></tr>
+  </table>
+  <div class="callout takeaway"><span class="lbl">In one line</span>Tenstorrent pushes the memory hierarchy and the scheduler <strong>out of hardware and into the program</strong> — that is exactly what the labs make you do by hand.</div>
+</section>
+
+<!-- Review Module 1 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 1 — Review</h2>
+  <div class="qa">
+    <p class="q">1. Why does Tenstorrent have no cache hierarchy, and what replaces it?</p>
+    <div class="fragment"><div class="a">For dense tensor work the reuse pattern is known, so caches waste area/power and add coherence overhead. Instead the chip exposes large distributed L1 SRAM that any core can address over the NoC, with data movement scheduled explicitly by the program.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. What are the five RISC-V cores and the three compute units in a Tensix core?</p>
+    <div class="fragment"><div class="a">RV 0 = reader, RV 4 = writer, RV 1–3 drive compute. The compute engine has the FPU (32×32 matrix), SFPU (vector), and ThCon (scalar / pack-unpack), plus ~1–1.5 MB L1 and two NoC routers.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. What did Wormhole and Blackhole each add over Grayskull?</p>
+    <div class="fragment"><div class="a">Wormhole added 16 × 100 GbE ports for chip-to-chip scale-out (meshes / Galaxy). Blackhole moved to 6 nm and added 16 "big" RISC-V cores so the device manages more of its own data movement, cutting host round-trips.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 2 — THE PROGRAMMING STACK
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 2</div>
+  <div class="mod-title">The Programming Stack</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Place the layers: <strong>Hardware → TT-Metalium → TT-NN → TT-Forge / TT-MLIR</strong> + runtime tools</li>
+      <li>Describe what each layer does and which problems it solves</li>
+      <li>Explain the <strong>TT-MLIR</strong> dialects and passes that lower a model down to Metalium</li>
+      <li>Say <strong>where the labs sit</strong> and why an open / RISC-V stack matters vs. closed CUDA</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Layered stack diagram -->
+<section data-background-color="#ffffff">
+  <h2>The Layered Stack</h2>
+  <div class="cols w-37">
+    <div class="center">
+      <svg viewBox="0 0 300 240" class="chart" style="max-width:340px">
+        <rect x="30" y="14" width="240" height="34" rx="6" fill="#ede9fe" stroke="#8b5cf6"/>
+        <text x="150" y="32" text-anchor="middle" class="lbl">TT-Forge / TT-MLIR</text>
+        <text x="150" y="44" text-anchor="middle" class="tiny">compiler: PyTorch / JAX / TF → Metalium</text>
+        <rect x="30" y="56" width="240" height="34" rx="6" fill="#dbeafe" stroke="#1d4ed8"/>
+        <text x="150" y="74" text-anchor="middle" class="lbl">TT-NN</text>
+        <text x="150" y="86" text-anchor="middle" class="tiny">Python op library (PyTorch-like)</text>
+        <rect x="30" y="98" width="240" height="40" rx="6" fill="#dcfce7" stroke="#16a34a"/>
+        <text x="150" y="116" text-anchor="middle" class="lbl">TT-Metalium</text>
+        <text x="150" y="128" text-anchor="middle" class="tiny">low-level C++ SDK · TT-LLK kernels</text>
+        <rect x="30" y="146" width="240" height="44" rx="6" fill="#0f172a"/>
+        <text x="150" y="166" text-anchor="middle" style="fill:#fff;font-weight:700;font-size:11px">Hardware</text>
+        <text x="150" y="180" text-anchor="middle" style="fill:#cbd5e1;font-size:9px">Tensix grid · RISC-V · NoC · FPU/SFPU · SRAM</text>
+        <rect x="30" y="198" width="240" height="30" rx="6" fill="#fef3c7" stroke="#f59e0b"/>
+        <text x="150" y="217" text-anchor="middle" class="tiny" style="font-weight:700">Runtime tools: TT-Inference-Server · TT-Studio</text>
+        <text x="150" y="240" text-anchor="middle" class="tiny" style="fill:#475569">higher level ↑ &nbsp;·&nbsp; closer to metal ↓</text>
       </svg>
     </div>
     <div>
-      <p>Each output C-tile is a <strong>sum of tile-products</strong> along the K dimension:</p>
-      <div class="eq">\( C_{mt,nt} = \sum_{kt=0}^{K_t-1} A_{mt,kt}\, B_{kt,nt} \)</div>
+      <p class="small">Higher layers are <strong>more automated</strong>; lower layers give <strong>more control</strong>.</p>
       <ul class="small">
-        <li>Outer loops over output tiles <code class="inline">(mt, nt)</code></li>
-        <li>Inner loop over <code class="inline">kt</code> accumulates into one register tile</li>
-        <li>A index = <code class="inline">mt*Kt + kt</code>; B index = <code class="inline">kt*Nt + nt</code></li>
+        <li><strong>TT-Forge / TT-MLIR</strong> — compile whole models, no kernels written</li>
+        <li><strong>TT-NN</strong> — call optimized ops from Python</li>
+        <li><strong>TT-Metalium</strong> — write kernels by hand <span class="pill">labs</span></li>
+        <li><strong>Hardware</strong> — the Tensix grid</li>
       </ul>
+      <div class="callout"><span class="lbl">All open source</span>The entire stack is open and RISC-V-based — you can read every layer down to the kernels.</div>
+    </div>
+  </div>
+</section>
+
+<!-- TT-Metalium layer -->
+<section data-background-color="#ffffff">
+  <h2>Layer: TT-Metalium</h2>
+  <div class="cols">
+    <div>
+      <p>The <strong>low-level, open-source C++ SDK</strong> — bare-metal direct access to the hardware. This is what the labs use.</p>
+      <ul class="small">
+        <li>Direct control of <strong>RISC-V cores, the NoC,</strong> and the matrix / vector engines</li>
+        <li><strong>Explicit memory &amp; data movement</strong> — you place buffers and circular buffers yourself</li>
+        <li>You write <strong>reader / compute / writer kernels</strong> plus a host program</li>
+        <li><strong>TT-LLK</strong> — a low-level kernel library of compute primitives sits just beneath it</li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Analogy</span>TT-Metalium is to Tenstorrent roughly what writing CUDA kernels (or even PTX) is to a GPU — but with the data movement fully exposed.</div>
+      <div class="callout takeaway"><span class="lbl">Why teach at this level</span>Dropping to Metalium forces you to confront tiles, circular buffers, the NoC, and core placement directly — the whole point of the labs.</div>
+    </div>
+  </div>
+</section>
+
+<!-- TT-NN layer -->
+<section data-background-color="#ffffff">
+  <h2>Layer: TT-NN</h2>
+  <div class="cols w-64">
+    <div>
+      <p>A <strong>Python + C++ operator library</strong> of pre-packaged, optimized ops, built on top of Metalium.</p>
+      <ul class="small">
+        <li><strong>PyTorch-like API</strong> — tensors, ops, and modules feel familiar</li>
+        <li>Run models <strong>without writing kernels</strong> — the optimized kernels already exist underneath</li>
+        <li>Each op ultimately calls hand-tuned Metalium / TT-LLK code</li>
+      </ul>
+      <div class="callout"><span class="lbl">Where most users live</span>If you just want to run a model fast, TT-NN (or TT-Forge above it) is the normal entry point — not raw Metalium.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 200 150" class="chart" style="max-width:240px">
+        <rect x="30" y="20" width="140" height="28" rx="5" fill="#dbeafe" stroke="#1d4ed8"/>
+        <text x="100" y="38" text-anchor="middle" class="tiny" style="font-weight:700">ttnn.matmul(a, b)</text>
+        <line x1="100" y1="48" x2="100" y2="66" class="axis" marker-end="url(#arn)"/>
+        <rect x="30" y="68" width="140" height="28" rx="5" fill="#dcfce7" stroke="#16a34a"/>
+        <text x="100" y="86" text-anchor="middle" class="tiny">tuned Metalium kernels</text>
+        <line x1="100" y1="96" x2="100" y2="114" class="axis" marker-end="url(#arn)"/>
+        <rect x="30" y="116" width="140" height="26" rx="5" fill="#0f172a"/>
+        <text x="100" y="133" text-anchor="middle" class="tiny" style="fill:#fff">Tensix grid</text>
+        <defs><marker id="arn" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#475569"/></marker></defs>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- TT-Forge / TT-MLIR layer -->
+<section data-background-color="#ffffff">
+  <h2>Layer: TT-Forge / TT-MLIR Compiler</h2>
+  <div class="cols w-64">
+    <div>
+      <p>An <strong>MLIR-based compiler</strong> that ingests models from <strong>PyTorch, JAX, and TensorFlow</strong> and lowers them automatically — no custom kernels needed.</p>
+      <ul class="small">
+        <li><strong>Dialects:</strong> <code class="inline">TTIR</code> → <code class="inline">TTNN</code> / <code class="inline">TTKernel</code></li>
+        <li><strong>Optimization passes:</strong> operator <strong>fusion</strong>, <strong>sharding</strong> across cores, and <strong>layout</strong> (tiling) selection</li>
+        <li>Finally <strong>lowers to TT-Metalium</strong></li>
+      </ul>
+      <div class="callout"><span class="lbl">The automated path</span>TT-Forge is the general, hands-off route: bring a trained model, get it running on the grid.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 210 200" class="chart" style="max-width:250px">
+        <rect x="30" y="12" width="150" height="24" rx="5" fill="#e2e8f0" stroke="#475569"/>
+        <text x="105" y="28" text-anchor="middle" class="tiny">PyTorch / JAX / TensorFlow</text>
+        <line x1="105" y1="36" x2="105" y2="50" class="axis" marker-end="url(#arf)"/>
+        <rect x="55" y="52" width="100" height="22" rx="5" fill="#ede9fe" stroke="#8b5cf6"/>
+        <text x="105" y="67" text-anchor="middle" class="tiny" style="font-weight:700">TTIR</text>
+        <line x1="105" y1="74" x2="105" y2="88" class="axis" marker-end="url(#arf)"/>
+        <rect x="30" y="90" width="70" height="22" rx="5" fill="#dbeafe" stroke="#1d4ed8"/>
+        <text x="65" y="105" text-anchor="middle" class="tiny">TTNN</text>
+        <rect x="110" y="90" width="70" height="22" rx="5" fill="#dbeafe" stroke="#1d4ed8"/>
+        <text x="145" y="105" text-anchor="middle" class="tiny">TTKernel</text>
+        <line x1="105" y1="112" x2="105" y2="126" class="axis" marker-end="url(#arf)"/>
+        <rect x="45" y="128" width="120" height="22" rx="5" fill="#dcfce7" stroke="#16a34a"/>
+        <text x="105" y="143" text-anchor="middle" class="tiny" style="font-weight:700">TT-Metalium</text>
+        <text x="105" y="170" text-anchor="middle" class="tiny" style="fill:#475569">passes: fusion · sharding · layout</text>
+        <defs><marker id="arf" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#475569"/></marker></defs>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Runtime tools + where labs sit + open positioning -->
+<section data-background-color="#ffffff">
+  <h2>Runtime Tools &amp; Where the Labs Sit</h2>
+  <div class="cols">
+    <div>
+      <p class="small"><strong>Runtime / deployment tools</strong> wrap the stack for serving:</p>
+      <ul class="tiny">
+        <li><strong>TT-Inference-Server</strong> — OpenAI-compatible model serving</li>
+        <li><strong>TT-Forge Models</strong> — validated model catalog</li>
+        <li><strong>TT-Studio</strong> — web UI to deploy</li>
+        <li><strong>tt-smi / tt-topology</strong> — monitoring &amp; topology</li>
+      </ul>
+      <div class="callout"><span class="lbl">Where the labs sit</span>The matmul labs are <strong>pure TT-Metalium</strong> — the lowest level. You control kernels, CBs, the NoC, and cores directly. Most users would instead reach for TT-NN or TT-Forge; the labs deliberately drop to Metalium to <em>teach the hardware</em>.</div>
+    </div>
+    <div>
+      <table class="small">
+        <tr><th>Stack</th><th>Tenstorrent</th><th>NVIDIA</th></tr>
+        <tr><td>License</td><td class="hi">open source</td><td>proprietary</td></tr>
+        <tr><td>ISA</td><td class="hi">RISC-V (open)</td><td>closed</td></tr>
+        <tr><td>Low level</td><td>TT-Metalium</td><td>CUDA / PTX</td></tr>
+        <tr><td>Op library</td><td>TT-NN</td><td>cuDNN</td></tr>
+        <tr><td>Compiler</td><td>TT-MLIR</td><td>nvcc / TensorRT</td></tr>
+      </table>
+      <div class="callout ok"><span class="lbl">Open positioning</span>An open, RISC-V-based, end-to-end-readable stack — contrast the closed CUDA stack. (Stated factually; both are mature in their own ecosystems.)</div>
+    </div>
+  </div>
+</section>
+
+<!-- Review Module 2 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 2 — Review</h2>
+  <div class="qa">
+    <p class="q">1. Order the stack from hardware up, and say what each layer does.</p>
+    <div class="fragment"><div class="a">Hardware (Tensix grid) → TT-Metalium (bare-metal C++ kernels) → TT-NN (Python op library) → TT-Forge / TT-MLIR (compiles whole PyTorch/JAX/TF models down to Metalium). Runtime tools (TT-Inference-Server, TT-Studio) sit alongside for serving.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. What dialects and passes does TT-MLIR use?</p>
+    <div class="fragment"><div class="a">Dialects TTIR → TTNN / TTKernel, with passes for operator fusion, sharding across cores, and layout/tiling selection, before lowering to TT-Metalium.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Why do the labs use raw TT-Metalium instead of TT-NN?</p>
+    <div class="fragment"><div class="a">To teach the hardware: at the Metalium level you must manage tiles, circular buffers, the NoC, and core placement by hand. Production users would typically use TT-NN or TT-Forge instead.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     LAB 1 — SINGLE-CORE MATMUL
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Lab 1</div>
+  <div class="mod-title">Single-Core Matmul</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Apply <strong>loop tiling</strong> and reason about the host/device memory model</li>
+      <li>Walk the <strong>TT-Metalium host API lifecycle</strong> and implement a single-core tiled matmul</li>
+      <li>Write <strong>reader / compute / writer</strong> kernels with circular buffers</li>
+      <li>Debug with <strong>DPRINT</strong>, <strong>tt-triage</strong>, and the device profiler, and validate vs. a CPU golden result</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Lab 1 problem + tiling -->
+<section data-background-color="#ffffff">
+  <h2>The Problem &amp; the Tiled Idea</h2>
+  <div class="cols">
+    <div>
+      <p>Compute <strong>C = A · B</strong> on one Tensix core:</p>
+      <div class="eq small">\( A_{640\times320}\cdot B_{320\times640} = C_{640\times640} \)</div>
+      <ul class="small">
+        <li>With 32×32 tiles: <code class="inline">Mt=20, Kt=10, Nt=20</code></li>
+        <li>One core produces <strong>all</strong> \(M_t\cdot N_t\) output tiles</li>
+        <li>Each output tile accumulates over <code class="inline">Kt</code> tile-products</li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Three kernels, one core</span>
+        <ul class="tiny" style="margin:.2em 0 0 .9em">
+          <li><strong>reader</strong> — streams A &amp; B tiles DRAM → CBs</li>
+          <li><strong>compute</strong> — tile matmul + accumulate → output CB</li>
+          <li><strong>writer</strong> — output CB → DRAM</li>
+        </ul>
+      </div>
+      <div class="callout takeaway"><span class="lbl">Loop tiling = locality</span>Tiling turns a giant matmul into many small ones that fit in fast L1 — the same idea as blocking for cache.</div>
     </div>
   </div>
 </section>
@@ -368,66 +708,6 @@ EnqueueReadMeshBuffer(cq, c_data, dst, /*blocking=*/true);
 </code></pre>
   <div class="callout takeaway"><span class="lbl">Lifecycle in one line</span>
     <strong>open device → place DRAM buffers → build a Program (CBs + kernels + args) → enqueue write / workload / read.</strong></div>
-</section>
-
-<!-- Review Module 1 -->
-<section data-background-color="#f6f8fb">
-  <h2>Module 1 — Review</h2>
-  <div class="qa">
-    <p class="q">1. What are the five RISC-V cores in a Tensix core for?</p>
-    <div class="fragment"><div class="a">RV 0 &amp; RV 4 drive the two NoC routers (reader / writer data-movement kernels); RV 1–3 drive the Tensix compute engine (compute kernel).</div></div>
-  </div>
-  <div class="qa">
-    <p class="q">2. What is a circular buffer, and why is it sized 2× a tile?</p>
-    <div class="fragment"><div class="a">A FIFO queue in L1 linking a producer and consumer kernel. Sizing it for two tiles enables double-buffering so the reader can fill the next tile while the compute engine consumes the current one.</div></div>
-  </div>
-  <div class="qa">
-    <p class="q">3. Trace the host API lifecycle from device open to result read-back.</p>
-    <div class="fragment"><div class="a">create_unit_mesh → command queue → DRAM buffers → Program with CreateCircularBuffer / CreateKernel / SetRuntimeArgs → EnqueueWriteMeshBuffer → EnqueueMeshWorkload → EnqueueReadMeshBuffer.</div></div>
-  </div>
-</section>
-
-<!-- ==================================================================
-     LAB 1 — SINGLE-CORE MATMUL
-     ================================================================== -->
-<section class="divider" data-background-color="#ffffff">
-  <div class="mod-num">Lab 1</div>
-  <div class="mod-title">Single-Core Matmul</div>
-  <div class="objectives" style="margin-top:1em;">
-    <h4>By the end you can…</h4>
-    <ul>
-      <li>Apply <strong>loop tiling</strong> and reason about the host/device memory model</li>
-      <li>Implement a <strong>single-core tiled matmul</strong> with reader / compute / writer kernels</li>
-      <li>Debug with <strong>DPRINT</strong>, stack traces (<strong>tt-triage</strong>), and the device profiler</li>
-      <li>Optimize data movement through <strong>circular buffers</strong> and validate vs. a CPU golden result</li>
-    </ul>
-  </div>
-</section>
-
-<!-- Lab 1 problem + tiling -->
-<section data-background-color="#ffffff">
-  <h2>The Problem &amp; the Tiled Idea</h2>
-  <div class="cols">
-    <div>
-      <p>Compute <strong>C = A · B</strong> on one Tensix core:</p>
-      <div class="eq small">\( A_{640\times320}\cdot B_{320\times640} = C_{640\times640} \)</div>
-      <ul class="small">
-        <li>With 32×32 tiles: <code class="inline">Mt=20, Kt=10, Nt=20</code></li>
-        <li>One core produces <strong>all</strong> \(M_t\cdot N_t\) output tiles</li>
-        <li>Each output tile accumulates over <code class="inline">Kt</code> tile-products</li>
-      </ul>
-    </div>
-    <div>
-      <div class="callout"><span class="lbl">Three kernels, one core</span>
-        <ul class="tiny" style="margin:.2em 0 0 .9em">
-          <li><strong>reader</strong> — streams A &amp; B tiles DRAM → CBs</li>
-          <li><strong>compute</strong> — tile matmul + accumulate → output CB</li>
-          <li><strong>writer</strong> — output CB → DRAM</li>
-        </ul>
-      </div>
-      <div class="callout takeaway"><span class="lbl">Loop tiling = locality</span>Tiling turns a giant matmul into many small ones that fit in fast L1 — the same idea as blocking for cache.</div>
-    </div>
-  </div>
 </section>
 
 <!-- Lab 1 compute kernel -->
@@ -661,116 +941,39 @@ for (auto&amp; [group, work_per_core] : {std::pair{core_group_1, work_per_core_1
 </section>
 
 <!-- ==================================================================
-     LAB 3 — MULTI-CORE WITH MULTICAST
-     ================================================================== -->
-<section class="divider" data-background-color="#ffffff">
-  <div class="mod-num">Lab 3</div>
-  <div class="mod-title">Multi-Core with Multicast</div>
-  <div class="objectives" style="margin-top:1em;">
-    <h4>By the end you can…</h4>
-    <ul>
-      <li>Identify the <strong>data-reuse</strong> opportunity that motivates multicast</li>
-      <li>Explain how a <strong>sender broadcasts</strong> an input block over the NoC to many receivers</li>
-      <li>Describe <strong>semaphore synchronization</strong> and CB sizing for a CoreGrid</li>
-    </ul>
-  </div>
-</section>
-
-<!-- Lab 3 motivation -->
-<section data-background-color="#ffffff">
-  <h2>From Reuse to Multicast</h2>
-  <div class="cols w-64">
-    <div>
-      <p>In Lab 2 many cores compute output tiles in the <strong>same row or column</strong> — and each one <em>re-reads the same A row block or B column block from DRAM</em>. That's redundant DRAM traffic.</p>
-      <ul class="small">
-        <li><strong>Reuse</strong> (<code class="inline">matmul_multicore_reuse</code>): keep a block resident and reuse it across output tiles</li>
-        <li><strong>Multicast</strong> (<code class="inline">matmul_multicore_reuse_mcast</code>): one core reads a block once, then <strong>broadcasts it over the NoC</strong> to many receiver cores</li>
-      </ul>
-      <div class="callout takeaway"><span class="lbl">Payoff</span>One DRAM read feeds a whole row/column of cores → a <strong>big cut in DRAM traffic</strong>.</div>
-    </div>
-    <div class="center">
-      <svg viewBox="0 0 220 180" class="chart" style="max-width:260px">
-        <rect x="14" y="20" width="44" height="30" rx="5" fill="#dc2626" stroke="#991b1b"/>
-        <text x="36" y="39" text-anchor="middle" class="tiny" style="fill:#fff;font-weight:700">sender</text>
-        <g fill="#dbeafe" stroke="#1d4ed8">
-          <rect x="78" y="20" width="40" height="30" rx="5"/><rect x="124" y="20" width="40" height="30" rx="5"/><rect x="170" y="20" width="40" height="30" rx="5"/>
-        </g>
-        <text x="98" y="39" text-anchor="middle" class="tiny">recv</text><text x="144" y="39" text-anchor="middle" class="tiny">recv</text><text x="190" y="39" text-anchor="middle" class="tiny">recv</text>
-        <g class="axis"><line x1="58" y1="35" x2="78" y2="35"/><line x1="58" y1="35" x2="124" y2="32"/><line x1="58" y1="35" x2="170" y2="32"/></g>
-        <text x="110" y="70" text-anchor="middle" class="note" style="fill:#16a34a">1 read → multicast over NoC</text>
-        <rect x="40" y="120" width="140" height="26" rx="5" fill="#94a3b8" stroke="#475569"/>
-        <text x="110" y="137" text-anchor="middle" class="tiny" style="fill:#fff">vs. every core hitting DRAM</text>
-        <g class="axis"><line x1="60" y1="120" x2="40" y2="100"/><line x1="100" y1="120" x2="100" y2="100"/><line x1="150" y1="120" x2="170" y2="100"/></g>
-      </svg>
-    </div>
-  </div>
-</section>
-
-<!-- Lab 3 sender/receiver + semaphores -->
-<section data-background-color="#ffffff">
-  <h2>Sender / Receiver Kernels &amp; Semaphores</h2>
-  <div class="cols">
-    <div>
-      <p class="small">Multicast splits the data-movement kernel into two roles:</p>
-      <ul class="small">
-        <li><strong>Sender</strong> — reads the block from DRAM once, then issues a <em>multicast</em> NoC write to all receiver cores' L1</li>
-        <li><strong>Receivers</strong> — wait for the block to arrive in their CB, then compute</li>
-      </ul>
-      <div class="callout"><span class="lbl">Semaphores</span>A semaphore synchronizes sender ↔ receivers: receivers signal "ready for data," the sender multicasts, then signals "data valid" so receivers may consume.</div>
-    </div>
-    <div>
-      <div class="callout"><span class="lbl">CB sizing for a CoreGrid</span>Circular buffers are sized for the <strong>block</strong> the grid shares, not just one tile — enough L1 to hold the multicast block while it is reused.</div>
-      <div class="callout ok"><span class="lbl">Optional fusion</span>The compute kernel can <strong>fuse a bias add + activation</strong> after the matmul accumulation, avoiding an extra DRAM round-trip.</div>
-      <p class="tiny muted">A multidimensional systolic variant is "coming soon" in the upstream examples.</p>
-    </div>
-  </div>
-</section>
-
-<!-- Lab 3 run -->
-<section data-background-color="#ffffff">
-  <h2>Building &amp; Running Lab 3</h2>
-  <div class="code-label">bash</div>
-  <pre><code class="language-bash" data-trim>
-# select the target architecture, then run the optimized example
-export ARCH_NAME=&lt;arch&gt;
-./build/programming_examples/matmul_multicore_reuse_mcast
-</code></pre>
-  <div class="callout"><span class="lbl">Progression</span>
-    <code class="inline">matmul_multi_core</code> (Lab 2) → <code class="inline">matmul_multicore_reuse</code> → <code class="inline">matmul_multicore_reuse_mcast</code> (Lab 3). Each step removes redundant DRAM traffic while keeping the engines busy.</div>
-  <p class="small muted">Lab 3 stays conceptual here: the upstream kernels are detailed, but the takeaway is the multicast/reuse pattern, not the full source.</p>
-</section>
-
-<!-- Review Lab 3 -->
-<section data-background-color="#f6f8fb">
-  <h2>Lab 3 — Review</h2>
-  <div class="qa">
-    <p class="q">1. What redundancy does multicast eliminate?</p>
-    <div class="fragment"><div class="a">Many cores re-reading the same A row block or B column block from DRAM. With multicast, one sender reads it once and broadcasts it over the NoC to all receivers.</div></div>
-  </div>
-  <div class="qa">
-    <p class="q">2. What role do semaphores play?</p>
-    <div class="fragment"><div class="a">They synchronize the sender and receivers: receivers signal readiness, the sender multicasts the block, then signals that the data is valid before receivers consume it.</div></div>
-  </div>
-  <div class="qa">
-    <p class="q">3. Why are CBs sized for the CoreGrid here?</p>
-    <div class="fragment"><div class="a">The CB must hold the shared multicast block (not a single tile) so it can be reused across the grid's output tiles; compute may additionally fuse bias + activation.</div></div>
-  </div>
-</section>
-
-<!-- ==================================================================
      SUMMARY
      ================================================================== -->
 <section data-background-color="#ffffff">
   <h2>Unit Summary &amp; Takeaways</h2>
   <div class="cols c3">
-    <div class="callout"><span class="lbl">Architecture</span>A grid of Tensix cores (L1 + 2 routers + engine + 5 RISC-V) on a NoC, fed from device DRAM over PCIe; work in 32×32 tiles via CBs.</div>
+    <div class="callout"><span class="lbl">Architecture</span>A grid of Tensix cores (5 RISC-V + FPU/SFPU/ThCon + 2 routers + L1) on a 2-D torus NoC, <strong>no cache</strong>; data movement explicit; scale-out over Ethernet.</div>
+    <div class="callout"><span class="lbl">Stack</span>Open, RISC-V-based: TT-Metalium → TT-NN → TT-Forge / TT-MLIR. The labs work at the bare-metal Metalium layer.</div>
     <div class="callout"><span class="lbl">Labs 1 → 2</span>Single-core tiled matmul, then SPMD static splitting of output tiles across cores with per-core runtime args.</div>
-    <div class="callout"><span class="lbl">Lab 3</span>Multicast reuse: broadcast input blocks over the NoC to cut DRAM traffic, synchronized with semaphores.</div>
   </div>
   <div class="callout takeaway"><span class="lbl">The connecting theme</span>
-    Like the GPU unit, Tenstorrent is a <strong>throughput accelerator whose performance is bounded by data movement</strong>. The labs progressively move <em>fewer, more-reused</em> tiles — and they build toward the course's <strong>CUDA SpMV comparison</strong>, contrasting two ways to keep many simple engines fed.</div>
+    Like the GPU unit, Tenstorrent is a <strong>throughput accelerator whose performance is bounded by data movement</strong> — but it removes the cache hierarchy and the dynamic scheduler, pushing both into the program. This builds toward the course's <strong>CUDA SpMV comparison</strong>, contrasting two ways to keep many simple engines fed.</div>
   <p class="center muted small">You can now read TT-Metalium kernels, place buffers, and reason about why each optimization helps.</p>
-  <aside class="notes">Tie back to the GPU unit: both are throughput machines; the difference is that TT-Metalium makes data movement fully explicit (reader/compute/writer + CBs + multicast), whereas CUDA hides more of it. The SpMV comparison later in the course revisits these trade-offs.</aside>
+  <aside class="notes">Tie back to the GPU unit: both are throughput machines; the difference is that Tenstorrent removes caches and dynamic scheduling, making data movement fully explicit (reader/compute/writer + CBs over the NoC), whereas CUDA hides more of it. The SpMV comparison later in the course revisits these trade-offs.</aside>
+</section>
+
+<!-- ==================================================================
+     REFERENCES
+     ================================================================== -->
+<section data-background-color="#ffffff">
+  <h2>References &amp; Further Reading</h2>
+  <ol class="tiny src" style="text-align:left;line-height:1.5">
+    <li>Tenstorrent, "Understanding the Tenstorrent Software Stack," Tenstorrent Documentation. https://docs.tenstorrent.com/getting-started/tt-software-stack.html</li>
+    <li>Tenstorrent, "TT-Metalium — Getting Started," Tenstorrent Documentation. https://docs.tenstorrent.com/tt-metal/latest/tt-metalium/get_started/get_started.html</li>
+    <li>Tenstorrent, "Matrix Multiplication — Single Core" (TT-Metalium examples). https://docs.tenstorrent.com/tt-metal/latest/tt-metalium/tt_metal/examples/matmul_single_core.html</li>
+    <li>Tenstorrent, "Matrix Multiplication — Multi Core" (TT-Metalium examples). https://docs.tenstorrent.com/tt-metal/latest/tt-metalium/tt_metal/examples/matmul_multi_core.html</li>
+    <li>Tenstorrent, "Lab 1: Single-Core Matrix Multiplication," tt-metal (matmul labs; branch to be merged to main). https://github.com/tenstorrent/tt-metal</li>
+    <li>tenstorrent/tt-metal — TT-NN operator library &amp; TT-Metalium kernel programming model; METALIUM_GUIDE.md. https://github.com/tenstorrent/tt-metal/blob/main/METALIUM_GUIDE.md</li>
+    <li>tenstorrent/tt-forge — Tenstorrent's MLIR-based compiler. https://github.com/tenstorrent/tt-forge</li>
+    <li>"Dissecting the Tenstorrent Blackhole Architecture via Microbenchmarking," 2025. https://asplos.dev/wordpress/wp-content/uploads/2025/09/TT_bench-1.pdf</li>
+    <li>"Exploring Fast Fourier Transforms on the Tenstorrent Wormhole," arXiv:2506.15437. https://arxiv.org/abs/2506.15437</li>
+    <li>"Attention in SRAM on Tenstorrent Grayskull," arXiv:2407.13885. https://arxiv.org/abs/2407.13885</li>
+    <li>SemiAnalysis, "Tenstorrent Wormhole Analysis — A Scale-Out Architecture for Machine Learning," 2021. https://semianalysis.com/2021/06/25/tenstorrent-wormhole-analysis-a-scale/</li>
+  </ol>
 </section>
 
 </div>
