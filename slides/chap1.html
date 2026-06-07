@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <!-- course theme -->
-<link rel="stylesheet" href="assets/theme.css?v=8">
+<link rel="stylesheet" href="assets/theme.css?v=9">
 </head>
 <body>
 <div class="reveal">
@@ -458,6 +458,11 @@ gcc main.o code1.o code2.o
 <!-- Review Q 1.1 -->
 <section data-background-color="#f6f8fb">
   <h2>Module 1.1 — Review</h2>
+  <div class="activity">
+    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
+      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
+    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
+  </div>
   <div class="qa">
     <p class="q">1. What does Processor / CPU / Core mean in this course?</p>
     <div class="fragment"><div class="a">Logic that can independently fetch and execute an instruction stream. It <em>excludes</em> caches.</div></div>
@@ -657,6 +662,11 @@ gcc main.o code1.o code2.o
 <!-- Review 1.2 -->
 <section data-background-color="#f6f8fb">
   <h2>Module 1.2 — Review</h2>
+  <div class="activity">
+    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
+      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
+    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
+  </div>
   <div class="qa"><p class="q">1. Difference between energy and power?</p>
     <div class="fragment"><div class="a">Power is the <em>rate</em> of energy consumption (J/s = W).</div></div></div>
   <div class="qa"><p class="q">2. Impact of threshold-voltage choice on static vs. dynamic power as transistors shrink?</p>
@@ -972,6 +982,11 @@ MOVUPS [Ret], XMM0   ; store C[0..3]
 <!-- Review 1.3 -->
 <section data-background-color="#f6f8fb">
   <h2>Module 1.3 — Review</h2>
+  <div class="activity">
+    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
+      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
+    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
+  </div>
   <div class="qa"><p class="q">1. Name the four categories of computers in Flynn's taxonomy.</p>
     <div class="fragment"><div class="a">SISD, SIMD, MISD, MIMD.</div></div></div>
   <div class="qa"><p class="q">2. Classify each system:</p>
@@ -1047,6 +1062,29 @@ MOVUPS [Ret], XMM0   ; store C[0..3]
     Reveal.on('slidechanged', function(e){ fit(e.currentSlide); });
     try{ if(Reveal.isReady && Reveal.isReady()) fit(Reveal.getCurrentSlide()); }catch(e){}
   }
+})();
+</script>
+<script>
+/* In-class activity: set this to THIS chapter's Google Form link (one form per chapter). */
+const FORM_URL = "PASTE_GOOGLE_FORM_LINK_HERE";
+(function(){
+  function paint(){
+    var set = FORM_URL && FORM_URL.indexOf("PASTE_") === -1;
+    document.querySelectorAll('.activity').forEach(function(a){
+      var lnk=a.querySelector('.form-link'), img=a.querySelector('.qr-img'), ph=a.querySelector('.qr-ph');
+      if(set){
+        if(lnk) lnk.href=FORM_URL;
+        if(img){ img.src='https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=0&data='+encodeURIComponent(FORM_URL); img.style.display=''; }
+        if(ph) ph.style.display='none';
+      } else {
+        if(lnk) lnk.href='#';
+        if(img) img.style.display='none';
+        if(ph) ph.style.display='';
+      }
+    });
+  }
+  if(window.Reveal){ Reveal.on('ready', paint); }
+  document.addEventListener('DOMContentLoaded', paint); paint();
 })();
 </script>
 </body>

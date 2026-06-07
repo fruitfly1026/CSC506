@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <!-- course theme -->
-<link rel="stylesheet" href="assets/theme.css?v=8">
+<link rel="stylesheet" href="assets/theme.css?v=9">
 </head>
 <body>
 <div class="reveal">
@@ -311,6 +311,11 @@
 <!-- Module 1 review -->
 <section data-background-color="#f6f8fb">
   <h2>Module 1 — Review</h2>
+  <div class="activity">
+    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
+      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
+    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
+  </div>
   <div class="qa"><p class="q">1. Why can a GPU use small caches yet still achieve high throughput?</p>
     <div class="fragment"><div class="a">It hides memory latency with parallelism: while some warps wait on memory, the scheduler runs others, so the ALUs stay busy without needing big caches.</div></div></div>
   <div class="qa"><p class="q">2. What does it mean to "hide" memory latency rather than reduce it?</p>
@@ -510,6 +515,11 @@ int i = blockIdx.x * blockDim.x + threadIdx.x;
 <!-- Module 2 review -->
 <section data-background-color="#f6f8fb">
   <h2>Module 2 — Review</h2>
+  <div class="activity">
+    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
+      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
+    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
+  </div>
   <div class="qa"><p class="q">1. What are the responsibilities of the host vs. the device?</p>
     <div class="fragment"><div class="a">Host (CPU): runs main, allocates device memory, copies data H2D/D2H, launches kernels. Device (GPU): runs kernels in parallel over thousands of threads on its own HBM memory.</div></div></div>
   <div class="qa"><p class="q">2. What does the <code class="inline">__global__</code> qualifier mean?</p>
@@ -683,6 +693,11 @@ else
 <!-- Module 3 review -->
 <section data-background-color="#f6f8fb">
   <h2>Module 3 — Review</h2>
+  <div class="activity">
+    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
+      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
+    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
+  </div>
   <div class="qa"><p class="q">1. How many threads are in a warp, and how do they execute?</p>
     <div class="fragment"><div class="a">32 threads. They execute the same instruction each cycle in lockstep (SIMT), on different data.</div></div></div>
   <div class="qa"><p class="q">2. What is branch divergence and when does it occur?</p>
@@ -866,6 +881,11 @@ else
 <!-- Module 4 review -->
 <section data-background-color="#f6f8fb">
   <h2>Module 4 — Review</h2>
+  <div class="activity">
+    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
+      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
+    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
+  </div>
   <div class="qa"><p class="q">1. How does shared-memory tiling reduce global memory traffic?</p>
     <div class="fragment"><div class="a">A block loads a tile from slow global memory into fast shared memory once, then all threads reuse it many times — fewer global accesses per FLOP, so higher arithmetic intensity.</div></div></div>
   <div class="qa"><p class="q">2. What causes a shared-memory bank conflict? &nbsp; 3. Why does a parallel reduction take log₂(N) steps?</p>
@@ -948,6 +968,29 @@ else
     Reveal.on('slidechanged', function(e){ fit(e.currentSlide); });
     try{ if(Reveal.isReady && Reveal.isReady()) fit(Reveal.getCurrentSlide()); }catch(e){}
   }
+})();
+</script>
+<script>
+/* In-class activity: set this to THIS chapter's Google Form link (one form per chapter). */
+const FORM_URL = "PASTE_GOOGLE_FORM_LINK_HERE";
+(function(){
+  function paint(){
+    var set = FORM_URL && FORM_URL.indexOf("PASTE_") === -1;
+    document.querySelectorAll('.activity').forEach(function(a){
+      var lnk=a.querySelector('.form-link'), img=a.querySelector('.qr-img'), ph=a.querySelector('.qr-ph');
+      if(set){
+        if(lnk) lnk.href=FORM_URL;
+        if(img){ img.src='https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=0&data='+encodeURIComponent(FORM_URL); img.style.display=''; }
+        if(ph) ph.style.display='none';
+      } else {
+        if(lnk) lnk.href='#';
+        if(img) img.style.display='none';
+        if(ph) ph.style.display='';
+      }
+    });
+  }
+  if(window.Reveal){ Reveal.on('ready', paint); }
+  document.addEventListener('DOMContentLoaded', paint); paint();
 })();
 </script>
 </body>

@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <!-- course theme -->
-<link rel="stylesheet" href="assets/theme.css?v=8">
+<link rel="stylesheet" href="assets/theme.css?v=9">
 </head>
 <body>
 <div class="reveal">
@@ -473,6 +473,11 @@ if (flag2==0) ..   if (flag1==0) ..
 <!-- Module 9.1 review -->
 <section data-background-color="#f6f8fb">
   <h2>Module 9.1 — Review</h2>
+  <div class="activity">
+    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
+      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
+    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
+  </div>
   <div class="qa">
     <p class="q">1. What two expectations do programmers have when writing a parallel program?</p>
     <div class="fragment"><div class="a"><strong>Program order</strong> — accesses appear in source-code order; and <strong>atomicity</strong> — each access happens all-at-once with respect to every processor.</div></div>
@@ -973,6 +978,11 @@ Rd F
 <!-- Module 9.2 review -->
 <section data-background-color="#f6f8fb">
   <h2>Module 9.2 — Review</h2>
+  <div class="activity">
+    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
+      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
+    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
+  </div>
   <div class="qa">
     <p class="q">1. What ordering is relaxed, and what is imposed, by Weak Ordering?</p>
     <div class="fragment"><div class="a"><strong>Relaxed:</strong> any ld/st → ld/st ordering. <strong>Imposed:</strong> synch → ld/st and ld/st → synch.</div></div>
@@ -1050,6 +1060,29 @@ Rd F
     Reveal.on('slidechanged', function(e){ fit(e.currentSlide); });
     try{ if(Reveal.isReady && Reveal.isReady()) fit(Reveal.getCurrentSlide()); }catch(e){}
   }
+})();
+</script>
+<script>
+/* In-class activity: set this to THIS chapter's Google Form link (one form per chapter). */
+const FORM_URL = "PASTE_GOOGLE_FORM_LINK_HERE";
+(function(){
+  function paint(){
+    var set = FORM_URL && FORM_URL.indexOf("PASTE_") === -1;
+    document.querySelectorAll('.activity').forEach(function(a){
+      var lnk=a.querySelector('.form-link'), img=a.querySelector('.qr-img'), ph=a.querySelector('.qr-ph');
+      if(set){
+        if(lnk) lnk.href=FORM_URL;
+        if(img){ img.src='https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=0&data='+encodeURIComponent(FORM_URL); img.style.display=''; }
+        if(ph) ph.style.display='none';
+      } else {
+        if(lnk) lnk.href='#';
+        if(img) img.style.display='none';
+        if(ph) ph.style.display='';
+      }
+    });
+  }
+  if(window.Reveal){ Reveal.on('ready', paint); }
+  document.addEventListener('DOMContentLoaded', paint); paint();
 })();
 </script>
 </body>

@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <!-- course theme -->
-<link rel="stylesheet" href="assets/theme.css?v=8">
+<link rel="stylesheet" href="assets/theme.css?v=9">
 </head>
 <body>
 <div class="reveal">
@@ -273,6 +273,11 @@
 <!-- Review 7.1 -->
 <section data-background-color="#f6f8fb">
   <h2>Module 7.1 — Review</h2>
+  <div class="activity">
+    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
+      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
+    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
+  </div>
   <div class="qa">
     <p class="q">1. What is a bus, and what properties make it attractive for a small-scale multiprocessor?</p>
     <div class="fragment"><div class="a">A set of long shared wires with arbitration. It is simple, cheap, and extendable — you can plug in more processors as needed. But clock skew limits its scalability.</div></div>
@@ -536,6 +541,11 @@
 <!-- MSI Q&A -->
 <section data-background-color="#ffffff">
   <h2>MSI — Subtle Points</h2>
+  <div class="activity">
+    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
+      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
+    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
+  </div>
   <div class="qa">
     <p class="q">What does the memory controller do?</p>
     <div class="fragment"><div class="a">On snooped <strong>BusRd</strong> or <strong>BusRdX</strong> → read and supply data (unless a cache Flushes first). On snooped <strong>Flush</strong> → update main memory.</div></div>
@@ -553,6 +563,11 @@
 <!-- Review 7.2 -->
 <section data-background-color="#f6f8fb">
   <h2>Module 7.2 — Review</h2>
+  <div class="activity">
+    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
+      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
+    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
+  </div>
   <div class="qa">
     <p class="q">1. Contrast the two protocols in this module: write-through and MSI.</p>
     <div class="fragment"><div class="a"><strong>Write-through</strong> coherence is for write-through caches; <strong>MSI</strong> is for write-back caches (write hits stay in the cache, cutting bus traffic).</div></div>
@@ -823,6 +838,11 @@
 <!-- Review 7.3 -->
 <section data-background-color="#f6f8fb">
   <h2>Module 7.3 — Review</h2>
+  <div class="activity">
+    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
+      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
+    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
+  </div>
   <div class="qa">
     <p class="q">1. How does MESI improve on MSI?</p>
     <div class="fragment"><div class="a">A block that is read then written incurs only <strong>one</strong> bus transaction (not two), thanks to the <strong>Exclusive</strong> state — E → M is silent.</div></div>
@@ -1062,6 +1082,11 @@
 <!-- Review 7.4 -->
 <section data-background-color="#f6f8fb">
   <h2>Module 7.4 — Review</h2>
+  <div class="activity">
+    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
+      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
+    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
+  </div>
   <div class="qa">
     <p class="q">1. How does Dragon differ from MSI / MESI / MOESI?</p>
     <div class="fragment"><div class="a">Dragon uses <strong>write update</strong>: a written value is <em>immediately propagated</em> to peer caches (BusUpd), rather than invalidating them.</div></div>
@@ -1142,6 +1167,29 @@
     Reveal.on('slidechanged', function(e){ fit(e.currentSlide); });
     try{ if(Reveal.isReady && Reveal.isReady()) fit(Reveal.getCurrentSlide()); }catch(e){}
   }
+})();
+</script>
+<script>
+/* In-class activity: set this to THIS chapter's Google Form link (one form per chapter). */
+const FORM_URL = "PASTE_GOOGLE_FORM_LINK_HERE";
+(function(){
+  function paint(){
+    var set = FORM_URL && FORM_URL.indexOf("PASTE_") === -1;
+    document.querySelectorAll('.activity').forEach(function(a){
+      var lnk=a.querySelector('.form-link'), img=a.querySelector('.qr-img'), ph=a.querySelector('.qr-ph');
+      if(set){
+        if(lnk) lnk.href=FORM_URL;
+        if(img){ img.src='https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=0&data='+encodeURIComponent(FORM_URL); img.style.display=''; }
+        if(ph) ph.style.display='none';
+      } else {
+        if(lnk) lnk.href='#';
+        if(img) img.style.display='none';
+        if(ph) ph.style.display='';
+      }
+    });
+  }
+  if(window.Reveal){ Reveal.on('ready', paint); }
+  document.addEventListener('DOMContentLoaded', paint); paint();
 })();
 </script>
 </body>

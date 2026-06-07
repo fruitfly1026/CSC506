@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <!-- course theme -->
-<link rel="stylesheet" href="assets/theme.css?v=8">
+<link rel="stylesheet" href="assets/theme.css?v=9">
 </head>
 <body>
 <div class="reveal">
@@ -324,6 +324,11 @@ for (i=1; i&lt;=n; i++)
 <!-- Review 3.1 -->
 <section data-background-color="#f6f8fb">
   <h2>Module 3.1 — Review</h2>
+  <div class="activity">
+    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
+      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
+    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
+  </div>
   <div class="qa">
     <p class="q">1. What are the three types of dependences?</p>
     <div class="fragment"><div class="a"><strong>True</strong> (producer→consumer, RAW), <strong>anti</strong> (WAR), and <strong>output</strong> (WAW).</div></div>
@@ -598,6 +603,11 @@ for (i=2; i&lt;=N; i++) {    // stage 2
 <!-- Review 3.2 -->
 <section data-background-color="#f6f8fb">
   <h2>Module 3.2 — Review</h2>
+  <div class="activity">
+    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
+      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
+    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
+  </div>
   <div class="qa">
     <p class="q">Describe DOALL, DOACROSS, function, and DOPIPE parallelism.</p>
     <div class="fragment"><div class="a">
@@ -836,6 +846,11 @@ for (i=1; i&lt;=n; i++)
 <!-- Review 3.4 -->
 <section data-background-color="#f6f8fb">
   <h2>Module 3.4 — Review</h2>
+  <div class="activity">
+    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
+      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
+    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
+  </div>
   <div class="qa">
     <p class="q">1. Define the main variable scopes in shared-memory parallel programming.</p>
     <div class="fragment"><div class="a"><strong>Shared</strong> — all threads see one copy. <strong>Private</strong> — each thread has its own copy (OpenMP refines into <code class="inline">firstprivate</code>/<code class="inline">lastprivate</code>). <strong>Reduction</strong> — private partials merged by a commutative/associative operator.</div></div>
@@ -943,6 +958,11 @@ for (i=start; i&lt;end; i++) {
 <!-- Review 3.5 -->
 <section data-background-color="#f6f8fb">
   <h2>Module 3.5 — Review</h2>
+  <div class="activity">
+    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
+      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
+    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
+  </div>
   <div class="qa">
     <p class="q">1. What synchronization primitives does a shared-memory system support?</p>
     <div class="fragment"><div class="a"><strong>Lock</strong> (mutual exclusion), <strong>barrier</strong> (global event), and <strong>point-to-point</strong> (e.g. post/wait).</div></div>
@@ -1024,6 +1044,29 @@ for (i=start; i&lt;end; i++) {
     Reveal.on('slidechanged', function(e){ fit(e.currentSlide); });
     try{ if(Reveal.isReady && Reveal.isReady()) fit(Reveal.getCurrentSlide()); }catch(e){}
   }
+})();
+</script>
+<script>
+/* In-class activity: set this to THIS chapter's Google Form link (one form per chapter). */
+const FORM_URL = "PASTE_GOOGLE_FORM_LINK_HERE";
+(function(){
+  function paint(){
+    var set = FORM_URL && FORM_URL.indexOf("PASTE_") === -1;
+    document.querySelectorAll('.activity').forEach(function(a){
+      var lnk=a.querySelector('.form-link'), img=a.querySelector('.qr-img'), ph=a.querySelector('.qr-ph');
+      if(set){
+        if(lnk) lnk.href=FORM_URL;
+        if(img){ img.src='https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=0&data='+encodeURIComponent(FORM_URL); img.style.display=''; }
+        if(ph) ph.style.display='none';
+      } else {
+        if(lnk) lnk.href='#';
+        if(img) img.style.display='none';
+        if(ph) ph.style.display='';
+      }
+    });
+  }
+  if(window.Reveal){ Reveal.on('ready', paint); }
+  document.addEventListener('DOMContentLoaded', paint); paint();
 })();
 </script>
 </body>
