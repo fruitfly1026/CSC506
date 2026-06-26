@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <!-- course theme -->
-<link rel="stylesheet" href="assets/theme.css?v=9">
+<link rel="stylesheet" href="assets/theme.css?v=11">
 </head>
 <body>
 <div class="reveal">
@@ -641,11 +641,6 @@
 <!-- Module 10.1 review -->
 <section data-background-color="#f6f8fb">
   <h2>Module 10.1 — Review</h2>
-  <div class="activity">
-    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
-      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
-    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
-  </div>
   <div class="qa">
     <p class="q">1. How does a directory protocol scale better than broadcast/snoopy?</p>
     <div class="fragment"><div class="a">The directory <strong>filters traffic</strong>: only the owner/sharer caches are contacted for a transaction. In broadcast, <em>every</em> cache controller participates.</div></div>
@@ -937,11 +932,6 @@
 <!-- Module 10.2 review -->
 <section data-background-color="#f6f8fb">
   <h2>Module 10.2 — Review</h2>
-  <div class="activity">
-    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
-      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
-    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
-  </div>
   <div class="qa">
     <p class="q">1. What are the two sources of protocol races?</p>
     <div class="fragment"><div class="a"><strong>Out-of-sync directory</strong> — the directory no longer reflects the caches' real states. <strong>Non-instantaneous processing</strong> — the home may overlap multiple transactions, so messages race.</div></div>
@@ -1148,11 +1138,6 @@
 <!-- Module 10.3 review -->
 <section data-background-color="#f6f8fb">
   <h2>Module 10.3 — Review</h2>
-  <div class="activity">
-    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
-      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
-    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
-  </div>
   <div class="qa">
     <p class="q">1. How does a cache-based (SCI) directory store sharer information?</p>
     <div class="fragment"><div class="a">As a <strong>doubly-linked list</strong>: the home holds only the <strong>head pointer</strong>; each sharing cache stores prev/next pointers. Storage is proportional to <em>cache</em> size, not p².</div></div>
@@ -1187,7 +1172,6 @@
   <div class="callout"><span class="lbl">Course textbook</span>
     Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em>, Chapman &amp; Hall/CRC, 2015.
     These slides follow and adapt the corresponding chapter of the text.</div>
-  <p class="src">Diagrams and examples were re-drawn for these slides; see the textbook for the full treatment, derivations, and exercises.</p>
 </section>
 </div>
 

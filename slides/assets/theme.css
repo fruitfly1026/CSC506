@@ -160,8 +160,8 @@
 
 /* ---------- code ---------- */
 .reveal pre {
-  width: 100%; box-shadow: 0 6px 24px rgba(15,23,42,.18);
-  border-radius: 10px; margin: .5em 0; font-size: .56em;
+  width: fit-content; max-width: 100%; box-shadow: 0 6px 24px rgba(15,23,42,.18);
+  border-radius: 10px; margin: .5em auto; font-size: .56em;
 }
 .reveal pre code {
   font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
@@ -177,6 +177,17 @@
 }
 .code-label { font-size:.62em; font-weight:700; color: var(--muted); letter-spacing:.05em;
   text-transform: uppercase; margin-bottom:-.2em; }
+
+/* ---------- symbol key / legend strip ---------- */
+.reveal .symkey {
+  display:flex; flex-wrap:wrap; justify-content:center; gap:.4em .6em;
+  margin:.1em 0 .7em; font-size:.62em;
+}
+.reveal .symkey > span {
+  background: var(--bg-alt); border:1px solid var(--line, #e3e6ec);
+  border-radius:999px; padding:.18em .7em; color: var(--ink); white-space:nowrap;
+}
+.reveal .symkey .katex { color: var(--wolf-red-d); font-weight:700; }
 
 /* ---------- tables ---------- */
 .reveal table { font-size: .62em; border-collapse: collapse; width: 100%; }

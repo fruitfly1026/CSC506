@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSC/ECE 506 · Lecture 2 — Parallel Computers &amp; Performance</title>
+
+<!-- reveal.js core (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<!-- code highlighting + math -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+<!-- fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<!-- course theme -->
+<link rel="stylesheet" href="assets/theme.css?v=11">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module A</div>
+  <div class="mod-title">Why Performance, and the Limits of Speedup</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Say <strong>why</strong> performance analysis is done, and what optimization aims for</li>
+      <li>Explain why <strong>linear speedup</strong> is rare and state <strong>Amdahl's law</strong></li>
+      <li>Name the three sources of <strong>parallel overhead</strong></li>
+    </ul>
+  </div>
+</section>
+<section data-background-color="#ffffff">
+  <h2>Why Study Performance?</h2>
+  <div class="cols">
+    <div>
+      <p>Performance is the <strong>driving motivation</strong> for going parallel — and it is analyzed <em>everywhere</em>:</p>
+      <ul class="small">
+        <li>To <strong>justify</strong> parallelizing a program at all</li>
+        <li>In <strong>algorithm design</strong> — choosing the decomposition</li>
+        <li>In <strong>architecture design</strong> — what to build</li>
+        <li>In <strong>system building, purchase &amp; evaluation</strong></li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Goals of optimization</span>
+        <ul class="small" style="margin:.2em 0 0 .9em">
+          <li>Shorter overall <strong>execution time</strong></li>
+          <li>Better <strong>speedup</strong></li>
+          <li>Better <strong>scalability</strong></li>
+        </ul></div>
+      <p class="src">These three goals recur in every later chapter — coherence, consistency, and interconnect are all about protecting them.</p>
+    </div>
+  </div>
+</section>
+<section data-background-color="#ffffff">
+  <h2>Why Can't We Just Get Linear Speedup?</h2>
+  <p class="small">The dream: with <strong>p</strong> processing elements, shorten execution time by a factor of <strong>p</strong>. This is the constant goal of parallel programs — and <em>most cannot reach it</em>.</p>
+  <div class="cols c3">
+    <div class="callout ok"><span class="lbl">A few over-achievers</span><strong>Super-linear</strong> speedup (&gt; p) — rare, from a hardware advantage (e.g. the working set now fits in cache).</div>
+    <div class="callout"><span class="lbl">Software limit</span>The <strong>algorithm</strong> has an inherently <em>serial part</em> that no number of PEs can split.</div>
+    <div class="callout warn"><span class="lbl">Hardware limit</span><strong>Architecture</strong> &amp; <strong>bandwidth</strong> limits — shared resources serialize access.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The culprit</span>
+    Speedup is capped by the <strong>serial fraction</strong> of the work — the part that runs on one PE while the rest wait. That observation is <strong>Amdahl's law</strong>.</div>
+</section>
+<section data-background-color="#ffffff">
+  <h2>Amdahl's Law (Revisited)</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 420 270" class="chart">
+        <!-- axes -->
+        <line class="axis" x1="48" y1="20" x2="48" y2="225"/>
+        <line class="axis" x1="48" y1="225" x2="405" y2="225"/>
+        <text x="226" y="252" text-anchor="middle" class="lbl">number of processors  (1 … 100)</text>
+        <text x="16" y="120" text-anchor="middle" class="lbl" transform="rotate(-90 16 120)">speedup</text>
+        <!-- y ticks 0..100 -->
+        <text x="42" y="29" text-anchor="end" class="lbl">100</text>
+        <text x="42" y="69" text-anchor="end" class="lbl">75</text>
+        <text x="42" y="109" text-anchor="end" class="lbl">50</text>
+        <text x="42" y="149" text-anchor="end" class="lbl">25</text>
+        <text x="42" y="225" text-anchor="end" class="lbl">0</text>
+        <line class="grid" x1="48" y1="65" x2="405" y2="65"/>
+        <line class="grid" x1="48" y1="105" x2="405" y2="105"/>
+        <line class="grid" x1="48" y1="145" x2="405" y2="145"/>
+        <!-- s = 0 : linear diagonal to 100 (x:48->405 maps p:1->100 ; y:225->25 maps S:0->100) -->
+        <line x1="48" y1="225" x2="405" y2="25" stroke="#16a34a" stroke-width="2.5"/>
+        <text x="350" y="38" class="note" style="fill:#16a34a">s = 0</text>
+        <!-- s = 0.01 -> ~50 -->
+        <path d="M48,225 C150,140 280,110 405,105" stroke="#2563eb" stroke-width="2.5" fill="none"/>
+        <text x="402" y="100" text-anchor="end" class="note" style="fill:#2563eb">s = 0.01</text>
+        <!-- s = 0.025 -> ~28 -->
+        <path d="M48,225 C140,170 280,150 405,142" stroke="#7c3aed" stroke-width="2.5" fill="none"/>
+        <text x="402" y="136" text-anchor="end" class="note" style="fill:#7c3aed">s = 0.025</text>
+        <!-- s = 0.05 -> ~17 -->
+        <path d="M48,225 C130,190 280,172 405,157" stroke="#d97706" stroke-width="2.5" fill="none"/>
+        <text x="402" y="170" text-anchor="end" class="note" style="fill:#d97706">s = 0.05</text>
+        <!-- s = 0.1 -> ~9.5 -->
+        <path d="M48,225 C120,205 280,190 405,187" stroke="#dc2626" stroke-width="2.5" fill="none"/>
+        <text x="402" y="201" text-anchor="end" class="note" style="fill:#dc2626">s = 0.1</text>
+        <!-- s = 0.2 -> ~5 -->
+        <path d="M48,225 C120,213 280,205 405,205" stroke="#991b1b" stroke-width="2.5" fill="none"/>
+        <text x="402" y="220" text-anchor="end" class="note" style="fill:#991b1b">s = 0.2</text>
+      </svg>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Amdahl's law</span>
+        Let <strong>s</strong> = the serial fraction of the work. As \(p \to \infty\), the maximum speedup is
+        <div class="eq">\( S \;=\; \dfrac{1}{s} \)</div></div>
+      <ul class="small">
+        <li><span class="pill">s = 0</span> ideal — linear, follows the diagonal</li>
+        <li><span class="pill">s = 0.01</span> caps at <strong>100×</strong> (plot ≈ 50 at p = 100)</li>
+        <li><span class="pill">s = 0.2</span> caps at just <strong>5×</strong>, no matter how many PEs</li>
+      </ul>
+      <p class="src">Even a tiny serial fraction puts a hard ceiling on speedup.</p>
+    </div>
+  </div>
+</section>
+<section data-background-color="#ffffff">
+  <h2>Amdahl in Reality</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 420 260" class="chart">
+        <line class="axis" x1="50" y1="20" x2="50" y2="215"/>
+        <line class="axis" x1="50" y1="215" x2="405" y2="215"/>
+        <text x="227" y="242" text-anchor="middle" class="lbl">number of processors  (0 … 256)</text>
+        <text x="18" y="115" text-anchor="middle" class="lbl" transform="rotate(-90 18 115)">speedup</text>
+        <!-- y 0..80 : y px 215->20 -->
+        <text x="44" y="28" text-anchor="end" class="lbl">80</text>
+        <text x="44" y="76" text-anchor="end" class="lbl">60</text>
+        <text x="44" y="125" text-anchor="end" class="lbl">40</text>
+        <text x="44" y="173" text-anchor="end" class="lbl">20</text>
+        <text x="44" y="215" text-anchor="end" class="lbl">0</text>
+        <line class="grid" x1="50" y1="76" x2="405" y2="76"/>
+        <line class="grid" x1="50" y1="125" x2="405" y2="125"/>
+        <line class="grid" x1="50" y1="173" x2="405" y2="173"/>
+        <!-- x ticks -->
+        <text x="50"  y="230" text-anchor="middle" class="lbl">0</text>
+        <text x="139" y="230" text-anchor="middle" class="lbl">64</text>
+        <text x="227" y="230" text-anchor="middle" class="lbl">128</text>
+        <text x="405" y="230" text-anchor="middle" class="lbl">256</text>
+        <!-- Amdahl's law: keeps rising toward ~73 at 256 (y at 73 ~ 38) -->
+        <path d="M50,215 C150,120 280,65 405,38" stroke="#CC0000" stroke-width="3" fill="none"/>
+        <text x="300" y="55" class="note" style="fill:#CC0000">Amdahl's Law</text>
+        <!-- Reality: peaks ~25 around 64-100 then declines to ~10 at 256 -->
+        <path d="M50,215 C110,180 150,155 200,152 C260,150 340,180 405,191" stroke="#2563eb" stroke-width="3" fill="none"/>
+        <circle cx="200" cy="152" r="4" fill="#2563eb"/>
+        <text x="210" y="148" class="note" style="fill:#2563eb">Reality (peak ≈ 25)</text>
+      </svg>
+      <div class="src">Even after accounting for the serial part, real speedup peaks, then <em>declines</em>.</div>
+    </div>
+    <div>
+      <p>Amdahl's law assumes the only cost is the serial fraction. But adding PEs adds <strong>more than zero overhead</strong>:</p>
+      <ul class="small">
+        <li>Communication grows with p</li>
+        <li>Synchronization &amp; idling grow with p</li>
+        <li>Eventually overhead <em>outweighs</em> the extra compute</li>
+      </ul>
+      <div class="callout warn"><span class="lbl">Past the sweet spot</span>
+        Adding processors can make a program <strong>slower</strong>. Knowing where the curve peaks is half of performance engineering.</div>
+    </div>
+  </div>
+</section>
+<section data-background-color="#ffffff">
+  <h2>Parallelization Is Not Free: Overhead</h2>
+  <p class="small">Where does the gap between Amdahl and reality come from? Parallelization itself <strong>creates work that the serial program never had to do</strong>. Three typical sources:</p>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Interaction · "talking"</span>
+      <strong>Inter-process interaction.</strong>
+      <span class="small">Synchronization and data communication between processes.</span></div>
+    <div class="callout warn"><span class="lbl">Idling · "waiting"</span>
+      <strong>Processes sit idle.</strong>
+      <span class="small">Load imbalance, synchronization, serialization, resource contention.</span></div>
+    <div class="callout"><span class="lbl">Excess · "replicating"</span>
+      <strong>Excess computation.</strong>
+      <span class="small">Work repeated by multiple processes that the serial code did once.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Net</span>
+    Total useful work is fixed; overhead is added on top and grows with p. <strong>Reducing overhead is what the rest of this unit is about.</strong></div>
+</section>
+<section data-background-color="#f6f8fb">
+  <h2>Module A — Review</h2>
+  <div class="qa">
+    <p class="q">1. State Amdahl's law and the maximum speedup for s = 0.05.</p>
+    <div class="fragment"><div class="a">Max speedup \(S = 1/s\). For s = 0.05, \(S = 1/0.05 = 20\)× — no matter how many PEs.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. Why does real speedup peak and then decline as p grows?</p>
+    <div class="fragment"><div class="a">Parallel overhead (communication, idling, excess computation) grows with p; past a point it outweighs the extra compute, so adding PEs hurts.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Name the three sources of parallel overhead.</p>
+    <div class="fragment"><div class="a">Inter-process interaction (talking), idling (waiting), and excess computation (replicating).</div></div>
+  </div>
+  <p class="src">Click / press → to reveal each answer.</p>
+</section>
+
+</div>
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Performance · Module A — Why Performance &amp; the Limits of Speedup</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.04,
+    minScale: 0.2, maxScale: 1.6,
+    center: false,                 // top-align content so the NC State header bar sits at the slide top
+    hash: true, slideNumber: 'c/t', history: true,
+    transition: 'slide', transitionSpeed: 'fast',
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      {left:'\\(', right:'\\)', display:false},
+      {left:'$$', right:'$$', display:true}
+    ]},
+  });
+</script>
+<script>
+/* Auto-fit: shrink any slide whose content would exceed the 720px slide (and be
+   cut off in true 16:9 fullscreen). Scales content via --nc-fit; the header bar
+   is px-based and unaffected. */
+(function(){
+  function fit(s){ if(!s) return;
+    s.style.setProperty('--nc-fit','1');           // reset, then measure natural height
+    var h=s.scrollHeight;
+    if(h>724){ var k=Math.max(0.6, Math.min(1, 720/h));
+      s.style.setProperty('--nc-fit', k.toFixed(3)); }
+  }
+  if(window.Reveal){
+    Reveal.on('ready', function(e){ fit(e.currentSlide); });
+    Reveal.on('slidechanged', function(e){ fit(e.currentSlide); });
+    try{ if(Reveal.isReady && Reveal.isReady()) fit(Reveal.getCurrentSlide()); }catch(e){}
+  }
+})();
+</script>
+<script>
+/* In-class activity: set this to THIS chapter's Google Form link (one form per chapter). */
+const FORM_URL = "PASTE_GOOGLE_FORM_LINK_HERE";
+(function(){
+  function paint(){
+    var set = FORM_URL && FORM_URL.indexOf("PASTE_") === -1;
+    document.querySelectorAll('.activity').forEach(function(a){
+      var lnk=a.querySelector('.form-link'), img=a.querySelector('.qr-img'), ph=a.querySelector('.qr-ph');
+      if(set){
+        if(lnk) lnk.href=FORM_URL;
+        if(img){ img.src='https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=0&data='+encodeURIComponent(FORM_URL); img.style.display=''; }
+        if(ph) ph.style.display='none';
+      } else {
+        if(lnk) lnk.href='#';
+        if(img) img.style.display='none';
+        if(ph) ph.style.display='';
+      }
+    });
+  }
+  if(window.Reveal){ Reveal.on('ready', paint); }
+  document.addEventListener('DOMContentLoaded', paint); paint();
+})();
+</script>
+</body>
+</html>

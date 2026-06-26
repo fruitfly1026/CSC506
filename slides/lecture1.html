@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSC/ECE 506 · Lecture 1 — Multicore &amp; Power Wall</title>
+
+<!-- reveal.js core (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<!-- code highlighting + math -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+<!-- fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<!-- course theme -->
+<link rel="stylesheet" href="assets/theme.css?v=11">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<section class="title-slide" data-background-color="#ffffff">
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <h1>Lecture 1</h1>
+  <div class="sub">Perspectives I — The Switch to Multicore</div>
+  <aside class="notes">Lecture 1 covers Module 1.1 (the switch to multicore): why the industry pivoted to parallel hardware around 2005, the low-hanging-fruit theory, and how multicore is now the building block of clusters and supercomputers. Course info comes first. (The power wall, Module 1.2, moves to Lecture 2.)</aside>
+</section>
+<section data-background-color="#ffffff">
+  <h2>Lecture 1 Roadmap</h2>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Course info</span><strong>Logistics &amp; syllabus</strong><br><span class="small">Meeting times, grading, textbook, AI policy, schedule.</span></div>
+    <div class="callout"><span class="lbl">Module 1.1</span><strong>The Switch to Multicore</strong><br><span class="small">Core / multicore, the <em>low-hanging-fruit</em> theory (ILP → TLP), and multicore everywhere (clusters &amp; supercomputers).</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The thread</span>Physics removed the free lunch — pushing the burden of performance onto <strong>software &amp; architecture</strong>. <span class="small">(The power wall behind it: Lecture 2.)</span></div>
+</section>
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 1.1</div>
+  <div class="mod-title">The Switch to Multicore</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Define <strong>core</strong>, <strong>multicore</strong>, and <strong>parallel architecture</strong> precisely</li>
+      <li>Explain the <strong>low-hanging-fruit</strong> theory of architectural progress</li>
+      <li>Contrast <strong>ILP</strong> and <strong>TLP</strong>, and say why we ran out of cheap ILP</li>
+    </ul>
+  </div>
+</section>
+<section data-background-color="#ffffff">
+  <h2>Definitions</h2>
+  <div class="callout fragment"><span class="lbl">Parallel architecture</span>
+    An architecture where <strong>CPUs are integrated tightly enough that they can cooperate to solve a single problem</strong>.</div>
+  <div class="fragment">
+    <p><strong>What is a CPU (a "core")?</strong> A processing element that can <em>independently</em> fetch and execute instructions from at least one instruction stream.</p>
+    <ul>
+      <li>Contains: instruction-fetch unit, program counter, scheduler, functional units, register file…</li>
+      <li>Does it include the L1 cache? the L2 cache? <span class="fragment"><span class="pill gray">Yes and no</span> — depends on context</span></li>
+    </ul>
+  </div>
+  <div class="callout takeaway fragment"><span class="lbl">Course convention</span>
+    A <strong>core</strong> is the logic that independently runs an instruction stream. We generally <em>exclude</em> caches from the definition.</div>
+  <aside class="notes">The "yes and no" is deliberate: vendors draw the boundary differently. For this course, when we say "core" we mean the execution logic, and we'll talk about caches as a separate (shared or private) resource.</aside>
+</section>
+<section data-background-color="#ffffff">
+  <h2>What is a Multicore?</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">Multicore</span>A single chip (die) containing <strong>multiple CPUs / cores</strong>.</div>
+      <p class="small"><strong>Terminology used in this course:</strong></p>
+      <ul class="small">
+        <li><code class="inline">Processor = CPU = core</code></li>
+        <li><code class="inline">Processor chip</code> = the chip that holds the cores</li>
+      </ul>
+      <p class="small">Most multicores <em>are</em> parallel architectures; parallel architectures often use multicores as the building block.</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 220 160" class="chart" style="max-width:280px">
+        <rect x="6" y="6" width="208" height="148" rx="14" fill="#f0fdf4" stroke="#22c55e" stroke-width="2"/>
+        <text x="110" y="26" text-anchor="middle" class="note" style="fill:#15803d">Parallel Architecture</text>
+        <rect x="34" y="40" width="152" height="100" rx="12" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+        <text x="110" y="58" text-anchor="middle" class="note" style="fill:#1d4ed8">Multicore</text>
+        <rect x="48" y="70" width="48" height="32" rx="6" fill="#fff" stroke="#1d4ed8"/><text x="72" y="90" text-anchor="middle" class="lbl">core</text>
+        <rect x="124" y="70" width="48" height="32" rx="6" fill="#fff" stroke="#1d4ed8"/><text x="148" y="90" text-anchor="middle" class="lbl">core</text>
+        <rect x="48" y="108" width="48" height="24" rx="6" fill="#fff" stroke="#1d4ed8"/><text x="72" y="124" text-anchor="middle" class="lbl">core</text>
+        <rect x="124" y="108" width="48" height="24" rx="6" fill="#fff" stroke="#1d4ed8"/><text x="148" y="124" text-anchor="middle" class="lbl">core</text>
+      </svg>
+      <div class="src">Multicore ⊂ Parallel architecture (usually)</div>
+    </div>
+  </div>
+</section>
+<section data-background-color="#ffffff">
+  <h2>Recent Multicores</h2>
+  <p><strong>From a handful to many dozens of cores</strong>, most x86 cores running <strong>2 hardware threads</strong> (SMT-2), with a <strong>3-level</strong> cache hierarchy: per-core private <strong>L1</strong> (split I/D) and <strong>L2</strong>, plus a large <strong>shared L3 / last-level cache</strong>; an on-die mesh / ring / chiplet interconnect links cores, cache, and memory controllers.</p>
+  <table>
+    <tr><th>Chip (year)</th><th>Cores / threads</th><th>Clock (boost)</th><th>Process</th><th>L1 / core</th><th>L2 / core</th><th>L3 (shared LLC)</th></tr>
+    <tr><td>AMD EPYC 9654 "Genoa" (2022)</td><td>96 / 192</td><td>3.7 GHz</td><td>TSMC 5 nm</td><td>64 KB (32 I + 32 D)</td><td>1 MB</td><td>384 MB (32 MB × 12 CCD)</td></tr>
+    <tr><td>AMD EPYC "Turin" Zen 5 (2024)</td><td>up to 192 / 384</td><td>~3.7 GHz</td><td>TSMC 3 nm (Zen 5c)</td><td>80 KB (32 I + 48 D)</td><td>1 MB</td><td>up to 384 MB</td></tr>
+    <tr><td>Intel Xeon "Emerald Rapids" (2023)</td><td>64 / 128</td><td>3.9 GHz</td><td>Intel 7 &dagger;</td><td>80 KB (32 I + 48 D)</td><td>2 MB</td><td>320 MB</td></tr>
+    <tr><td>Apple M3 Max (2023)</td><td>16 (12 P + 4 E)</td><td>~4.0 GHz</td><td>TSMC 3 nm</td><td>up to 192 KB</td><td>16 MB / cluster</td><td>48 MB SLC*</td></tr>
+  </table>
+  <p class="src">SMT width varies: x86 cores run <strong>2 threads</strong> (SMT-2); IBM POWER up to 8; Apple &amp; most ARM run 1 (no SMT). Process labels are commercial <strong>node names</strong>, not physical gate lengths. <strong>&dagger; &ldquo;Intel 7&rdquo;</strong> is Intel&rsquo;s former 10 nm node (&asymp; TSMC 7 nm class), not a true 7 nm. *Apple uses large shared per-cluster L2 + a system-level cache (SLC) rather than a classic L3.</p>
+</section>
+<section data-background-color="#ffffff">
+  <h2>A Closer Look: AMD EPYC &ldquo;Genoa&rdquo; (Zen 4)</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 300 200" class="chart" style="max-width:360px">
+        <rect x="6" y="6" width="288" height="188" rx="12" fill="#0f172a"/>
+        <text x="150" y="24" text-anchor="middle" style="fill:#fff;font-weight:700;font-size:12px">EPYC package &mdash; 12 CCDs + central I/O die</text>
+        <!-- left CCD column (6) -->
+        <g fill="#3b82f6" stroke="#1d4ed8">
+          <rect x="22" y="34" width="54" height="20" rx="4"/><rect x="22" y="60" width="54" height="20" rx="4"/>
+          <rect x="22" y="86" width="54" height="20" rx="4"/><rect x="22" y="112" width="54" height="20" rx="4"/>
+          <rect x="22" y="138" width="54" height="20" rx="4"/><rect x="22" y="164" width="54" height="20" rx="4"/>
+        </g>
+        <!-- right CCD column (6) -->
+        <g fill="#3b82f6" stroke="#1d4ed8">
+          <rect x="224" y="34" width="54" height="20" rx="4"/><rect x="224" y="60" width="54" height="20" rx="4"/>
+          <rect x="224" y="86" width="54" height="20" rx="4"/><rect x="224" y="112" width="54" height="20" rx="4"/>
+          <rect x="224" y="138" width="54" height="20" rx="4"/><rect x="224" y="164" width="54" height="20" rx="4"/>
+        </g>
+        <g class="tiny" style="fill:#fff" text-anchor="middle">
+          <text x="49" y="48">CCD</text><text x="49" y="74">CCD</text><text x="49" y="100">CCD</text><text x="49" y="126">CCD</text><text x="49" y="152">CCD</text><text x="49" y="178">CCD</text>
+          <text x="251" y="48">CCD</text><text x="251" y="74">CCD</text><text x="251" y="100">CCD</text><text x="251" y="126">CCD</text><text x="251" y="152">CCD</text><text x="251" y="178">CCD</text>
+        </g>
+        <!-- central I/O die -->
+        <rect x="108" y="34" width="84" height="150" rx="6" fill="#f59e0b" stroke="#b45309"/>
+        <text x="150" y="104" text-anchor="middle" style="fill:#052e16;font-weight:700;font-size:11px">I/O die</text>
+        <text x="150" y="120" text-anchor="middle" class="tiny" style="fill:#3a2a00">mem ctrl ·</text>
+        <text x="150" y="132" text-anchor="middle" class="tiny" style="fill:#3a2a00">Infinity Fabric</text>
+      </svg>
+      <div class="src">One CCD = 8 Zen 4 cores sharing a 32 MB L3.</div>
+    </div>
+    <div>
+      <ul>
+        <li><strong>12 CCD chiplets</strong> (blue), <strong>8 cores</strong> each &rarr; up to <strong>96 cores / 192 threads</strong></li>
+        <li>Each CCD: 8 cores share a <strong>32 MB L3</strong> &rarr; <strong>384 MB</strong> total</li>
+        <li>Per core: <strong>64 KB L1</strong> (32 I + 32 D) + <strong>1 MB</strong> private L2</li>
+        <li>Central <strong>I/O die</strong> (amber): memory controllers + <strong>Infinity Fabric</strong> linking all CCDs</li>
+        <li>Chiplet design: CCDs on <strong>5 nm</strong>, I/O die on 6 nm</li>
+      </ul>
+      <div class="callout warn"><span class="lbl">The big question</span>
+        Starting ~2001&ndash;2005, every chipmaker turned to the multicore approach.
+        <strong>Why then? Why not earlier or later?</strong></div>
+      <p class="small muted">Module 1.1 answers the "why now"; Module 1.2 gives the physics.</p>
+    </div>
+  </div>
+</section>
+<section data-background-color="#ffffff">
+  <h2>Feature Size Scaling</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 430 240" class="chart">
+        <line class="axis" x1="60" y1="22" x2="60" y2="200"/>
+        <line class="axis" x1="60" y1="200" x2="412" y2="200"/>
+        <text x="54" y="34"  text-anchor="end" class="lbl">10 µm</text>
+        <text x="54" y="76"  text-anchor="end" class="lbl">1 µm</text>
+        <text x="54" y="118" text-anchor="end" class="lbl">100 nm</text>
+        <text x="54" y="160" text-anchor="end" class="lbl">10 nm</text>
+        <text x="54" y="200" text-anchor="end" class="lbl">1 nm</text>
+        <line class="grid" x1="60" y1="72"  x2="412" y2="72"/>
+        <line class="grid" x1="60" y1="114" x2="412" y2="114"/>
+        <line class="grid" x1="60" y1="156" x2="412" y2="156"/>
+        <text x="70"  y="216" text-anchor="middle" class="lbl">1971</text>
+        <text x="167" y="216" text-anchor="middle" class="lbl">1986</text>
+        <text x="264" y="216" text-anchor="middle" class="lbl">2001</text>
+        <text x="400" y="216" text-anchor="middle" class="lbl">2022</text>
+        <g class="dot">
+          <circle cx="70" cy="30" r="4"/><circle cx="96" cy="39" r="4"/><circle cx="122" cy="52" r="4"/>
+          <circle cx="141" cy="65" r="4"/><circle cx="167" cy="72" r="4"/><circle cx="186" cy="76" r="4"/>
+          <circle cx="212" cy="81" r="4"/><circle cx="225" cy="91" r="4"/><circle cx="238" cy="97" r="4"/>
+          <circle cx="251" cy="103" r="4"/><circle cx="264" cy="109" r="4"/><circle cx="277" cy="116" r="4"/>
+          <circle cx="290" cy="122" r="4"/><circle cx="303" cy="129" r="4"/><circle cx="322" cy="135" r="4"/>
+          <circle cx="335" cy="142" r="4"/><circle cx="348" cy="150" r="4"/><circle cx="361" cy="156" r="4"/>
+          <circle cx="374" cy="163" r="4"/><circle cx="387" cy="169" r="4"/><circle cx="400" cy="178" r="4"/>
+        </g>
+        <!-- two-segment trend: shallower pre-1990, steeper after -->
+        <path class="trend" d="M70,30 L193,72 L400,178"/>
+        <text x="170" y="48" text-anchor="middle" class="note" style="font-size:15px">Shrinks 30% / 3 yrs</text>
+        <text x="300" y="156" text-anchor="middle" class="note" style="font-size:15px">Shrinks 30% / 1.5 yrs</text>
+      </svg>
+      <div class="src">Process-node introduction years. Data: Wikipedia, &ldquo;List of semiconductor scale examples&rdquo; (ITRS / IRDS roadmaps). Recent &ldquo;nm&rdquo; node names are commercial labels, not physical gate lengths.</div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Moore's Law</span>
+        Gordon Moore's 1965 observation that the number of transistors on a chip <strong>doubles roughly every ~2 years</strong> (originally yearly; revised to ~2 years in 1975) as feature sizes shrink. It's an empirical trend, <em>not</em> a physical law.</div>
+      <div class="callout takeaway"><span class="lbl">Result of scaling</span>
+        <strong>2,300</strong> transistors (Intel 4004, 1971) &rarr; <strong>2.3 billion</strong> transistors (2012).</div>
+      <ul class="small">
+        <li>Feature size: <strong>10 µm</strong> (1971) → <strong>~1 µm</strong> (late 1980s) → <strong>90 nm</strong> (2003) → <strong>3 nm</strong> (2022)</li>
+        <li>Early pace ~<strong>30% / 3 yrs</strong>, accelerating to ~<strong>30% / 1.5 yrs</strong> after ~1990</li>
+      </ul>
+      <p class="src">Abundant transistors are <em>not</em> the same as abundant performance — that's the twist in Module 1.2.</p>
+    </div>
+  </div>
+</section>
+<section data-background-color="#ffffff">
+  <h2>Evolution in Microprocessors</h2>
+  <p class="small muted">Table 1.1: Evolution of Intel Processors — other chipmakers follow similar transistor-integration scaling per Moore's law.</p>
+  <table>
+    <tr><th>Year</th><th>Processor</th><th>Specifications</th><th>New Features</th></tr>
+    <tr><td>1971</td><td>4004</td><td>740 KHz, 2300 transistors, 10 µm, 640 B addressable memory, 4 KB program memory</td><td>—</td></tr>
+    <tr><td>1978</td><td>8086</td><td>16-bit, 5–10 MHz, 29,000 transistors at 3 µm, 1 MB addressable memory</td><td>—</td></tr>
+    <tr><td>1982</td><td>80286</td><td>8–12.5 MHz</td><td>Virtual memory and protection mode</td></tr>
+    <tr><td>1985</td><td>386</td><td>32-bit, 16–33 MHz, 275K transistors, 4 GB addressable memory</td><td class="hi">Pipelining</td></tr>
+    <tr><td>1989</td><td>486</td><td>25–100 MHz, 1.2M transistors</td><td>FPU integration</td></tr>
+    <tr><td>1993</td><td>Pentium</td><td>60–200 MHz</td><td class="hi">on chip L1 caches, SMP support</td></tr>
+    <tr><td>1995</td><td>Pentium Pro</td><td>16 KB L1 caches, 5.5M transistors</td><td class="hi">out-of-order execution</td></tr>
+    <tr><td>1997</td><td>Pentium MMX</td><td>233–450 MHz, 32 KB L1 cache, 4.5M transistors</td><td>dynamic branch prediction, MMX instruction sets</td></tr>
+    <tr><td>1999</td><td>Pentium III</td><td>450–1400 MHz, 256 KB L2 cache on chip, 28M transistors</td><td>SSE instruction sets</td></tr>
+    <tr><td>2000</td><td>Pentium IV</td><td>1.4–3 GHz, 55M transistors</td><td class="hi">hyper-pipelining, SMT</td></tr>
+    <tr><td>2006</td><td>Pentium Dual-Core</td><td>64-bit, 2 GHz, 167M transistors, 4 MB L2 cache on chip</td><td class="hi">Dual core, virtualization support</td></tr>
+    <tr><td>2011</td><td>Sandy Bridge (i7)</td><td>64-bit, up to 3.5 GHz, 2.37B transistors, up to 20 MB L3 cache</td><td>graphics processor, TurboBoost</td></tr>
+  </table>
+  <div class="callout">Pipelining → caches → OoO → SMT → <strong>multicore</strong>. Why exactly that order? Next slide.</div>
+</section>
+<section data-background-color="#ffffff">
+  <h2>Why That Order? The Low-Hanging-Fruit Theory</h2>
+  <div class="cols">
+    <div>
+      <p>More transistors became available steadily. So "single core → multicore" feels inevitable…</p>
+      <p><strong>But why did pipelining, branch prediction, superscalar, and caches all come <em>before</em> multicore?</strong></p>
+      <div class="callout takeaway"><span class="lbl">The theory</span>
+        A farmer picks the <strong>low-hanging fruit first</strong> — it takes the least effort — <em>until they run out</em>.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 220 200" class="chart" style="max-width:260px">
+        <ellipse cx="110" cy="60" rx="95" ry="55" fill="#16a34a" opacity="0.85"/>
+        <rect x="105" y="110" width="10" height="80" fill="#7c4a02"/>
+        <!-- low fruit (easy) -->
+        <circle cx="70" cy="95" r="11" fill="#dc2626"/><text x="70" y="99" text-anchor="middle" style="fill:#fff;font-size:9px;font-weight:700">ILP</text>
+        <circle cx="150" cy="92" r="11" fill="#dc2626"/><text x="150" y="96" text-anchor="middle" style="fill:#fff;font-size:9px;font-weight:700">cache</text>
+        <!-- high fruit (hard) -->
+        <circle cx="105" cy="38" r="12" fill="#991b1b"/><text x="105" y="42" text-anchor="middle" style="fill:#fff;font-size:8px;font-weight:700">TLP</text>
+        <text x="110" y="185" text-anchor="middle" class="lbl">low = easy ILP first, then reach for hard TLP</text>
+      </svg>
+    </div>
+  </div>
+  <aside class="notes">This metaphor is the spine of the whole chapter. Architects exploited the techniques that gave performance with the least programmer effort first (ILP, caches — invisible to the programmer). Multicore is "high-hanging" because it demands parallel programming.</aside>
+</section>
+<section data-background-color="#ffffff">
+  <h2>Multicore Is <em>Not</em> Low-Hanging</h2>
+  <div class="flynn">
+    <div class="cell on">
+      <h4>TLP — Thread-Level Parallelism</h4>
+      <ul class="small">
+        <li>Split program into multiple <strong>threads</strong></li>
+        <li>Coordinate with <strong>synchronization</strong></li>
+        <li><strong>Communicate</strong> data across threads</li>
+      </ul>
+      <p class="tag">Cost: real parallel-programming effort 😓</p>
+    </div>
+    <div class="cell">
+      <h4 style="color:var(--accent)">ILP — Instruction-Level Parallelism</h4>
+      <ul class="small">
+        <li>Hardware finds parallelism <em>automatically</em></li>
+        <li>Programmer keeps the <strong>sequential</strong> mental model</li>
+      </ul>
+      <p class="tag">Cost: little to none for the programmer 🙂</p>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">So why switch?</span>
+    We switched from ILP to TLP only because we <strong>ran out of low-hanging ILP fruit</strong>. Multicore wasn't chosen for love — it was chosen out of necessity.</div>
+</section>
+<section data-background-color="#ffffff">
+  <h2>The ILP Fruits</h2>
+  <div class="cols">
+    <div>
+      <h3>Pipelining &amp; issue</h3>
+      <ul class="small">
+        <li>Pipelining (RISC; CISC with a RISC backend)</li>
+        <li>Superscalar (multiple issue / cycle)</li>
+        <li>Out-of-order execution</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Memory hierarchy</h3>
+      <ul class="small">
+        <li>Caches exploit <strong>spatial</strong> &amp; <strong>temporal</strong> locality</li>
+        <li>Multiple cache levels (L1/L2/L3)</li>
+      </ul>
+    </div>
+  </div>
+  <p class="muted small">Next: three quick ILP techniques (pipelining, superscalar) and three flavors of parallelism we can expose instead.</p>
+</section>
+<section data-background-color="#ffffff">
+  <h2>ILP Technique: Pipelining</h2>
+  <p class="small">Overlap successive instructions in a 5-stage pipeline (<strong>IF · ID · EX · MEM · WB</strong>). One instruction <em>finishes</em> every cycle at steady state.</p>
+  <div class="pipe">
+    <div class="row"><div class="lbl">A (a load)</div><div class="cell IF">IF</div><div class="cell ID">ID</div><div class="cell EX">EX</div><div class="cell MEM">MEM</div><div class="cell WB">WB</div><div class="cell" style="visibility:hidden"></div><div class="cell" style="visibility:hidden"></div><div class="cell" style="visibility:hidden"></div><div class="cell" style="visibility:hidden"></div></div>
+    <div class="row"><div class="lbl">B</div><div class="cell" style="visibility:hidden"></div><div class="cell IF">IF</div><div class="cell ID">ID</div><div class="cell EX">EX</div><div class="cell MEM">MEM</div><div class="cell WB">WB</div><div class="cell" style="visibility:hidden"></div><div class="cell" style="visibility:hidden"></div><div class="cell" style="visibility:hidden"></div></div>
+    <div class="row"><div class="lbl">C</div><div class="cell" style="visibility:hidden"></div><div class="cell" style="visibility:hidden"></div><div class="cell IF">IF</div><div class="cell ID">ID</div><div class="cell EX">EX</div><div class="cell MEM">MEM</div><div class="cell WB">WB</div><div class="cell" style="visibility:hidden"></div><div class="cell" style="visibility:hidden"></div></div>
+    <div class="row"><div class="lbl" style="color:var(--muted)">cycle →</div><div class="cell tiny">1</div><div class="cell tiny">2</div><div class="cell tiny">3</div><div class="cell tiny">4</div><div class="cell tiny">5</div><div class="cell tiny">6</div><div class="cell tiny">7</div><div class="cell tiny" style="visibility:hidden"></div><div class="cell tiny" style="visibility:hidden"></div></div>
+  </div>
+  <div class="callout"><span class="lbl">Why it's "low-hanging"</span>The programmer writes ordinary sequential code; the hardware overlaps it. Free performance — <em>until</em> latching overhead and deep-pipeline penalties bite (we'll see this limit shortly).</div>
+</section>
+<section data-background-color="#ffffff">
+  <h2>ILP Technique: Superscalar</h2>
+  <div class="callout"><span class="lbl">Superscalar</span>A CPU that <strong>issues and executes multiple instructions per clock cycle</strong> — several functional units + multiple-issue dispatch — to extract ILP from a <em>single</em> instruction stream.</div>
+  <div class="cols">
+    <div>
+      <div class="code-label">Original (sequential issue)</div>
+      <pre><code class="language-x86asm" data-trim>
+LD    F0, 34(R2)
+ADDD  F4, F0, F2
+LD    F7, 45(R3)
+ADDD  F8, F7, F6
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label">Scheduled (2-wide issue)</div>
+      <pre><code class="language-x86asm" data-trim>
+LD   F0,34(R2)  │  LD   F7,45(R3)
+ADDD F4,F0,F2   │  ADDD F8,F7,F6
+</code></pre>
+    </div>
+  </div>
+  <ul class="small">
+    <li>Moderate parallelism: theoretically ~50 inst/cycle, realistically <strong>~2</strong></li>
+    <li>Requires <strong>fast (register-level) communication</strong> between functional units</li>
+  </ul>
+</section>
+<section data-background-color="#ffffff">
+  <h2>TLP Technique: Loop Parallelism</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Parallel — iterations independent</div>
+      <pre><code class="language-c" data-trim>
+for (i = 0; i &lt; 8; i++)
+    a[i] = b[i] + c[i];
+</code></pre>
+      <p class="small ok-text" style="color:var(--ok)">✓ Each iteration is independent → split across threads.</p>
+    </div>
+    <div>
+      <div class="code-label">NOT parallel — loop-carried dependence</div>
+      <pre><code class="language-c" data-trim>
+for (i = 0; i &lt; 8; i++)
+    a[i] = b[i] + a[i-1];
+</code></pre>
+      <p class="small" style="color:var(--warn)">✗ <code class="inline">a[i]</code> depends on <code class="inline">a[i-1]</code>.</p>
+    </div>
+  </div>
+  <div class="cols">
+    <div class="callout ok"><span class="lbl">Pros</span><ul><li>Very high parallelism (&gt; 1K)</li><li>Often easy load balance</li></ul></div>
+    <div class="callout warn"><span class="lbl">Cons</span><ul><li>Needs splitting into instruction streams</li><li>Some loops aren't parallel</li><li>Some apps have few loops</li></ul></div>
+  </div>
+</section>
+<section data-background-color="#ffffff">
+  <h2>TLP Technique: Function Parallelism</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Arbitrary independent code segments run concurrently.</p>
+      <div class="code-label">Across loops</div>
+      <pre><code class="language-c" data-trim>
+…
+for (i=0; i&lt;n; i++)
+  sum = sum + a[i];
+for (i=0; i&lt;n; i++)
+  prod = prod * a[i];
+…
+</code></pre>
+      <div class="code-label">Subroutines</div>
+      <pre><code class="language-c" data-trim>
+Cost = getCost();
+A    = computeSum();
+B    = A + Cost;
+</code></pre>
+      <p class="small">e.g. an editor: GUI · printing · parsing as separate threads.</p>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">Pros</span><ul><li>Larger granularity → lower overhead &amp; communication</li></ul></div>
+      <div class="callout warn"><span class="lbl">Cons</span><ul><li>Low degree of parallelism</li><li>Hard to load-balance</li></ul></div>
+    </div>
+  </div>
+</section>
+<section data-background-color="#ffffff">
+  <h2>Program-Level Parallelism</h2>
+  <p class="small">Independent <em>programs</em> run together — e.g. a parallel <code class="inline">make</code>:</p>
+  <pre><code class="language-bash" data-trim>
+gcc -c code1.c     # → proc 1
+gcc -c code2.c     # → proc 2
+gcc -c main.c      # → proc 3
+gcc main.o code1.o code2.o
+</code></pre>
+  <div class="cols">
+    <div class="callout ok"><span class="lbl">Pros</span><ul><li>No communication</li></ul></div>
+    <div class="callout warn"><span class="lbl">Cons</span><ul><li>Hard to balance</li><li>Relatively few opportunities</li></ul></div>
+  </div>
+</section>
+<section data-background-color="#ffffff">
+  <h2>ILP: No Longer Low-Hanging</h2>
+  <div class="cols">
+    <div>
+      <h3>Deeper pipelines backfire <span class="src">[Hartstein &amp; Puzak, 2002]</span></h3>
+      <ul class="small">
+        <li>Latching overhead grows significant</li>
+        <li>Too little useful logic per stage</li>
+        <li>Critical loops (branch mispredict, data dependence, cache miss) scale <em>with</em> depth</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Wider issue is quadratic <span class="src">[Palacharla &amp; Smith, 1996]</span></h3>
+      <ul class="small">
+        <li>Dependence checking, wakeup/select, register ports, bypass logic…</li>
+        <li>Complexity ↑ quadratically with width</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Verdict</span>
+    More ILP now costs <strong>more power and complexity than it returns</strong>. The cheap fruit is gone — time to climb to TLP. <em>But what physically forced the issue? → the Power Wall (in Module 1.2).</em></div>
+</section>
+<section data-background-color="#f6f8fb">
+  <h2>Module 1.1 — Review</h2>
+  <div class="qa">
+    <p class="q">1. What does Processor / CPU / Core mean in this course?</p>
+    <div class="fragment"><div class="a">Logic that can independently fetch and execute an instruction stream. It <em>excludes</em> caches.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. State the low-hanging-fruit theory and how it explains the rise of multicore.</p>
+    <div class="fragment"><div class="a">Easy performance is taken first. ILP techniques were lower-hanging than multicore. Multicore needs TLP, and TLP needs parallel programming — so it came last, once ILP fruit ran out.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Using the theory, predict the future of multicore.</p>
+    <div class="fragment"><div class="a">Other approaches (e.g. specialization / accelerators) take over once parallel programming on multicore delivers diminishing returns.</div></div>
+  </div>
+  <p class="src">Click / press → to reveal each answer.</p>
+</section>
+<section data-background-color="#ffffff">
+  <h2>Multicore Is Everywhere Now</h2>
+  <p>The switch to multicore wasn't a niche fix — multicore is the <strong>building block of essentially all computing today</strong>, from a phone to the world's fastest supercomputer. Large systems simply <strong>replicate</strong> the multicore node and connect the copies.</p>
+  <div style="display:flex;align-items:center;justify-content:center;gap:.35em;flex-wrap:nowrap;margin:1.1em 0;font-size:.82em">
+    <div style="padding:.45em .8em;border:2px solid #3b82f6;border-radius:12px;background:#eff6ff;font-weight:700;white-space:nowrap">Core</div>
+    <span style="font-size:1.5em;color:#64748b">→</span>
+    <div style="padding:.45em .8em;border:2px solid #3b82f6;border-radius:12px;background:#dbeafe;font-weight:700;white-space:nowrap">Multicore chip</div>
+    <span style="font-size:1.5em;color:#64748b">→</span>
+    <div style="padding:.45em .8em;border:2px solid #3b82f6;border-radius:12px;background:#dbeafe;font-weight:700;white-space:nowrap">Node</div>
+    <span style="font-size:1.5em;color:#64748b">→</span>
+    <div style="padding:.45em .8em;border:2px solid #2563eb;border-radius:12px;background:#bfdbfe;font-weight:700;white-space:nowrap">Cluster</div>
+    <span style="font-size:1.5em;color:#64748b">→</span>
+    <div style="padding:.45em .8em;border:2px solid #1d4ed8;border-radius:12px;background:#93c5fd;font-weight:700;white-space:nowrap">Supercomputer</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">One idea, many scales</span>core &#8594; multicore chip &#8594; multi-socket node &#8594; cluster &#8594; supercomputer &#8212; the <strong>same parallelism, replicated</strong> at every level.</div>
+</section>
+<section data-background-color="#ffffff">
+  <h2>Multicore in Clusters &amp; Data Centers</h2>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Cloud / warehouse-scale</span>Each server node = <strong>1&#8211;2 multicore CPUs</strong>. A dual-socket AMD EPYC &ldquo;Genoa&rdquo; node = <strong>2 &#215; 96 = 192 cores</strong> (384 threads). Hyperscalers stack <strong>thousands</strong> of such nodes per data center.</div>
+    <div class="callout"><span class="lbl">HPC clusters</span>Campus / lab clusters link multicore nodes with a fast fabric (<strong>InfiniBand / high-speed Ethernet</strong>). A job runs <strong>across nodes</strong> via MPI and <strong>across cores</strong> within a node via OpenMP / threads.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The unit of scale-out</span>The multicore <strong>node</strong> is what gets replicated &#8212; clouds and clusters are just <strong>many multicore nodes on a network</strong>.</div>
+</section>
+<section data-background-color="#ffffff">
+  <h2>Multicore in Supercomputers (TOP500)</h2>
+  <p>Every system on the <strong>TOP500</strong> is a giant cluster of <strong>multicore CPU nodes + manycore GPU accelerators</strong>. A few exascale-class examples:</p>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Frontier &#183; ORNL</span><strong>AMD EPYC</strong> 64-core CPUs + 4&#215; <strong>Instinct MI250X</strong> GPUs per node; ~9,400 nodes &#183; world&rsquo;s 1st exaflop machine (2022).</div>
+    <div class="callout"><span class="lbl">El Capitan &#183; LLNL</span><strong>AMD MI300A APUs</strong> (CPU + GPU on one package); ~1.7 EFlop/s &#183; #1 on TOP500 (2024).</div>
+    <div class="callout"><span class="lbl">Aurora &#183; Argonne</span><strong>Intel Xeon Max</strong> CPUs + <strong>Data Center GPU Max</strong>; ~2 EFlop/s peak.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Same hierarchy, all the way up</span>core &#8594; multicore chip &#8594; node &#8594; cluster scales to <strong>exascale</strong>. We dig into TOP500 &amp; the exascale race in <strong>Lecture 2</strong>.</div>
+</section>
+<section data-background-color="#ffffff">
+  <h2>The TOP500 &amp; the Race to Exascale</h2>
+  <div class="cols">
+    <div>
+      <p class="small"><a href="https://www.top500.org">top500.org</a> ranks the fastest machines (by Linpack). It changes fast — <em>Earth Simulator</em> went #1 (2004) → #10 in two years.</p>
+      <table>
+        <tr><th>Era</th><th>#1 system</th><th>Peak</th></tr>
+        <tr><td>2004</td><td>Earth Simulator</td><td>~40 TFLOP/s</td></tr>
+        <tr><td>2013</td><td>Tianhe-2 (China)</td><td>~33.8 PFLOP/s</td></tr>
+        <tr><td>2022</td><td>Frontier (ORNL)</td><td>first <strong>exascale</strong></td></tr>
+        <tr><td class="hi">2024→</td><td class="hi">El Capitan (LLNL)</td><td class="hi">~1.7 EFLOP/s</td></tr>
+      </table>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Engineering marvels</span>These machines consume <strong>as much power as a small city</strong> (tens of MW). Cooling, plumbing &amp; the building are co-designed with the computer.</div>
+      <ul class="tiny">
+        <li><strong>Tianhe-2</strong>: 3.12M cores, 16K nodes, ~18 MW</li>
+        <li><strong>El Capitan / Frontier</strong>: AMD CPU+GPU (APU) nodes — <em>CPU/GPU combo</em> is now standard at the top</li>
+      </ul>
+      <div class="callout takeaway"><span class="lbl">The pattern</span>The top of the list is now <strong>heterogeneous</strong>: MIMD CPUs orchestrating massive SIMD GPU arrays.</div>
+    </div>
+  </div>
+  <aside class="notes">Earth Simulator: $40M to build, $15M/yr maintenance, ~1 processor failure per week, 640 nodes on a single-stage crossbar. Tianhe-2 cost ~$100M. Updated the top of the list to the exascale era: Frontier (2022, first exascale) and El Capitan (2024, ~1.7 EFLOP/s).</aside>
+</section>
+<section data-background-color="#f6f8fb">
+  <h2>References</h2>
+  <div class="callout"><span class="lbl">Course textbook</span>
+    Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em>, Chapman &amp; Hall/CRC, 2015.
+    These slides follow and adapt the corresponding chapter of the text.</div>
+</section>
+</div>
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Lecture 1 — The Switch to Multicore</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.04,
+    minScale: 0.2, maxScale: 1.6,
+    center: false,                 // top-align content so the NC State header bar sits at the slide top
+    hash: true, slideNumber: 'c/t', history: true,
+    transition: 'slide', transitionSpeed: 'fast',
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      {left:'\\(', right:'\\)', display:false},
+      {left:'$$', right:'$$', display:true}
+    ]},
+  });
+</script>
+<script>
+/* Auto-fit: shrink any slide whose content would exceed the 720px slide (and be
+   cut off in true 16:9 fullscreen). Scales content via --nc-fit; the header bar
+   is px-based and unaffected. */
+(function(){
+  function fit(s){ if(!s) return;
+    s.style.setProperty('--nc-fit','1');           // reset, then measure natural height
+    var h=s.scrollHeight;
+    if(h>724){ var k=Math.max(0.6, Math.min(1, 720/h));
+      s.style.setProperty('--nc-fit', k.toFixed(3)); }
+  }
+  if(window.Reveal){
+    Reveal.on('ready', function(e){ fit(e.currentSlide); });
+    Reveal.on('slidechanged', function(e){ fit(e.currentSlide); });
+    try{ if(Reveal.isReady && Reveal.isReady()) fit(Reveal.getCurrentSlide()); }catch(e){}
+  }
+})();
+</script>
+<script>
+/* In-class activity: set this to THIS chapter's Google Form link (one form per chapter). */
+const FORM_URL = "PASTE_GOOGLE_FORM_LINK_HERE";
+(function(){
+  function paint(){
+    var set = FORM_URL && FORM_URL.indexOf("PASTE_") === -1;
+    document.querySelectorAll('.activity').forEach(function(a){
+      var lnk=a.querySelector('.form-link'), img=a.querySelector('.qr-img'), ph=a.querySelector('.qr-ph');
+      if(set){
+        if(lnk) lnk.href=FORM_URL;
+        if(img){ img.src='https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=0&data='+encodeURIComponent(FORM_URL); img.style.display=''; }
+        if(ph) ph.style.display='none';
+      } else {
+        if(lnk) lnk.href='#';
+        if(img) img.style.display='none';
+        if(ph) ph.style.display='';
+      }
+    });
+  }
+  if(window.Reveal){ Reveal.on('ready', paint); }
+  document.addEventListener('DOMContentLoaded', paint); paint();
+})();
+</script>
+</body>
+</html>

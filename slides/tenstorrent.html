@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <!-- course theme -->
-<link rel="stylesheet" href="assets/theme.css?v=9">
+<link rel="stylesheet" href="assets/theme.css?v=11">
 </head>
 <body>
 <div class="reveal">
@@ -360,11 +360,6 @@
 <!-- Review Module 1 -->
 <section data-background-color="#f6f8fb">
   <h2>Module 1 — Review</h2>
-  <div class="activity">
-    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
-      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
-    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
-  </div>
   <div class="qa">
     <p class="q">1. Why does Tenstorrent have no cache hierarchy, and what replaces it?</p>
     <div class="fragment"><div class="a">For dense tensor work the reuse pattern is known, so caches waste area/power and add coherence overhead. Instead the chip exposes large distributed L1 SRAM that any core can address over the NoC, with data movement scheduled explicitly by the program.</div></div>
@@ -547,11 +542,6 @@
 <!-- Review Module 2 -->
 <section data-background-color="#f6f8fb">
   <h2>Module 2 — Review</h2>
-  <div class="activity">
-    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
-      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
-    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
-  </div>
   <div class="qa">
     <p class="q">1. Order the stack from hardware up, and say what each layer does.</p>
     <div class="fragment"><div class="a">Hardware (Tensix grid) → TT-Metalium (bare-metal C++ kernels) → TT-NN (Python op library) → TT-Forge / TT-MLIR (compiles whole PyTorch/JAX/TF models down to Metalium). Runtime tools (TT-Inference-Server, TT-Studio) sit alongside for serving.</div></div>
@@ -823,11 +813,6 @@ tt-triage
 <!-- Review Lab 1 -->
 <section data-background-color="#f6f8fb">
   <h2>Lab 1 — Review</h2>
-  <div class="activity">
-    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
-      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
-    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
-  </div>
   <div class="qa">
     <p class="q">1. Why split the work into reader / compute / writer kernels?</p>
     <div class="fragment"><div class="a">They map onto distinct RISC-V cores and run concurrently through circular buffers, overlapping DRAM movement with compute.</div></div>
@@ -937,11 +922,6 @@ for (auto&amp; [group, work_per_core] : {std::pair{core_group_1, work_per_core_1
 <!-- Review Lab 2 -->
 <section data-background-color="#f6f8fb">
   <h2>Lab 2 — Review</h2>
-  <div class="activity">
-    <div class="activity-txt"><span class="lbl">In-class activity · ungraded</span>
-      Answer these in the chapter Google Form — <a class="form-link" href="#" target="_blank" rel="noopener">open form &#8599;</a></div>
-    <div class="qr-wrap"><img class="qr-img" alt="Scan to open the form"><span class="qr-ph tiny">set&nbsp;<code class="inline">FORM_URL</code></span></div>
-  </div>
   <div class="qa">
     <p class="q">1. How does Tenstorrent SPMD scheduling differ from a GPU's?</p>
     <div class="fragment"><div class="a">Work is assigned statically at launch — each core gets a fixed tile range with no dynamic scheduling, oversubscription, or work-stealing. An early-finishing core just idles.</div></div>
