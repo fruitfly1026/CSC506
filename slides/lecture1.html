@@ -126,7 +126,7 @@
         </g>
         <!-- central I/O die -->
         <rect x="108" y="34" width="84" height="150" rx="6" fill="#f59e0b" stroke="#b45309"/>
-        <text x="150" y="104" text-anchor="middle" style="fill:#052e16;font-weight:700;font-size:11px">I/O die</text>
+        <text x="150" y="104" text-anchor="middle" style="fill:#052e16;font-weight:700;font-size:15px">I/O die</text>
         <text x="150" y="120" text-anchor="middle" class="tiny" style="fill:#3a2a00">mem ctrl ·</text>
         <text x="150" y="132" text-anchor="middle" class="tiny" style="fill:#3a2a00">Infinity Fabric</text>
       </svg>
@@ -140,12 +140,12 @@
         <li>Central <strong>I/O die</strong> (amber): memory controllers + <strong>Infinity Fabric</strong> linking all CCDs</li>
         <li>Chiplet design: CCDs on <strong>5 nm</strong>, I/O die on 6 nm</li>
       </ul>
-      <div class="callout warn"><span class="lbl">The big question</span>
-        Starting ~2001&ndash;2005, every chipmaker turned to the multicore approach.
-        <strong>Why then? Why not earlier or later?</strong></div>
-      <p class="small muted">Module 1.1 answers the "why now"; Module 1.2 gives the physics.</p>
     </div>
   </div>
+  <div class="callout warn"><span class="lbl">The big question</span>
+    Starting ~2001&ndash;2005, every chipmaker turned to the multicore approach.
+    <strong>Why then? Why not earlier or later?</strong></div>
+  <p class="small muted">Module 1.1 answers the "why now"; Module 1.2 gives the physics.</p>
 </section>
 <section data-background-color="#ffffff">
   <h2>Feature Size Scaling</h2>
@@ -434,13 +434,12 @@ gcc main.o code1.o code2.o
     <span style="font-size:1.5em;color:#64748b">→</span>
     <div style="padding:.45em .8em;border:2px solid #3b82f6;border-radius:12px;background:#dbeafe;font-weight:700;white-space:nowrap">Multicore chip</div>
     <span style="font-size:1.5em;color:#64748b">→</span>
-    <div style="padding:.45em .8em;border:2px solid #3b82f6;border-radius:12px;background:#dbeafe;font-weight:700;white-space:nowrap">Node</div>
+    <div style="padding:.45em .8em;border:2px solid #3b82f6;border-radius:12px;background:#dbeafe;font-weight:700;white-space:nowrap">Multi-socket node</div>
     <span style="font-size:1.5em;color:#64748b">→</span>
     <div style="padding:.45em .8em;border:2px solid #2563eb;border-radius:12px;background:#bfdbfe;font-weight:700;white-space:nowrap">Cluster</div>
     <span style="font-size:1.5em;color:#64748b">→</span>
     <div style="padding:.45em .8em;border:2px solid #1d4ed8;border-radius:12px;background:#93c5fd;font-weight:700;white-space:nowrap">Supercomputer</div>
   </div>
-  <div class="callout takeaway"><span class="lbl">One idea, many scales</span>core &#8594; multicore chip &#8594; multi-socket node &#8594; cluster &#8594; supercomputer &#8212; the <strong>same parallelism, replicated</strong> at every level.</div>
 </section>
 <section data-background-color="#ffffff">
   <h2>Multicore in Clusters &amp; Data Centers</h2>
@@ -463,8 +462,37 @@ gcc main.o code1.o code2.o
 <section data-background-color="#ffffff">
   <h2>The TOP500 &amp; the Race to Exascale</h2>
   <div class="cols">
+    <div class="center">
+      <svg viewBox="0 0 430 250" class="chart" style="max-width:480px">
+        <!-- decade gridlines -->
+        <line x1="52" y1="48" x2="415" y2="48" stroke="#e3e6ec"/>
+        <line x1="52" y1="101" x2="415" y2="101" stroke="#e3e6ec"/>
+        <line x1="52" y1="154" x2="415" y2="154" stroke="#e3e6ec"/>
+        <line x1="52" y1="207" x2="415" y2="207" stroke="#e3e6ec"/>
+        <line class="axis" x1="52" y1="22" x2="52" y2="232"/>
+        <line class="axis" x1="52" y1="232" x2="415" y2="232"/>
+        <text x="48" y="51" text-anchor="end" style="font-size:15px;fill:#6b7280">1 EF</text>
+        <text x="48" y="104" text-anchor="end" style="font-size:15px;fill:#6b7280">1 PF</text>
+        <text x="48" y="157" text-anchor="end" style="font-size:15px;fill:#6b7280">1 TF</text>
+        <text x="48" y="210" text-anchor="end" style="font-size:15px;fill:#6b7280">1 GF</text>
+        <text x="52" y="246" text-anchor="middle" style="font-size:15px;fill:#6b7280">1993</text>
+        <text x="192" y="246" text-anchor="middle" style="font-size:15px;fill:#6b7280">2005</text>
+        <text x="310" y="246" text-anchor="middle" style="font-size:15px;fill:#6b7280">2015</text>
+        <text x="412" y="246" text-anchor="middle" style="font-size:15px;fill:#6b7280">2024</text>
+        <!-- three trend lines -->
+        <polyline points="52,154 134,131 228,83 321,46 415,32" fill="none" stroke="#CC0000" stroke-width="3"/>
+        <polyline points="52,176 134,142 228,101 321,66 392,48 415,44" fill="none" stroke="#2563eb" stroke-width="3"/>
+        <polyline points="52,214 134,190 228,145 321,114 415,96" fill="none" stroke="#16a34a" stroke-width="3"/>
+        <circle cx="392" cy="48" r="4.5" fill="#2563eb"/><text x="388" y="40" text-anchor="end" style="font-size:13px;fill:#2563eb;font-weight:700">1st exascale (2022)</text>
+        <!-- legend -->
+        <rect x="62" y="29" width="15" height="7" rx="2" fill="#CC0000"/><text x="82" y="36" style="font-size:15px;fill:#16181d">Sum</text>
+        <rect x="62" y="43" width="15" height="7" rx="2" fill="#2563eb"/><text x="82" y="50" style="font-size:15px;fill:#16181d">#1</text>
+        <rect x="62" y="57" width="15" height="7" rx="2" fill="#16a34a"/><text x="82" y="64" style="font-size:15px;fill:#16181d">#500</text>
+      </svg>
+      <div class="src">TOP500 performance development (Linpack), 1993 → today · log scale · recreated from top500.org data</div>
+    </div>
     <div>
-      <p class="small"><a href="https://www.top500.org">top500.org</a> ranks the fastest machines (by Linpack). It changes fast — <em>Earth Simulator</em> went #1 (2004) → #10 in two years.</p>
+      <p class="small"><a href="https://www.top500.org">top500.org</a> ranks the fastest machines by Linpack — performance has grown <strong>~exponentially</strong>, crossing GFlop → TFlop → PFlop → EFlop.</p>
       <table>
         <tr><th>Era</th><th>#1 system</th><th>Peak</th></tr>
         <tr><td>2004</td><td>Earth Simulator</td><td>~40 TFLOP/s</td></tr>
@@ -472,14 +500,7 @@ gcc main.o code1.o code2.o
         <tr><td>2022</td><td>Frontier (ORNL)</td><td>first <strong>exascale</strong></td></tr>
         <tr><td class="hi">2024→</td><td class="hi">El Capitan (LLNL)</td><td class="hi">~1.7 EFLOP/s</td></tr>
       </table>
-    </div>
-    <div>
-      <div class="callout"><span class="lbl">Engineering marvels</span>These machines consume <strong>as much power as a small city</strong> (tens of MW). Cooling, plumbing &amp; the building are co-designed with the computer.</div>
-      <ul class="tiny">
-        <li><strong>Tianhe-2</strong>: 3.12M cores, 16K nodes, ~18 MW</li>
-        <li><strong>El Capitan / Frontier</strong>: AMD CPU+GPU (APU) nodes — <em>CPU/GPU combo</em> is now standard at the top</li>
-      </ul>
-      <div class="callout takeaway"><span class="lbl">The pattern</span>The top of the list is now <strong>heterogeneous</strong>: MIMD CPUs orchestrating massive SIMD GPU arrays.</div>
+      <div class="callout takeaway"><span class="lbl">The pattern</span>Today's #1 is <strong>heterogeneous</strong> — MIMD CPUs orchestrating massive SIMD GPU arrays — and draws <strong>tens of MW</strong> (a small city).</div>
     </div>
   </div>
   <aside class="notes">Earth Simulator: $40M to build, $15M/yr maintenance, ~1 processor failure per week, 640 nodes on a single-stage crossbar. Tianhe-2 cost ~$100M. Updated the top of the list to the exascale era: Frontier (2022, first exascale) and El Capitan (2024, ~1.7 EFLOP/s).</aside>

@@ -166,12 +166,12 @@
         <li>Central <strong>I/O die</strong> (amber): memory controllers + <strong>Infinity Fabric</strong> linking all CCDs</li>
         <li>Chiplet design: CCDs on <strong>5 nm</strong>, I/O die on 6 nm</li>
       </ul>
-      <div class="callout warn"><span class="lbl">The big question</span>
-        Starting ~2001&ndash;2005, every chipmaker turned to the multicore approach.
-        <strong>Why then? Why not earlier or later?</strong></div>
-      <p class="small muted">Module 1.1 answers the "why now"; Module 1.2 gives the physics.</p>
     </div>
   </div>
+  <div class="callout warn"><span class="lbl">The big question</span>
+    Starting ~2001&ndash;2005, every chipmaker turned to the multicore approach.
+    <strong>Why then? Why not earlier or later?</strong></div>
+  <p class="small muted">Module 1.1 answers the "why now"; Module 1.2 gives the physics.</p>
 </section>
 
 <!-- Feature size scaling chart -->
@@ -991,6 +991,7 @@ MOVUPS [Ret], XMM0   ; store C[0..3]
       <p><strong>MISD</strong> = multiple instruction streams, single data stream. The rarest class.</p>
       <ul class="small">
         <li>Systolic arrays <span class="src">[Kung &amp; Leiserson '79]</span> — data "pulses" through a grid of PEs, each applying its own operation</li>
+        <li>A 3&times;3 array multiplies matrices by pulsing rows of <strong>A</strong> and columns of <strong>B</strong> through the grid with <em>staggered</em> timing</li>
         <li>Examples: space-shuttle computers (1984), Intel iWARP (1990)</li>
       </ul>
       <div class="callout"><span class="lbl">Comeback</span>The systolic idea is alive in modern <strong>AI accelerators</strong> — Google's TPU matrix unit is a systolic array.</div>
@@ -1018,12 +1019,14 @@ MOVUPS [Ret], XMM0   ; store C[0..3]
   <div class="cols w-64">
     <div>
       <p><strong>MIMD</strong> = independent PEs, each with its <em>own</em> instruction and data stream. <span class="pill">Most CPU parallel computers today</span></p>
-      <p class="small">Variants differ by <strong>which level of the memory hierarchy is shared</strong>:</p>
+      <p class="small">Solihin's <strong>Fig 1.7</strong> names four sub-classes by <strong>what is shared</strong>:</p>
       <ul class="small">
-        <li>Shared main memory (SMP / multicore)</li>
-        <li>Shared cache (cores on one die)</li>
-        <li>Nothing shared (clusters / distributed memory)</li>
+        <li><strong>Shared cache</strong> — cores on one die share a cache level</li>
+        <li><strong>UMA</strong> (uniform memory access) — all PEs share main memory at the <em>same</em> latency (classic SMP)</li>
+        <li><strong>NUMA</strong> (non-uniform memory access) — memory is distributed; <em>local</em> access is faster than <em>remote</em></li>
+        <li><strong>Distributed system</strong> — nothing shared; PEs cooperate by <strong>message passing</strong> (clusters)</li>
       </ul>
+      <div class="callout"><span class="lbl">UMA vs NUMA</span>Both share one address space — but UMA latency is flat, while NUMA latency depends on <em>where</em> the data lives. (Revisited in Ch.10, DSM.)</div>
     </div>
     <div class="center">
       <svg viewBox="0 0 220 150" class="chart" style="max-width:260px">

@@ -142,7 +142,7 @@
     <div>
       <div class="callout"><span class="lbl">Synchronous</span><span class="small">All devices share one clock; timing is pre-determined. The bus must be <em>short</em> or run slow (clock-skew limit).</span></div>
       <div class="callout"><span class="lbl">Asynchronous</span><span class="small">Independent clocks; timing established by a <strong>handshaking</strong> protocol. More flexible, slower.</span></div>
-      <div class="callout takeaway"><span class="lbl">Builds on the uniprocessor</span>Bus-based MPs reuse two uniprocessor fundamentals: <strong>bus transactions</strong> and the <strong>per-line cache state machine</strong>. Coherence <em>extends</em> both.</div>
+      <div class="callout takeaway"><span class="lbl">Builds on the uniprocessor</span>Bus-based MPs reuse two uniprocessor fundamentals: <strong>bus transactions</strong> and the <strong>per-line cache state machine</strong>. A uniprocessor line already has states — <em>Valid/Invalid</em> for write-through, plus <em>Modified</em> for write-back. Coherence <em>extends</em> both.</div>
     </div>
   </div>
 </section>
@@ -542,7 +542,7 @@
   </div>
   <div class="qa">
     <p class="q">On a BusRdX, if the block is M, why Flush it — we're about to overwrite it anyway?</p>
-    <div class="fragment"><div class="a">Writes may target <em>different words</em> within the block, so we must fetch the latest copy first. Also, BusRdX signals intent to write, but a read of the block may still follow.</div></div>
+    <div class="fragment"><div class="a">A cache line holds several words (x1, x2, x3, x4). A write may target a <em>different word</em> than the one being overwritten, so the whole dirty line must be fetched first. Also, BusRdX signals intent to write, but a read of the block may still follow.</div></div>
   </div>
   <div class="qa">
     <p class="q">Writing to a block already Shared — what's more efficient than BusRdX?</p>
@@ -678,7 +678,7 @@
         <text x="170" y="262" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX / BusUpgr</text>
         <!-- S self loop BusRd -->
         <path d="M58,231 C24,255 30,205 56,210" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#apb)"/>
-        <text x="32" y="258" text-anchor="middle" class="tiny">BusRd/-</text>
+        <text x="38" y="258" text-anchor="middle" class="tiny">BusRd/FlushOpt</text>
       </svg>
     </div>
     <div>
@@ -738,7 +738,7 @@
       <p class="small">Used in <strong>AMD</strong> processors since the K7 (Athlon).</p>
     </div>
   </div>
-  <div class="callout small"><span class="lbl">Owner's job</span>When a read/write to the block is snooped, other (Shared) caches do nothing — the <strong>Owner supplies the block</strong> and carries the write-back responsibility.</div>
+  <div class="callout small"><span class="lbl">Owner's job</span>When a read/write to the block is snooped, other (Shared) caches do nothing — the <strong>Owner supplies the block</strong> and carries the write-back responsibility. Two named actions: <strong>Flush</strong> = supply the data cache-to-cache to the requester; <strong>FlushWB</strong> = write the dirty block back to memory (on eviction, or to give up ownership).</div>
 </section>
 
 <!-- MOESI state diagram -->
@@ -772,9 +772,9 @@
         <!-- S -> M (PrWr / BusUpgr) -->
         <path d="M80,206 C80,160 80,110 80,76" fill="none" stroke="#CC0000" stroke-width="1.8" marker-end="url(#ao)"/>
         <text x="50" y="150" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr/</text><text x="50" y="162" text-anchor="middle" class="tiny" style="fill:#CC0000">BusUpgr</text>
-        <!-- O -> S possible on losing ownership; O supplies on BusRd self -->
-        <path d="M152,158 C120,182 102,202 92,212" fill="none" stroke="#16a34a" stroke-width="1.8" marker-end="url(#ao)"/>
-        <text x="150" y="200" text-anchor="middle" class="tiny" style="fill:#16a34a">BusRd/Flush</text>
+        <!-- O self-loop: on snooped BusRd the owner Flushes (supplies data) and stays O -->
+        <path d="M158,162 C128,200 150,214 176,168" fill="none" stroke="#16a34a" stroke-width="1.8" marker-end="url(#ao)"/>
+        <text x="140" y="210" text-anchor="middle" class="tiny" style="fill:#16a34a">BusRd/Flush</text>
       </svg>
       <div class="src">O = dirty + shared; the owner supplies data and owes the write-back.</div>
     </div>

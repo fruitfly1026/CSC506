@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSC/ECE 506 · Task Mapping — Work Distribution &amp; Performance</title>
+
+<!-- reveal.js core (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<!-- code highlighting + math -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+<!-- fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<!-- course theme -->
+<link rel="stylesheet" href="assets/theme.css?v=11">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============================ TITLE ============================ -->
+<section class="title-slide" data-background-color="#ffffff">
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <h1>Task Mapping</h1>
+  <div class="sub">Work Distribution &amp; Performance — Decomposition, Granularity &amp; Data Distribution</div>
+  <aside class="notes">
+    This deck is the performance half of parallelization. Chapter 3 built a <em>correct</em> parallel program:
+    it found tasks, scoped variables, and synchronized. Here we ask the next question — once the tasks exist,
+    how do we assign and place them on real hardware so the program is fast? The running example is a dense
+    matrix computation, and the tools are granularity control, blocking, and block/cyclic/block-cyclic distribution.
+  </aside>
+</section>
+
+<!-- Roadmap -->
+<section data-background-color="#ffffff">
+  <h2>Deck Roadmap</h2>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Module 1</span><strong>Decomposition &amp; Granularity</strong><br>
+      <span class="small">Matrix-vector multiply as <em>n</em> independent tasks; fine- vs. coarse-grained decomposition.</span></div>
+    <div class="callout"><span class="lbl">Module 2</span><strong>Block Partitioning &amp; Cache</strong><br>
+      <span class="small">Tiling an <code class="inline">n×n</code> matrix into <code class="inline">B×B</code> blocks; why blocking helps; sizing <code class="inline">B</code> to the cache.</span></div>
+  </div>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Module 3</span><strong>Mapping Blocks to Processors</strong><br>
+      <span class="small">Modulo mapping <code class="inline">B[i][j] → P[i%Px][j%Py]</code> on a processor grid.</span></div>
+    <div class="callout"><span class="lbl">Module 4</span><strong>Distribution Taxonomy</strong><br>
+      <span class="small">Block, cyclic, and block-cyclic distribution — and load balance.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Where this sits</span>
+    Parallelization is two problems: <strong>correctness</strong> (find tasks, scope variables, synchronize) and <strong>performance</strong> (map tasks to hardware). Chapter 3 was the correctness half — <strong>this deck is the performance half it deferred.</strong></div>
+</section>
+
+<!-- The four steps -->
+<section data-background-color="#ffffff">
+  <h2>From Program to Processors</h2>
+  <p class="small">The classic pipeline turns a sequential program into a running parallel one in four steps:</p>
+  <div class="cols c4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:.6em">
+    <div class="callout"><span class="lbl">1 · Decomposition</span><span class="small">Split the work into <strong>tasks</strong> — the units of possible concurrency.</span></div>
+    <div class="callout"><span class="lbl">2 · Assignment</span><span class="small">Group tasks into <strong>processes/threads</strong>; balance the load.</span></div>
+    <div class="callout"><span class="lbl">3 · Orchestration</span><span class="small">Name data, communicate, and <strong>synchronize</strong> the threads.</span></div>
+    <div class="callout"><span class="lbl">4 · Mapping</span><span class="small">Place threads onto <strong>physical cores</strong> for locality and speed.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">This deck</span>
+    Chapter 3 handled decomposition + orchestration for <em>correctness</em>. Here the emphasis is <strong>assignment and mapping for performance</strong>: granularity, blocking, and how data is distributed across processors.</div>
+</section>
+
+<!-- ==================================================================
+     MODULE 1 — DECOMPOSITION & GRANULARITY
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 1</div>
+  <div class="mod-title">Decomposition &amp; Granularity</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Decompose a <strong>matrix-vector product</strong> into <em>n</em> independent tasks</li>
+      <li>Identify the data <strong>each task touches</strong> (one row of A + the whole vector)</li>
+      <li>Explain <strong>granularity</strong> and the fine- vs. coarse-grained trade-off</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Matrix-vector decomposition -->
+<section data-background-color="#ffffff">
+  <h2>Worked Example: Matrix × Vector</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">Compute <code class="inline">y = A·x</code> for an <code class="inline">n×n</code> matrix <code class="inline">A</code> and length-<code class="inline">n</code> vector <code class="inline">x</code>:</p>
+      <div class="eq small">\( y[i] = \sum_{j=0}^{n-1} A[i][j]\cdot x[j] \)</div>
+      <div class="callout ok"><span class="lbl">Key observation</span>
+        Each output element <code class="inline">y[i]</code> is computed <strong>independently</strong> of every other <code class="inline">y[k]</code>. So the product decomposes into <strong>n tasks</strong> — one per output element.</div>
+      <p class="small"><strong>Task <code class="inline">i</code> touches:</strong> row <code class="inline">i</code> of <code class="inline">A</code> and the <strong>entire</strong> vector <code class="inline">x</code>; it writes only <code class="inline">y[i]</code>.</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 300 200" class="chart" style="max-width:360px">
+        <!-- Matrix A -->
+        <text x="70" y="20" text-anchor="middle" class="lbl">A (n×n)</text>
+        <g stroke="#94a3b8" fill="#eef2ff">
+          <rect x="20" y="30" width="100" height="120"/>
+        </g>
+        <!-- grid lines -->
+        <g stroke="#c7d2fe" stroke-width="1">
+          <line x1="45" y1="30" x2="45" y2="150"/><line x1="70" y1="30" x2="70" y2="150"/><line x1="95" y1="30" x2="95" y2="150"/>
+          <line x1="20" y1="60" x2="120" y2="60"/><line x1="20" y1="90" x2="120" y2="90"/><line x1="20" y1="120" x2="120" y2="120"/>
+        </g>
+        <!-- highlighted row i -->
+        <rect x="20" y="60" width="100" height="30" fill="#3b82f6" opacity="0.55"/>
+        <text x="8" y="80" text-anchor="middle" class="lbl">i</text>
+        <!-- times x -->
+        <text x="150" y="95" text-anchor="middle" class="lbl">×</text>
+        <!-- vector x -->
+        <text x="185" y="20" text-anchor="middle" class="lbl">x</text>
+        <rect x="170" y="30" width="30" height="120" fill="#dbeafe" stroke="#94a3b8"/>
+        <g stroke="#c7d2fe"><line x1="170" y1="60" x2="200" y2="60"/><line x1="170" y1="90" x2="200" y2="90"/><line x1="170" y1="120" x2="200" y2="120"/></g>
+        <!-- equals y -->
+        <text x="228" y="95" text-anchor="middle" class="lbl">=</text>
+        <text x="270" y="20" text-anchor="middle" class="lbl">y</text>
+        <rect x="255" y="30" width="30" height="120" fill="#f1f5f9" stroke="#94a3b8"/>
+        <g stroke="#e2e8f0"><line x1="255" y1="60" x2="285" y2="60"/><line x1="255" y1="90" x2="285" y2="90"/><line x1="255" y1="120" x2="285" y2="120"/></g>
+        <rect x="255" y="60" width="30" height="30" fill="#dc2626" opacity="0.7"/>
+        <text x="300" y="80" text-anchor="middle" class="lbl">y[i]</text>
+      </svg>
+      <div class="src">Task <em>i</em> = row <em>i</em> of A · all of x → y[i].</div>
+    </div>
+  </div>
+</section>
+
+<!-- Granularity -->
+<section data-background-color="#ffffff">
+  <h2>Granularity: How Many Tasks?</h2>
+  <p class="small">The <strong>number of tasks</strong> a problem is decomposed into sets its <strong>granularity</strong>.</p>
+  <div class="cols">
+    <div class="callout ok"><span class="lbl">Fine-grained</span>
+      <span class="small"><strong>Many small tasks</strong> (e.g. one per <code class="inline">y[i]</code>). More parallelism &amp; easier load balancing — but more <strong>scheduling / communication overhead</strong> per unit of work.</span></div>
+    <div class="callout warn"><span class="lbl">Coarse-grained</span>
+      <span class="small"><strong>Few large tasks</strong> (e.g. one per block of rows). Low overhead and good locality — but <strong>less parallelism</strong> and a higher risk of imbalance.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The trade-off</span>
+    Granularity trades <strong>overhead</strong> against <strong>parallelism &amp; load balance</strong>. Pick tasks large enough to amortize overhead, yet small and numerous enough to keep every core busy.</div>
+</section>
+
+<!-- Review Module 1 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 1 — Review</h2>
+  <div class="qa">
+    <p class="q">1. Into how many independent tasks does <code class="inline">y = A·x</code> decompose, and why?</p>
+    <div class="fragment"><div class="a">Into <strong>n</strong> tasks — one per output element <code class="inline">y[i]</code>, since each <code class="inline">y[i]</code> is computed independently of the others.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. What data does one such task read and write?</p>
+    <div class="fragment"><div class="a">It <strong>reads row <code class="inline">i</code> of A and all of vector <code class="inline">x</code></strong>, and <strong>writes only <code class="inline">y[i]</code></strong>.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Fine- vs. coarse-grained — what is the trade-off?</p>
+    <div class="fragment"><div class="a">Fine = many small tasks (more parallelism/balance, more overhead); coarse = few large tasks (less overhead/better locality, less parallelism). Granularity balances the two.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 2 — BLOCK PARTITIONING & CACHE
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 2</div>
+  <div class="mod-title">Block Partitioning &amp; Cache</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Tile an <code class="inline">n×n</code> matrix into <code class="inline">(n/B)×(n/B)</code> blocks of size <code class="inline">B×B</code></li>
+      <li>Give <strong>three reasons</strong> block partitioning helps — and the cost it adds</li>
+      <li>Choose a block size <code class="inline">B</code> so a block <strong>fits in cache</strong></li>
+    </ul>
+  </div>
+</section>
+
+<!-- Block partitioning / task parallelism -->
+<section data-background-color="#ffffff">
+  <h2>Task Parallelism via Block Partitioning</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">Instead of rows or single elements, subdivide the matrix into <strong>2-D blocks</strong>.</p>
+      <div class="callout"><span class="lbl">Blocking rule</span>
+        Given an <code class="inline">n×n</code> matrix and block size <code class="inline">B×B</code>, you obtain a grid of <code class="inline">(n/B)×(n/B)</code> blocks. Each block becomes a task.</div>
+      <p class="small"><strong>Why is block partitioning useful?</strong></p>
+      <ol class="small" style="margin:.2em 0 0 1.1em">
+        <li><strong>Cache efficiency</strong> — a block is reused while it sits in cache</li>
+        <li><strong>Efficient load distribution</strong> — many equal-size tasks to spread</li>
+        <li><strong>Scalability</strong> — task count grows as the matrix grows</li>
+      </ol>
+      <div class="callout warn"><span class="lbl">Caveat</span>Blocking also <strong>introduces communication</strong> between processors that own neighboring blocks.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 200 210" class="chart" style="max-width:250px">
+        <text x="100" y="16" text-anchor="middle" class="lbl">n×n matrix → (n/B)×(n/B) blocks</text>
+        <!-- 4x4 grid of cells, blocked into 2x2 blocks of 2x2 -->
+        <g stroke="#c7d2fe" stroke-width="1" fill="#eef2ff">
+          <rect x="30" y="30" width="140" height="140"/>
+        </g>
+        <g stroke="#c7d2fe" stroke-width="1">
+          <line x1="65" y1="30" x2="65" y2="170"/><line x1="100" y1="30" x2="100" y2="170"/><line x1="135" y1="30" x2="135" y2="170"/>
+          <line x1="30" y1="65" x2="170" y2="65"/><line x1="30" y1="100" x2="170" y2="100"/><line x1="30" y1="135" x2="170" y2="135"/>
+        </g>
+        <!-- block boundaries (B=2) -->
+        <g stroke="#1d4ed8" stroke-width="2.5" fill="none">
+          <rect x="30" y="30" width="70" height="70"/>
+          <rect x="100" y="30" width="70" height="70"/>
+          <rect x="30" y="100" width="70" height="70"/>
+          <rect x="100" y="100" width="70" height="70"/>
+        </g>
+        <text x="65" y="70" text-anchor="middle" class="note" style="fill:#1d4ed8;font-weight:700">B×B</text>
+        <text x="100" y="200" text-anchor="middle" class="lbl">here n=4, B=2 → 2×2 blocks</text>
+      </svg>
+      <div class="src">Each B×B block is one task.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Block size vs cache -->
+<section data-background-color="#ffffff">
+  <h2>Sizing Blocks to the Cache</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Rule of thumb</span>
+        Choose <code class="inline">B</code> so that a whole block <strong>fits in the data cache</strong> and can be reused before it is evicted:</div>
+      <div class="eq small">\( B^2 \;\le\; \text{cache size} \)</div>
+      <p class="small">Example: with a <strong>32&nbsp;KB</strong> data cache, keep the block footprint <code class="inline">B² ≤ 32&nbsp;KB</code> (ideal). Too large and the block spills out of cache mid-use; too small and you lose reuse and add overhead.</p>
+    </div>
+    <div>
+      <table>
+        <tr><th>Cache</th><th>Constraint</th><th>Effect</th></tr>
+        <tr><td>32&nbsp;KB L1</td><td><code class="inline">B² ≤ 32&nbsp;KB</code></td><td class="hi">block stays resident</td></tr>
+        <tr><td>Too big</td><td><code class="inline">B²  &gt; </code> cache</td><td>eviction → cache misses</td></tr>
+        <tr><td>Too small</td><td><code class="inline">B²  ≪ </code> cache</td><td>poor reuse, more overhead</td></tr>
+      </table>
+      <div class="callout takeaway"><span class="lbl">Goal</span>
+        Pick the <strong>largest</strong> <code class="inline">B</code> whose block still fits in cache — maximize reuse without spilling.</div>
+    </div>
+  </div>
+  <p class="tiny muted">In practice you also account for the vector/operands sharing the cache, associativity, and line size — but <code class="inline">B² ≤ cache</code> is the first-order guide.</p>
+</section>
+
+<!-- Review Module 2 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 2 — Review</h2>
+  <div class="qa">
+    <p class="q">1. An <code class="inline">n×n</code> matrix is tiled with block size <code class="inline">B×B</code>. How many blocks result?</p>
+    <div class="fragment"><div class="a"><code class="inline">(n/B)×(n/B)</code> blocks.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. Give three reasons block partitioning helps, and one cost it adds.</p>
+    <div class="fragment"><div class="a"><strong>Cache efficiency, efficient load distribution, scalability.</strong> The cost: it <strong>introduces communication</strong> between processors holding neighboring blocks.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. How should you pick <code class="inline">B</code> relative to cache size?</p>
+    <div class="fragment"><div class="a">So a block fits in cache: <code class="inline">B² ≤ cache size</code> (e.g. ≤ 32&nbsp;KB) — the largest such <code class="inline">B</code>, to maximize reuse without eviction.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 3 — MAPPING BLOCKS TO PROCESSORS
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 3</div>
+  <div class="mod-title">Mapping Blocks to Processors</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Apply <strong>modulo mapping</strong> <code class="inline">B[i][j] → P[i%Px][j%Py]</code></li>
+      <li>Lay blocks onto a <code class="inline">Px×Py</code> <strong>processor grid</strong></li>
+      <li>Read which processor owns a given block</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Modulo mapping -->
+<section data-background-color="#ffffff">
+  <h2>Modulo Mapping onto a Processor Grid</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">Given a processor grid of size <code class="inline">Px×Py</code>, assign each block to a processor by taking indices <strong>modulo</strong> the grid dimensions:</p>
+      <div class="eq small">\( B[i][j] \;\rightarrow\; P[\,i \bmod P_x\,][\,j \bmod P_y\,] \)</div>
+      <p class="small">Two processors in a column (<code class="inline">Px=2, Py=1</code>): <code class="inline">B[i][j] → P[i%2][j%1]</code> — even block-rows go to <code class="inline">P00</code>, odd to <code class="inline">P10</code>.</p>
+      <p class="small">On a <code class="inline">2×2</code> grid the ownership <strong>tiles</strong>: the same 2×2 pattern of processor IDs repeats across the whole block grid.</p>
+      <div class="callout"><span class="lbl">Why modulo</span>
+        It spreads neighboring blocks across <em>different</em> processors → interleaves work for balance, at the cost of communication between neighbors.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 210 220" class="chart" style="max-width:270px">
+        <text x="105" y="16" text-anchor="middle" class="lbl">4×4 blocks → 2×2 processor grid</text>
+        <!-- 4x4 blocks colored by (i%2, j%2) -->
+        <!-- colors: P00 blue, P01 green, P10 orange, P11 purple -->
+        <g stroke="#ffffff" stroke-width="2">
+          <!-- row i=0 -->
+          <rect x="35" y="30" width="35" height="35" fill="#3b82f6"/><rect x="70" y="30" width="35" height="35" fill="#10b981"/><rect x="105" y="30" width="35" height="35" fill="#3b82f6"/><rect x="140" y="30" width="35" height="35" fill="#10b981"/>
+          <!-- row i=1 -->
+          <rect x="35" y="65" width="35" height="35" fill="#f59e0b"/><rect x="70" y="65" width="35" height="35" fill="#8b5cf6"/><rect x="105" y="65" width="35" height="35" fill="#f59e0b"/><rect x="140" y="65" width="35" height="35" fill="#8b5cf6"/>
+          <!-- row i=2 -->
+          <rect x="35" y="100" width="35" height="35" fill="#3b82f6"/><rect x="70" y="100" width="35" height="35" fill="#10b981"/><rect x="105" y="100" width="35" height="35" fill="#3b82f6"/><rect x="140" y="100" width="35" height="35" fill="#10b981"/>
+          <!-- row i=3 -->
+          <rect x="35" y="135" width="35" height="35" fill="#f59e0b"/><rect x="70" y="135" width="35" height="35" fill="#8b5cf6"/><rect x="105" y="135" width="35" height="35" fill="#f59e0b"/><rect x="140" y="135" width="35" height="35" fill="#8b5cf6"/>
+        </g>
+        <g fill="#ffffff" style="font-size:9px;font-weight:700" text-anchor="middle">
+          <text x="52" y="51">P00</text><text x="87" y="51">P01</text>
+          <text x="52" y="86">P10</text><text x="87" y="86">P11</text>
+        </g>
+        <!-- legend -->
+        <g style="font-size:10px" text-anchor="start">
+          <rect x="35" y="185" width="12" height="12" fill="#3b82f6"/><text x="50" y="195" class="lbl">P00</text>
+          <rect x="80" y="185" width="12" height="12" fill="#10b981"/><text x="95" y="195" class="lbl">P01</text>
+          <rect x="120" y="185" width="12" height="12" fill="#f59e0b"/><text x="135" y="195" class="lbl">P10</text>
+          <rect x="160" y="185" width="12" height="12" fill="#8b5cf6"/><text x="175" y="195" class="lbl">P11</text>
+        </g>
+      </svg>
+      <div class="src">B[i][j] → P[i%2][j%2]; the 2×2 ownership pattern repeats.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Review Module 3 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 3 — Review</h2>
+  <div class="qa">
+    <p class="q">1. Write the modulo mapping of block <code class="inline">B[i][j]</code> onto a <code class="inline">Px×Py</code> processor grid.</p>
+    <div class="fragment"><div class="a"><code class="inline">B[i][j] → P[i%Px][j%Py]</code>.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. On a <code class="inline">2×2</code> grid, which processor owns block <code class="inline">B[3][2]</code>?</p>
+    <div class="fragment"><div class="a"><code class="inline">P[3%2][2%2] = P[1][0] = P10</code>.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 4 — DISTRIBUTION TAXONOMY & LOAD BALANCE
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 4</div>
+  <div class="mod-title">Distribution Taxonomy &amp; Load Balance</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Define <strong>block-cyclic</strong> distribution and its two special cases</li>
+      <li>Recognize <strong>cyclic</strong> (block size 1) and <strong>block</strong> (block size <code class="inline">n/p</code>)</li>
+      <li>Reason about the <strong>load-balance vs. locality</strong> trade-off each implies</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Block-cyclic taxonomy -->
+<section data-background-color="#ffffff">
+  <h2>Block, Cyclic &amp; Block-Cyclic</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small"><strong>Block-cyclic</strong> distribution is the general scheme: cut the dimension into blocks of a chosen size, then hand blocks out to the <code class="inline">p</code> processors <strong>round-robin</strong>. The two familiar schemes are its extremes:</p>
+      <div class="callout ok"><span class="lbl">Cyclic</span>
+        Special case with <strong>block size = 1</strong>. Consecutive elements go to consecutive processors (<code class="inline">P0,P1,…,P0,P1,…</code>). Best <strong>load balance</strong>, worst locality.</div>
+      <div class="callout warn"><span class="lbl">Block</span>
+        Special case with <strong>block size = n/p</strong>. Each processor gets one contiguous chunk. Best <strong>locality</strong>, worst balance if work is uneven.</div>
+      <p class="small">Block-cyclic (block size between <code class="inline">1</code> and <code class="inline">n/p</code>) <strong>dials between</strong> the two.</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 220" class="chart" style="max-width:300px">
+        <!-- 2 processors: P0 blue, P1 orange; 8 elements per row -->
+        <!-- BLOCK: block size n/p = 4 -->
+        <text x="10" y="34" class="lbl">Block</text>
+        <g stroke="#ffffff" stroke-width="1.5">
+          <rect x="10" y="40" width="27" height="24" fill="#3b82f6"/><rect x="37" y="40" width="27" height="24" fill="#3b82f6"/><rect x="64" y="40" width="27" height="24" fill="#3b82f6"/><rect x="91" y="40" width="27" height="24" fill="#3b82f6"/>
+          <rect x="118" y="40" width="27" height="24" fill="#f59e0b"/><rect x="145" y="40" width="27" height="24" fill="#f59e0b"/><rect x="172" y="40" width="27" height="24" fill="#f59e0b"/><rect x="199" y="40" width="27" height="24" fill="#f59e0b"/>
+        </g>
+        <text x="118" y="80" text-anchor="middle" class="tiny muted">block size = n/p = 4</text>
+
+        <!-- CYCLIC: block size 1 -->
+        <text x="10" y="112" class="lbl">Cyclic</text>
+        <g stroke="#ffffff" stroke-width="1.5">
+          <rect x="10" y="118" width="27" height="24" fill="#3b82f6"/><rect x="37" y="118" width="27" height="24" fill="#f59e0b"/><rect x="64" y="118" width="27" height="24" fill="#3b82f6"/><rect x="91" y="118" width="27" height="24" fill="#f59e0b"/>
+          <rect x="118" y="118" width="27" height="24" fill="#3b82f6"/><rect x="145" y="118" width="27" height="24" fill="#f59e0b"/><rect x="172" y="118" width="27" height="24" fill="#3b82f6"/><rect x="199" y="118" width="27" height="24" fill="#f59e0b"/>
+        </g>
+        <text x="118" y="158" text-anchor="middle" class="tiny muted">block size = 1</text>
+
+        <!-- BLOCK-CYCLIC: block size 2 -->
+        <text x="10" y="190" class="lbl">Block-cyclic</text>
+        <g stroke="#ffffff" stroke-width="1.5">
+          <rect x="10" y="196" width="27" height="24" fill="#3b82f6"/><rect x="37" y="196" width="27" height="24" fill="#3b82f6"/><rect x="64" y="196" width="27" height="24" fill="#f59e0b"/><rect x="91" y="196" width="27" height="24" fill="#f59e0b"/>
+          <rect x="118" y="196" width="27" height="24" fill="#3b82f6"/><rect x="145" y="196" width="27" height="24" fill="#3b82f6"/><rect x="172" y="196" width="27" height="24" fill="#f59e0b"/><rect x="199" y="196" width="27" height="24" fill="#f59e0b"/>
+        </g>
+      </svg>
+      <div class="src">Blue = P0, orange = P1. Block-cyclic (size 2) sits between.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Load balancing note -->
+<section data-background-color="#ffffff">
+  <h2>Choosing a Distribution: Balance vs. Locality</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Block</span><span class="small">Contiguous chunks → great <strong>spatial locality</strong> and low communication, but <strong>poor balance</strong> when work per element is uneven (e.g. triangular / growing work).</span></div>
+    <div class="callout"><span class="lbl">Cyclic</span><span class="small">Round-robin single elements → <strong>excellent balance</strong> for uneven work, but scattered data <strong>hurts locality</strong> and raises communication.</span></div>
+    <div class="callout"><span class="lbl">Block-cyclic</span><span class="small">Tunable block size → keep <strong>enough locality</strong> to reuse a block in cache while still <strong>interleaving</strong> work across processors.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Load balancing</span>
+    A parallel phase runs only as fast as its <strong>slowest processor</strong>. When per-task work is uniform, block is fine; when it varies, cyclic or block-cyclic spreads the heavy tasks so no single processor is overloaded.</div>
+</section>
+
+<!-- Review Module 4 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 4 — Review</h2>
+  <div class="qa">
+    <p class="q">1. What are the two special cases of block-cyclic distribution?</p>
+    <div class="fragment"><div class="a"><strong>Cyclic</strong> — block size 1; and <strong>block</strong> — block size <code class="inline">n/p</code> (n = dimension, p = number of processes).</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. Which distribution gives the best load balance, and which the best locality?</p>
+    <div class="fragment"><div class="a"><strong>Cyclic</strong> gives the best balance; <strong>block</strong> gives the best locality. Block-cyclic tunes between them.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Why does load balance matter for performance?</p>
+    <div class="fragment"><div class="a">A parallel phase finishes only when its <strong>slowest processor</strong> does — imbalance leaves other processors idle.</div></div>
+  </div>
+</section>
+
+<!-- Deck summary -->
+<section data-background-color="#ffffff">
+  <h2>Task Mapping — Big Picture</h2>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Module 1 · Granularity</span>Decompose <code class="inline">y=A·x</code> into <em>n</em> independent tasks; fine vs. coarse trades overhead against parallelism &amp; balance.</div>
+    <div class="callout"><span class="lbl">Module 2 · Blocking</span>Tile into <code class="inline">(n/B)×(n/B)</code> blocks for cache efficiency, load distribution &amp; scalability; size <code class="inline">B² ≤ cache</code>.</div>
+  </div>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Module 3 · Mapping</span>Place blocks on a <code class="inline">Px×Py</code> grid with <code class="inline">B[i][j] → P[i%Px][j%Py]</code>.</div>
+    <div class="callout"><span class="lbl">Module 4 · Distribution</span>Block, cyclic, block-cyclic — trade locality against load balance.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">One sentence</span>
+    <strong>Cut the work into right-sized tasks, block them to fit the cache, and distribute those blocks across processors to balance load while preserving locality.</strong> That is the performance half of parallelization.</div>
+  <p class="center muted small">Chapter 3 made it correct — this deck makes it fast.</p>
+</section>
+
+<!-- References -->
+<section data-background-color="#f6f8fb">
+  <h2>References</h2>
+  <div class="callout"><span class="lbl">Course textbook</span>
+    Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em>, Chapman &amp; Hall/CRC, 2015.
+    These slides follow and adapt the course lecture on task mapping and work distribution.</div>
+</section>
+</div>
+
+<!-- deck-level fixed footer (course + topic); slide number is reveal-native -->
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Task Mapping — Work Distribution &amp; Performance</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.04,
+    minScale: 0.2, maxScale: 1.6,
+    center: false,                 // top-align content so the NC State header bar sits at the slide top
+    hash: true, slideNumber: 'c/t', history: true,
+    transition: 'slide', transitionSpeed: 'fast',
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      {left:'\\(', right:'\\)', display:false},
+      {left:'$$', right:'$$', display:true}
+    ]},
+  });
+</script>
+<script>
+/* Auto-fit: shrink any slide whose content would exceed the 720px slide (and be
+   cut off in true 16:9 fullscreen). Scales content via --nc-fit; the header bar
+   is px-based and unaffected. */
+(function(){
+  function fit(s){ if(!s) return;
+    s.style.setProperty('--nc-fit','1');           // reset, then measure natural height
+    var h=s.scrollHeight;
+    if(h>724){ var k=Math.max(0.6, Math.min(1, 720/h));
+      s.style.setProperty('--nc-fit', k.toFixed(3)); }
+  }
+  if(window.Reveal){
+    Reveal.on('ready', function(e){ fit(e.currentSlide); });
+    Reveal.on('slidechanged', function(e){ fit(e.currentSlide); });
+    try{ if(Reveal.isReady && Reveal.isReady()) fit(Reveal.getCurrentSlide()); }catch(e){}
+  }
+})();
+</script>
+<script>
+/* In-class activity: set this to THIS deck's Google Form link (one form per deck). */
+const FORM_URL = "PASTE_GOOGLE_FORM_LINK_HERE";
+(function(){
+  function paint(){
+    var set = FORM_URL && FORM_URL.indexOf("PASTE_") === -1;
+    document.querySelectorAll('.activity').forEach(function(a){
+      var lnk=a.querySelector('.form-link'), img=a.querySelector('.qr-img'), ph=a.querySelector('.qr-ph');
+      if(set){
+        if(lnk) lnk.href=FORM_URL;
+        if(img){ img.src='https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=0&data='+encodeURIComponent(FORM_URL); img.style.display=''; }
+        if(ph) ph.style.display='none';
+      } else {
+        if(lnk) lnk.href='#';
+        if(img) img.style.display='none';
+        if(ph) ph.style.display='';
+      }
+    });
+  }
+  if(window.Reveal){ Reveal.on('ready', paint); }
+  document.addEventListener('DOMContentLoaded', paint); paint();
+})();
+</script>
+</body>
+</html>

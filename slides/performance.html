@@ -162,6 +162,56 @@
   </div>
 </section>
 
+<!-- Gustafson's law (weak scaling) -->
+<section data-background-color="#ffffff">
+  <h2>Gustafson's Law (Scaled Speedup)</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Amdahl fixes the <strong>problem size</strong> and asks how much faster p PEs run it. Gustafson flips the question: in practice we buy more PEs to solve a <strong>bigger</strong> problem in the <em>same</em> time.</p>
+      <div class="callout"><span class="lbl">Setup</span>
+        Let the parallel work <strong>grow with p</strong> so the parallel time is fixed at \(T_P = 1\), split into a serial slice <strong>s</strong> and a parallel slice <strong>1 − s</strong>.</div>
+      <div class="callout takeaway"><span class="lbl">Scaled speedup</span>
+        <div class="eq">\( S(p) \;=\; s + p\,(1-s) \)</div>
+        <span class="small">Speedup grows <strong>nearly linearly</strong> with p — the serial fraction only lowers the slope, it does <em>not</em> cap the result.</span></div>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Amdahl — fixed problem</span>
+        Serial fraction s is fixed → \(S \le 1/s\), a <strong>hard ceiling</strong> no matter how many PEs you add.</div>
+      <div class="callout ok"><span class="lbl">Gustafson — scaled problem</span>
+        The problem grows with p → \(S = s + p(1-s)\) keeps <strong>rising with p</strong>, limited only by the serial slice.</div>
+      <ul class="small">
+        <li>\(s = 0.05,\ p = 32\): \(S = 0.05 + 32(0.95) \approx 30.5\)</li>
+        <li>…versus Amdahl's ceiling of \(1/s = 20\) for the <em>same</em> serial fraction</li>
+      </ul>
+      <p class="src">Same s — opposite outlook. The difference is entirely <em>what you hold fixed</em>: the problem, or the work per PE.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Strong vs weak scalability -->
+<section data-background-color="#ffffff">
+  <h2>Strong vs. Weak Scalability</h2>
+  <p class="small">Two ways to talk about "scaling to more PEs" — they differ in <strong>what you hold fixed</strong> as p grows.</p>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Strong scaling</span>
+      <strong>Fixed total problem size</strong>; add PEs to finish the <em>same</em> work faster.
+      <ul class="small" style="margin:.3em 0 0 .9em">
+        <li>Work per PE <strong>shrinks</strong> as p grows</li>
+        <li>Overhead's share rises → efficiency falls</li>
+        <li>Governed by <strong>Amdahl</strong> → bounded speedup</li>
+      </ul></div>
+    <div class="callout"><span class="lbl">Weak scaling</span>
+      <strong>Fixed work per PE</strong>; grow the problem with p, holding time roughly constant.
+      <ul class="small" style="margin:.3em 0 0 .9em">
+        <li>Total problem size <strong>grows</strong> with p</li>
+        <li>Efficiency can be held ≈ constant</li>
+        <li>Governed by <strong>Gustafson</strong> → near-linear speedup</li>
+      </ul></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Tie it together</span>
+    <strong>Amdahl → strong scaling</strong> (fixed size, bounded speedup); <strong>Gustafson → weak scaling</strong> (grow the problem, near-linear speedup). <strong>Isoefficiency</strong> (Module C) makes the weak-scaling question — <em>how fast must the problem grow to hold efficiency?</em> — precise.</div>
+</section>
+
 <!-- Amdahl in reality -->
 <section data-background-color="#ffffff">
   <h2>Amdahl in Reality</h2>

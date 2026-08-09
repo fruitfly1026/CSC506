@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSC/ECE 506 · OpenMP in Practice</title>
+
+<!-- reveal.js core (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<!-- code highlighting + math -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+<!-- fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<!-- course theme -->
+<link rel="stylesheet" href="assets/theme.css?v=11">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============================ TITLE ============================ -->
+<section class="title-slide" data-background-color="#ffffff">
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <h1>OpenMP in Practice</h1>
+  <div class="sub">Getting Threads Running — Mechanics, Scheduling &amp; the Cluster</div>
+  <aside class="notes">
+    This is the hands-on companion to Chapter 3's conceptual OpenMP coverage. Chapter 3 tells you
+    which loop to parallelize and how to scope its variables; this deck is the "now actually run it"
+    half: how to set the thread count, which compiler flags to pass, what the schedule clause does,
+    the sections construct, and how to find your cores and launch on the ARC cluster with Slurm.
+    Supports Topic 2/3 programming work.
+  </aside>
+</section>
+
+<!-- Roadmap -->
+<section data-background-color="#ffffff">
+  <h2>Roadmap</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Module 1</span><strong>Landscape &amp; Execution Model</strong><br>
+      <span class="small">OpenMP among the multithreading options; the fork-join model; what OpenMP will and will <em>not</em> do.</span></div>
+    <div class="callout"><span class="lbl">Module 2</span><strong>Mechanics: Getting It Running</strong><br>
+      <span class="small">Thread count three ways, compiler flags, a hello-threads program, the <code class="inline">schedule</code> clause, and <code class="inline">sections</code>.</span></div>
+    <div class="callout"><span class="lbl">Module 3</span><strong>Your Hardware &amp; the Cluster</strong><br>
+      <span class="small">Cores vs. hardware threads via <code class="inline">/proc/cpuinfo</code>; running on ARC with Slurm.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Where this sits</span>
+    Chapter 3 covered the <strong>concepts</strong> — dependences, scope (<code class="inline">shared</code>/<code class="inline">private</code>/<code class="inline">reduction</code>), DOALL. Here we focus on the <strong>mechanics</strong>: how to compile, launch, and control an OpenMP program.</div>
+</section>
+
+<!-- ==================================================================
+     MODULE 1 — LANDSCAPE & EXECUTION MODEL
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 1</div>
+  <div class="mod-title">Landscape &amp; Execution Model</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Place <strong>OpenMP</strong> among the shared-memory multithreading options</li>
+      <li>Describe the <strong>fork-join</strong> execution model — master thread, team, barrier</li>
+      <li>State exactly what OpenMP <strong>will</strong> and <strong>will not</strong> do for you</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Landscape -->
+<section data-background-color="#ffffff">
+  <h2>OpenMP Among the Multithreading Options</h2>
+  <p class="small">For shared-memory parallelism in C/C++ there is a whole family of options. OpenMP is the one we use — it is a portable, compiler-based <em>specification</em>, not a library you have to hand-roll.</p>
+  <div class="cols c3">
+    <div class="callout ok"><span class="lbl">OpenMP</span><span class="small">Compiler directives (<code class="inline">#pragma omp</code>) over serial code. Portable, "light" syntax, C &amp; Fortran. <strong>Our focus.</strong></span></div>
+    <div class="callout"><span class="lbl">Cilk / Cilk Plus</span><span class="small">Language extension with <code class="inline">spawn</code>/<code class="inline">sync</code>; work-stealing runtime for divide-and-conquer tasking.</span></div>
+    <div class="callout"><span class="lbl">Intel TBB</span><span class="small">A C++ <em>template library</em> — parallel algorithms and containers, no compiler support needed.</span></div>
+  </div>
+  <div class="cols">
+    <div class="callout"><span class="lbl">PBBS</span><span class="small">Problem-Based Benchmark Suite — a set of parallel benchmarks/primitives, useful for comparison.</span></div>
+    <div class="callout"><span class="lbl">…and pthreads</span><span class="small">The low-level primitive everything else is built on — maximum control, maximum boilerplate.</span></div>
+  </div>
+  <p class="tiny muted">OpenMP's trade: you give up some control, and in return you annotate ordinary serial code instead of rewriting it.</p>
+</section>
+
+<!-- What is OpenMP / will & won't -->
+<section data-background-color="#ffffff">
+  <h2>OpenMP Will — and Will Not</h2>
+  <p class="small"><strong>OpenMP</strong> = <em>Open specification for Multi-Processing</em>: a standard API for shared-memory multithreaded programs (see <code class="inline">openmp.org</code>). Behavior depends on the implementation, and it <strong>requires compiler support</strong>.</p>
+  <div class="cols">
+    <div class="callout ok"><span class="lbl">OpenMP WILL</span>
+      <ul class="small" style="margin:.3em 0 0 .9em">
+        <li>Let you split a program into <strong>serial</strong> and <strong>parallel</strong> regions</li>
+        <li><strong>Hide stack / thread management</strong> — no manual create/join</li>
+        <li>Provide <strong>synchronization constructs</strong> (barrier, critical, atomic…)</li>
+        <li>Stay <strong>portable</strong> across compilers and platforms</li>
+      </ul></div>
+    <div class="callout warn"><span class="lbl">OpenMP will NOT</span>
+      <ul class="small" style="margin:.3em 0 0 .9em">
+        <li><strong>Parallelize automatically</strong> — you mark the parallelism</li>
+        <li><strong>Guarantee speedup</strong> — a bad decomposition can be slower</li>
+        <li><strong>Free you from data races</strong> — correctness is still on you</li>
+      </ul></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Mental model</span>
+    OpenMP is <strong>power steering, not a self-driving car</strong>. It removes the boilerplate of threading; deciding <em>what</em> is parallel and scoping variables correctly is still your job (that was Chapter 3).</div>
+</section>
+
+<!-- Fork-join model -->
+<section data-background-color="#ffffff">
+  <h2>The Fork-Join Execution Model</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">An OpenMP program starts as a <strong>single process</strong> — the <strong>master thread</strong> — and runs serially until it hits a parallel region.</p>
+      <ul class="small">
+        <li><strong>FORK</strong> — at <code class="inline">#pragma omp parallel</code> the master spawns a <strong>team</strong> of threads; the enclosed statements run in parallel.</li>
+        <li><strong>JOIN</strong> — at the end of the region the team synchronizes at an implicit barrier and terminates, leaving only the master.</li>
+      </ul>
+      <p class="small muted">A program is just a sequence of these fork-join episodes — serial stretch, parallel region, serial stretch, and so on.</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 360 210" class="chart" style="max-width:420px">
+        <defs><marker id="fjar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#1d4ed8"/></marker></defs>
+        <!-- master in -->
+        <line x1="20" y1="105" x2="95" y2="105" stroke="#0f172a" stroke-width="3"/>
+        <!-- fork fan-out -->
+        <g stroke="#3b82f6" stroke-width="2.5" fill="none">
+          <path d="M95,105 C120,105 120,45 150,45"/>
+          <path d="M95,105 C120,105 120,80 150,80"/>
+          <path d="M95,105 C120,105 120,130 150,130"/>
+          <path d="M95,105 C120,105 120,165 150,165"/>
+        </g>
+        <!-- parallel bars -->
+        <g stroke="#3b82f6" stroke-width="2.5">
+          <line x1="150" y1="45"  x2="240" y2="45"/>
+          <line x1="150" y1="80"  x2="240" y2="80"/>
+          <line x1="150" y1="130" x2="240" y2="130"/>
+          <line x1="150" y1="165" x2="240" y2="165"/>
+        </g>
+        <!-- join fan-in -->
+        <g stroke="#3b82f6" stroke-width="2.5" fill="none">
+          <path d="M240,45  C270,45  270,105 295,105"/>
+          <path d="M240,80  C270,80  270,105 295,105"/>
+          <path d="M240,130 C270,130 270,105 295,105"/>
+          <path d="M240,165 C270,165 270,105 295,105"/>
+        </g>
+        <!-- master out -->
+        <line x1="295" y1="105" x2="345" y2="105" stroke="#0f172a" stroke-width="3" marker-end="url(#fjar)"/>
+        <!-- fork/join markers -->
+        <line x1="150" y1="30" x2="150" y2="180" stroke="#CC0000" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <line x1="240" y1="30" x2="240" y2="180" stroke="#CC0000" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text x="150" y="22" text-anchor="middle" class="note" style="fill:#CC0000">FORK</text>
+        <text x="240" y="22" text-anchor="middle" class="note" style="fill:#CC0000">JOIN</text>
+        <text x="40"  y="98" class="lbl">master</text>
+        <text x="315" y="98" class="lbl">master</text>
+        <text x="195" y="200" text-anchor="middle" class="lbl">team of threads</text>
+      </svg>
+      <div class="src">Serial → FORK a team → JOIN at an implicit barrier.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Review 1 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 1 — Review</h2>
+  <div class="qa">
+    <p class="q">1. In one sentence, what is OpenMP?</p>
+    <div class="fragment"><div class="a">A portable, <strong>compiler-based specification</strong> of directives (<code class="inline">#pragma omp</code>) for shared-memory multithreading — you annotate mostly serial code rather than manage threads yourself.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. Trace the fork-join model through one parallel region.</p>
+    <div class="fragment"><div class="a">The <strong>master</strong> runs serially; at <code class="inline">#pragma omp parallel</code> it <strong>FORKs</strong> a team that runs the region in parallel; at the end they <strong>JOIN</strong> at an implicit barrier, leaving only the master.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Name one thing OpenMP will <em>not</em> do.</p>
+    <div class="fragment"><div class="a">It won't parallelize automatically, won't guarantee speedup, and won't prevent data races — correctness stays your responsibility.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 2 — MECHANICS
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 2</div>
+  <div class="mod-title">Mechanics: Getting It Running</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Set the thread count <strong>three ways</strong> and compile with the right flag</li>
+      <li>Write and run a minimal <strong>hello-threads</strong> program</li>
+      <li>Pick a <code class="inline">schedule</code> policy and use <code class="inline">#pragma omp sections</code></li>
+    </ul>
+  </div>
+</section>
+
+<!-- Setting thread count -->
+<section data-background-color="#ffffff">
+  <h2>Setting the Thread Count — Three Ways</h2>
+  <p class="small">The same knob, at three levels of scope. Later settings override earlier ones for the region they apply to.</p>
+  <div class="cols c3">
+    <div>
+      <div class="code-label">1 · Environment variable</div>
+      <pre><code class="language-bash" data-trim>
+# whole run, set in the shell
+export OMP_NUM_THREADS=8
+./myprog
+</code></pre>
+      <p class="tiny">Broadest &amp; simplest — no recompile.</p>
+    </div>
+    <div>
+      <div class="code-label">2 · Library call</div>
+      <pre><code class="language-c" data-trim>
+#include &lt;omp.h&gt;
+// from serial code, before a region
+omp_set_num_threads(4);
+</code></pre>
+      <p class="tiny">Programmatic — overrides the env var.</p>
+    </div>
+    <div>
+      <div class="code-label">3 · Clause on the region</div>
+      <pre><code class="language-c" data-trim>
+#pragma omp parallel num_threads(2)
+{
+    // exactly 2 threads here
+}
+</code></pre>
+      <p class="tiny">Most local — this region only.</p>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">Precedence</span>
+    <code class="inline">num_threads()</code> clause &gt; <code class="inline">omp_set_num_threads()</code> &gt; <code class="inline">OMP_NUM_THREADS</code> &gt; implementation default (often "all hardware threads").</div>
+</section>
+
+<!-- Compile + include + hello -->
+<section data-background-color="#ffffff">
+  <h2>Compile &amp; Run: Hello, Threads</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Minimal program — hello.c</div>
+      <pre><code class="language-c" data-trim>
+#include &lt;stdio.h&gt;
+#include &lt;omp.h&gt;          // OpenMP API
+
+int main(void) {
+    #pragma omp parallel
+    {
+        int id  = omp_get_thread_num();
+        int tot = omp_get_num_threads();
+        printf("Hello from thread %d of %d\n",
+               id, tot);
+    }
+    return 0;
+}
+</code></pre>
+      <p class="tiny muted">Every thread runs the block once; <code class="inline">omp_get_thread_num()</code> gives its id in <code class="inline">[0, tot)</code>.</p>
+    </div>
+    <div>
+      <div class="code-label">Compile — the <code class="inline">-fopenmp</code> flag is required</div>
+      <pre><code class="language-bash" data-trim>
+# GNU
+gcc  -fopenmp hello.c   -o hello    # C
+g++  -fopenmp hello.cpp -o hello    # C++
+
+# Intel
+icc  -fopenmp hello.c   -o hello    # C
+icpc -fopenmp hello.cpp -o hello    # C++
+</code></pre>
+      <div class="callout warn"><span class="lbl">Forget the flag?</span>
+        Without <code class="inline">-fopenmp</code> the compiler <strong>ignores every <code class="inline">#pragma omp</code></strong> — the code still builds and runs, but serially on one thread. A "no speedup" bug is very often a missing flag.</div>
+      <div class="code-label">Run</div>
+      <pre><code class="language-bash" data-trim>
+export OMP_NUM_THREADS=4
+./hello
+</code></pre>
+    </div>
+  </div>
+</section>
+
+<!-- Schedule clause -->
+<section data-background-color="#ffffff">
+  <h2>The <code class="inline">schedule</code> Clause: Handing Out Iterations</h2>
+  <p class="small">On <code class="inline">#pragma omp parallel for</code>, <code class="inline">schedule</code> decides <em>how loop iterations are distributed</em> across the team — a load-balancing knob.</p>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">schedule(static)</span>
+      <span class="small">Iterations split into equal contiguous chunks, assigned up front. <strong>Lowest overhead.</strong> Best when every iteration costs about the same.</span></div>
+    <div class="callout"><span class="lbl">schedule(dynamic, chunk)</span>
+      <span class="small">Threads grab a <code class="inline">chunk</code> of iterations at a time, coming back for more when done. Handles <strong>uneven</strong> iteration costs; more runtime overhead.</span></div>
+    <div class="callout"><span class="lbl">schedule(guided)</span>
+      <span class="small">Like dynamic, but chunk size <strong>starts large and shrinks</strong>. A compromise: good balance, fewer trips to the scheduler than dynamic.</span></div>
+  </div>
+  <div class="code-label">Syntax</div>
+  <pre><code class="language-c" data-trim>
+#pragma omp parallel for schedule(static)
+for (i = 0; i &lt; n; i++)      work(i);
+
+#pragma omp parallel for schedule(dynamic, 4)   // 4 iterations per grab
+for (i = 0; i &lt; n; i++)      variable_cost(i);
+
+#pragma omp parallel for schedule(guided)
+for (i = 0; i &lt; n; i++)      work(i);
+</code></pre>
+  <p class="tiny muted">Rule of thumb: uniform work → <code class="inline">static</code>; lumpy work → <code class="inline">dynamic</code> or <code class="inline">guided</code>. Measure before committing.</p>
+</section>
+
+<!-- Sections -->
+<section data-background-color="#ffffff">
+  <h2>Independent Blocks: <code class="inline">#pragma omp sections</code></h2>
+  <div class="cols">
+    <div>
+      <p class="small">Where <code class="inline">omp for</code> splits <em>one</em> loop across threads, <code class="inline">omp sections</code> hands <strong>distinct code blocks</strong> to different threads. Each <code class="inline">section</code> runs <strong>exactly once</strong>.</p>
+      <div class="code-label">Two independent tasks in parallel</div>
+      <pre><code class="language-c" data-trim>
+#pragma omp parallel sections
+{
+    #pragma omp section
+    { compute_left(); }    // one thread
+
+    #pragma omp section
+    { compute_right(); }   // another thread
+}
+// implicit barrier here: both done
+</code></pre>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">When to use</span>
+        Function parallelism — a handful of <em>different</em> jobs that can run at once (e.g. read a file while computing on the previous one).</div>
+      <div class="callout warn"><span class="lbl">Degree is fixed</span>
+        Parallelism is capped by the <strong>number of sections you write</strong> — two sections use at most two threads, no matter how many are available. It does <em>not</em> scale with data size.</div>
+      <div class="callout ok"><span class="lbl">Contrast</span>
+        Use <code class="inline">for</code> for data parallelism (scales with <code class="inline">n</code>); use <code class="inline">sections</code> for a fixed set of distinct tasks.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Review 2 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 2 — Review</h2>
+  <div class="qa">
+    <p class="q">1. Give the three ways to set the thread count, most-local first.</p>
+    <div class="fragment"><div class="a"><code class="inline">num_threads()</code> clause on a region → <code class="inline">omp_set_num_threads()</code> library call → <code class="inline">OMP_NUM_THREADS</code> environment variable. Each overrides the broader ones below it.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. You added pragmas but see no speedup and one thread. First thing to check?</p>
+    <div class="fragment"><div class="a">The <strong><code class="inline">-fopenmp</code> flag</strong>. Without it the compiler silently ignores every <code class="inline">#pragma omp</code> and builds a serial program.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Loop iterations have wildly different costs — which schedule?</p>
+    <div class="fragment"><div class="a"><code class="inline">schedule(dynamic, chunk)</code> or <code class="inline">schedule(guided)</code>, so idle threads pull more work. <code class="inline">static</code> would leave some threads stalling at the barrier.</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 3 — HARDWARE & CLUSTER
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 3</div>
+  <div class="mod-title">Your Hardware &amp; the Cluster</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Read <code class="inline">/proc/cpuinfo</code> to tell <strong>physical cores</strong> from <strong>hardware threads</strong></li>
+      <li>Launch an OpenMP job on the <strong>ARC cluster</strong> with Slurm</li>
+      <li>Choose <code class="inline">srun</code> vs. <code class="inline">sbatch</code> and set threads per task</li>
+    </ul>
+  </div>
+</section>
+
+<!-- /proc/cpuinfo -->
+<section data-background-color="#ffffff">
+  <h2>How Many Cores? Cores vs. Hardware Threads</h2>
+  <div class="cols">
+    <div>
+      <p class="small">On Linux, <code class="inline">/proc/cpuinfo</code> is the ground truth. Two fields matter:</p>
+      <ul class="small">
+        <li><code class="inline">processor</code> — the id of a <strong>hardware thread</strong> (logical CPU). Take the <strong>max value + 1</strong> for the total number of hardware threads.</li>
+        <li><code class="inline">cpu cores</code> — the number of <strong>physical cores</strong> per socket.</li>
+      </ul>
+      <div class="callout warn"><span class="lbl">Why they differ</span>
+        With SMT / hyper-threading, one physical core exposes <strong>two hardware threads</strong>. 8 cores can show 16 <code class="inline">processor</code> entries — so more threads than cores does not mean more true parallelism.</div>
+    </div>
+    <div>
+      <div class="code-label">Inspecting the machine</div>
+      <pre><code class="language-bash" data-trim>
+# browse the raw file
+vi /proc/cpuinfo
+
+# total hardware threads (count of ids)
+grep -c '^processor' /proc/cpuinfo
+
+# physical cores per socket
+grep 'cpu cores' /proc/cpuinfo | head -1
+</code></pre>
+      <p class="tiny muted">Setting <code class="inline">OMP_NUM_THREADS</code> above the hardware-thread count only oversubscribes — threads timeshare cores and usually slow down.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Slurm / ARC -->
+<section data-background-color="#ffffff">
+  <h2>Running on ARC with Slurm</h2>
+  <div class="cols">
+    <div>
+      <p class="small">ARC is the department research cluster. You do <em>not</em> run heavy jobs on the login node — you ask <strong>Slurm</strong>, the batch scheduler, for compute nodes. Slurm supports MPI, OpenMP, and CUDA jobs.</p>
+      <div class="callout"><span class="lbl">srun — interactive</span>
+        <span class="small">Runs a command now on allocated resources. Good for quick tests.</span></div>
+      <div class="callout"><span class="lbl">sbatch — batch</span>
+        <span class="small">Submits a job script to the queue; it runs when resources free up. Good for real runs.</span></div>
+      <p class="tiny muted">Docs: <code class="inline">arcb.csc.ncsu.edu/~mueller/cluster/arc/</code></p>
+    </div>
+    <div>
+      <div class="code-label">Interactive test</div>
+      <pre><code class="language-bash" data-trim>
+# 1 task, 8 cores for its threads
+srun -n 1 -c 8 ./hello
+</code></pre>
+      <div class="code-label">Batch job — job.sh</div>
+      <pre><code class="language-bash" data-trim>
+#!/bin/bash
+#SBATCH -N 1           # 1 node
+#SBATCH -n 1           # 1 task
+#SBATCH -c 8           # 8 cores / task
+
+export OMP_NUM_THREADS=8
+./hello
+</code></pre>
+      <pre><code class="language-bash" data-trim>
+sbatch job.sh          # submit to the queue
+</code></pre>
+      <p class="tiny muted">Match <code class="inline">OMP_NUM_THREADS</code> to the <code class="inline">-c</code> cores you requested.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Review 3 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 3 — Review</h2>
+  <div class="qa">
+    <p class="q">1. In <code class="inline">/proc/cpuinfo</code>, what do <code class="inline">processor</code> and <code class="inline">cpu cores</code> mean?</p>
+    <div class="fragment"><div class="a"><code class="inline">processor</code> is a <strong>hardware-thread</strong> id (max + 1 = total HW threads); <code class="inline">cpu cores</code> is the number of <strong>physical cores</strong>. They differ when SMT is on.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. Why not launch your parallel job directly on the ARC login node?</p>
+    <div class="fragment"><div class="a">It is shared by everyone. You request compute nodes through <strong>Slurm</strong> — <code class="inline">srun</code> for interactive tests, <code class="inline">sbatch</code> for queued batch runs.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Your <code class="inline">sbatch</code> script requests <code class="inline">-c 8</code>. What should <code class="inline">OMP_NUM_THREADS</code> be?</p>
+    <div class="fragment"><div class="a"><strong>8</strong> — match the thread count to the cores you reserved, so you neither waste cores nor oversubscribe them.</div></div>
+  </div>
+</section>
+
+<!-- Summary -->
+<section data-background-color="#ffffff">
+  <h2>OpenMP in Practice — Big Picture</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Model</span>Fork-join: master → FORK a team at a parallel region → JOIN at an implicit barrier. OpenMP hides the threading; you mark the parallelism.</div>
+    <div class="callout"><span class="lbl">Mechanics</span><code class="inline">#include &lt;omp.h&gt;</code>, set threads (env / call / clause), compile with <code class="inline">-fopenmp</code>, tune with <code class="inline">schedule</code>, split tasks with <code class="inline">sections</code>.</div>
+    <div class="callout"><span class="lbl">Cluster</span>Know your cores vs. HW threads from <code class="inline">/proc/cpuinfo</code>; launch on ARC via Slurm (<code class="inline">srun</code>/<code class="inline">sbatch</code>), matching threads to cores.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">One sentence</span>
+    <strong>OpenMP turns serial code into threaded code with directives — but you still choose the parallelism, pass the flag, pick a schedule, and size the job to the hardware.</strong> It performs comparably to hand-coded threading, but it is no silver bullet.</div>
+  <p class="center muted small">Pairs with Chapter 3's conceptual OpenMP — supports the Topic 2/3 programming work.</p>
+</section>
+
+<!-- References -->
+<section data-background-color="#f6f8fb">
+  <h2>References</h2>
+  <div class="callout"><span class="lbl">OpenMP</span>
+    <code class="inline">openmp.org</code> — specification, tutorials, examples. Yang, <em>Parallel Programming with OpenMP</em> (UCSB CS240A lecture notes).</div>
+  <div class="callout"><span class="lbl">Examples &amp; cluster</span>
+    Worked code: <code class="inline">github.com/muatik/openmp-examples</code>. ARC cluster + Slurm: <code class="inline">arcb.csc.ncsu.edu/~mueller/cluster/arc/</code>.</div>
+</section>
+</div>
+
+<!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>OpenMP in Practice</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.04,
+    minScale: 0.2, maxScale: 1.6,
+    center: false,                 // top-align content so the NC State header bar sits at the slide top
+    hash: true, slideNumber: 'c/t', history: true,
+    transition: 'slide', transitionSpeed: 'fast',
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      {left:'\\(', right:'\\)', display:false},
+      {left:'$$', right:'$$', display:true}
+    ]},
+  });
+</script>
+<script>
+/* Auto-fit: shrink any slide whose content would exceed the 720px slide (and be
+   cut off in true 16:9 fullscreen). Scales content via --nc-fit; the header bar
+   is px-based and unaffected. */
+(function(){
+  function fit(s){ if(!s) return;
+    s.style.setProperty('--nc-fit','1');           // reset, then measure natural height
+    var h=s.scrollHeight;
+    if(h>724){ var k=Math.max(0.6, Math.min(1, 720/h));
+      s.style.setProperty('--nc-fit', k.toFixed(3)); }
+  }
+  if(window.Reveal){
+    Reveal.on('ready', function(e){ fit(e.currentSlide); });
+    Reveal.on('slidechanged', function(e){ fit(e.currentSlide); });
+    try{ if(Reveal.isReady && Reveal.isReady()) fit(Reveal.getCurrentSlide()); }catch(e){}
+  }
+})();
+</script>
+<script>
+/* In-class activity: set this to THIS chapter's Google Form link (one form per chapter). */
+const FORM_URL = "PASTE_GOOGLE_FORM_LINK_HERE";
+(function(){
+  function paint(){
+    var set = FORM_URL &amp;&amp; FORM_URL.indexOf("PASTE_") === -1;
+    document.querySelectorAll('.activity').forEach(function(a){
+      var lnk=a.querySelector('.form-link'), img=a.querySelector('.qr-img'), ph=a.querySelector('.qr-ph');
+      if(set){
+        if(lnk) lnk.href=FORM_URL;
+        if(img){ img.src='https://api.qrserver.com/v1/create-qr-code/?size=180x180&amp;margin=0&amp;data='+encodeURIComponent(FORM_URL); img.style.display=''; }
+        if(ph) ph.style.display='none';
+      } else {
+        if(lnk) lnk.href='#';
+        if(img) img.style.display='none';
+        if(ph) ph.style.display='';
+      }
+    });
+  }
+  if(window.Reveal){ Reveal.on('ready', paint); }
+  document.addEventListener('DOMContentLoaded', paint); paint();
+})();
+</script>
+</body>
+</html>

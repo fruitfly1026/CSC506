@@ -413,7 +413,7 @@ unlock: st  &amp;lockvar, #0
 </code></pre>
     </div>
     <div>
-      <p class="small">After a successful <code class="inline">SC</code>, <code class="inline">R1</code> holds 1 (success); a failed <code class="inline">SC</code> returns 0 in <code class="inline">R1</code>, so the <code class="inline">bnz</code> sends us back to spin.</p>
+      <p class="small">The <code class="inline">addi</code> makes <code class="inline">R1</code> = 1, the value <code class="inline">SC</code> tries to store. <code class="inline">SC</code> then overwrites <code class="inline">R1</code> with its outcome — <strong>0 on success, nonzero on failure</strong> — so a successful store falls through to <code class="inline">ret</code> with the lock held, while a failed one (the link register was cleared by another writer) sends <code class="inline">bnz</code> back to spin.</p>
       <div class="callout ok"><span class="lbl">Spin = loads</span>The waiting loop uses <code class="inline">LL</code> (a load) — no bus traffic while the lock is held, like TTSL.</div>
     </div>
   </div>
@@ -476,7 +476,7 @@ unlock: st  &amp;lockvar, #0
 CAS:  LL  R3, &amp;L        ; R3 = MEM[L]; LINK = &amp;L
       bne R3, R1, done  ; MEM[L] != R1 -&gt; no swap
       SC  R2, &amp;L        ; try MEM[L] = R2
-      beqz R2, CAS      ; SC failed -&gt; retry
+      bnz  R2, CAS      ; SC failed -&gt; retry
       mov R2, R3        ; return old MEM[L] in R2
 done: ret
 </code></pre>

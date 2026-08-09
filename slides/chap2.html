@@ -155,14 +155,19 @@ else
       <div class="code-label">Thread — share everything (<code class="inline">clone</code>)</div>
       <pre><code class="language-c" data-trim>
 void sayhello() {
-  printf("child thread, id %d", getpid());
+  printf("child thread, tid %d", gettid());
 }
-printf("parent thread, id %d", getpid());
-clone(&amp;sayhello, &amp;stack, flags, ());
+printf("parent thread, tid %d", gettid());
+
+// what's shared is set by the flags;
+// CLONE_VM = share the address space
+clone(&amp;sayhello, stack_top,
+      CLONE_VM | CLONE_FILES | CLONE_FS, NULL);
 </code></pre>
       <div class="callout ok"><span class="lbl">Lightweight</span>
-        <span class="small">Small creation cost; threads share the address space →
-        <strong>implicit</strong> communication through memory.</span></div>
+        <span class="small">Threads share the address space via <code class="inline">CLONE_VM</code> &rarr;
+        <strong>implicit</strong> communication through memory. The <strong>flags pick exactly what's shared</strong>.</span></div>
+      <p class="tiny muted">"Share everything" = the <strong>address space</strong> (code, data, heap). Each thread still has its <strong>own stack, registers &amp; PC</strong>.</p>
     </div>
   </div>
   <aside class="notes">This is the crux: shared memory ≈ threads (share address space, communicate implicitly);
@@ -223,36 +228,57 @@ clone(&amp;sayhello, &amp;stack, flags, ());
   <h2>Shared Memory: Communication &amp; Synchronization</h2>
   <div class="cols w-64">
     <div>
-      <div class="code-label">Two threads share a, b, sum, signal</div>
+      <div class="code-label">Two threads share a, b, sum + flags</div>
       <pre><code class="language-c" data-trim>
-int a, b, sum, signal = 0;
+int a, b, sum;
+int ready = 0, done = 0;   // two flags
 
-void dosum(args) {
-  while (signal == 0) {}  // wait for work
+int dosum(void *arg) {
+  while (!ready) {}         // wait for work
   sum = a + b;
-  signal = 0;             // done
+  done = 1;                 // mark complete
+  return 0;
 }
 void main() {
-  clone(&amp;dosum, ...);     // spawn child
+  clone(&amp;dosum, ...);       // spawn child
   a = 5; b = 3;
-  signal = 1;             // tell child to work
-  while (signal == 1) {}  // wait for child
+  ready = 1;                // work is available
+  while (!done) {}          // wait for child
   printf("sum is %d", sum);
 }
 </code></pre>
     </div>
     <div>
       <div class="callout"><span class="lbl">Communication</span>
-        <span class="small">The values of <code class="inline">a</code>, <code class="inline">b</code>, <code class="inline">sum</code>
-        are <strong>never explicitly sent</strong> — they live in shared memory.</span></div>
-      <div class="callout warn"><span class="lbl">Synchronization</span>
-        <span class="small"><code class="inline">signal</code> is the only thing being coordinated. The spin-loops
-        <em>sequence</em> the two threads so the read of <code class="inline">sum</code> sees the write.</span></div>
+        <span class="small"><code class="inline">a</code>, <code class="inline">b</code>, <code class="inline">sum</code>, <code class="inline">ready</code>, <code class="inline">done</code>
+        are <strong>never explicitly sent</strong> &mdash; they live in shared memory.</span></div>
+      <div class="callout"><span class="lbl">Synchronization</span>
+        <span class="small">Only the flags <code class="inline">ready</code> / <code class="inline">done</code> are coordinated;
+        the spin-loops <em>try</em> to order the two threads.</span></div>
       <div class="callout takeaway"><span class="lbl">Lesson</span>
-        Shared memory separates <strong>data sharing</strong> (free, through memory) from
-        <strong>synchronization</strong> (which you must write explicitly).</div>
+        <span class="small">Shared memory separates <strong>data sharing</strong> (free, through memory) from
+        <strong>synchronization</strong> (which you must write explicitly).</span></div>
     </div>
   </div>
+</section>
+
+<!-- Is the spin-loop actually correct? -->
+<section data-background-color="#ffffff">
+  <h2>Shared Memory: Is the Spin-Loop Correct?</h2>
+  <p class="small">The handshake on the previous slide &mdash; the <code class="inline">ready</code> / <code class="inline">done</code> spin-loops &mdash; <em>looks</em> right. It isn't, for two independent reasons:</p>
+  <div class="cols">
+    <div class="callout warn fragment"><span class="lbl">&#9312; Compiler &mdash; infinite spin</span>
+      <span class="small"><code class="inline">while(!ready){}</code> reads a plain global; the optimizer may cache it in a
+      register and <strong>never re-read it</strong> &rarr; spins forever.<br>Fix: <code class="inline">volatile</code> /
+      <code class="inline">atomic</code>. Bites on <strong>every</strong> platform.</span></div>
+    <div class="callout warn fragment"><span class="lbl">&#9313; Hardware &mdash; stale a, b</span>
+      <span class="small">On <strong>weak memory</strong> (ARM, Power) the child can see <code class="inline">ready=1</code>
+      <em>before</em> <code class="inline">a=5, b=3</code> &rarr; <code class="inline">sum</code> reads stale values.<br>Fix: a
+      <strong>fence / acquire-release</strong>. (x86-TSO happens to hide it &mdash; a "works on my machine" trap.)</span></div>
+  </div>
+  <div class="callout takeaway fragment"><span class="lbl">Real lesson</span><span class="small">It is correct only under
+    <strong>sequential consistency</strong> &mdash; the poster child for <em>why</em> we need
+    <strong>memory-consistency models, atomics &amp; fences</strong>, the subject of <strong>Chapter 9</strong>.</span></div>
 </section>
 
 <!-- Message passing example -->
@@ -260,13 +286,14 @@ void main() {
   <h2>Message Passing: The Same Task</h2>
   <div class="cols w-64">
     <div>
-      <div class="code-label">Parent sends operands; child returns work</div>
+      <div class="code-label">Parent sends operands; child returns the result</div>
       <pre><code class="language-c" data-trim>
-int a, b;
+int a, b, sum;            // parent's variables
 
-void dosum() {
-  recvMsg(mainID, &amp;a, &amp;b);
-  printf("child&gt; sum is %d", a + b);
+void dosum() {            // child: separate address space
+  int x, y;               // child's OWN copies
+  recvMsg(mainID, &amp;x, &amp;y);
+  sendMsg(mainID, x + y); // return the result
 }
 void main() {
   if (fork() == 0)        // child
@@ -274,24 +301,40 @@ void main() {
   else {                  // parent
     a = 5; b = 3;
     sendMsg(childID, a, b);
-    wait(childID);
-    printf("all done, exiting\n");
+    recvMsg(childID, &amp;sum);     // receive result
+    waitpid(childID, NULL, 0);  // reap the child
+    printf("sum is %d\n", sum);
   }
 }
 </code></pre>
     </div>
     <div>
       <div class="callout warn"><span class="lbl">Explicit communication</span>
-        <span class="small">Data only crosses between processes via <code class="inline">sendMsg</code> /
-        <code class="inline">recvMsg</code> — nothing is shared.</span></div>
-      <div class="callout ok"><span class="lbl">Synchronization for free</span>
-        <span class="small">Send/receive <strong>automatically synchronize</strong>: the receiver blocks until the
-        message arrives. No separate <code class="inline">signal</code> variable needed.</span></div>
+        <span class="small">Data crosses only via <code class="inline">sendMsg</code> / <code class="inline">recvMsg</code> &mdash;
+        nothing is shared. The child's <code class="inline">x</code>, <code class="inline">y</code> are <strong>its own copies</strong>,
+        not the parent's <code class="inline">a</code>, <code class="inline">b</code>.</span></div>
+      <div class="callout ok"><span class="lbl">Synchronization &mdash; (almost) for free<sup>*</sup></span>
+        <span class="small">Send/receive <strong>synchronize on their own</strong>: the receiver blocks until the message
+        arrives. No separate <code class="inline">ready</code> / <code class="inline">done</code> flags.</span></div>
       <div class="callout takeaway"><span class="lbl">Trade-off</span>
-        Message passing <em>bundles</em> communication and synchronization — simpler reasoning, but you pay to move
-        every byte.</div>
+        <span class="small">Message passing <em>bundles</em> communication and synchronization &mdash; simpler reasoning, but you pay to move every byte.</span></div>
     </div>
   </div>
+  <p class="tiny muted" style="margin-top:.35em"><sup>*</sup> Not entirely free: whether the <strong>sender</strong> blocks depends on the send mode (buffered vs. synchronous vs. ready) &mdash; the send modes that message-passing libraries like <strong>MPI</strong> expose.</p>
+</section>
+
+<!-- Inter-process communication -->
+<section data-background-color="#ffffff">
+  <h2>Inter-Process Communication</h2>
+  <p class="small">The <code class="inline">sendMsg</code> / <code class="inline">recvMsg</code> above are pseudocode for real OS <strong>inter-process communication (IPC)</strong> &mdash; pick any primitive:</p>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Pipes / FIFOs</span>
+      <span class="small">A <code class="inline">pipe()</code> with <code class="inline">fork()</code> is the classic case: one end <code class="inline">write()</code>s (= send), the other <code class="inline">read()</code>s (= recv). <code class="inline">read()</code> <strong>blocks until data arrives</strong> &mdash; exactly the "receiver blocks" we relied on. Named pipes (<strong>FIFOs</strong>) do the same between unrelated processes.</span></div>
+    <div class="callout"><span class="lbl">Sockets</span>
+      <span class="small">Unix-domain or network sockets call <code class="inline">send()</code> / <code class="inline">recv()</code> directly &mdash; the names line up. Same host <em>or</em> <strong>across machines</strong> &mdash; which is what scales out to a cluster.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Where MPI fits</span>
+    <span class="small">MPI is the standard library layered on these primitives &mdash; adding ranks, datatypes &amp; collectives. The model is OS-level, <strong>not necessarily MPI</strong>.</span></div>
 </section>
 
 <!-- Review 2.1 -->
@@ -396,6 +439,7 @@ print sum;
           <li><strong>Lock:</strong> protects the <code class="inline">sum</code> reduction</li>
           <li><strong>Barrier:</strong> all threads finish a phase before the next</li>
         </ul></div>
+      <p class="tiny muted">These three primitives map directly onto OpenMP — the subject of <strong>Chapter 3</strong>.</p>
     </div>
   </div>
 </section>
@@ -529,7 +573,7 @@ if (id == 0) {
       <div class="callout ok"><span class="lbl">The PGAS idea</span>
         <span class="small">Keep a <strong>global shared address space</strong>, but <em>partition</em> it so each thread has an
         affinity for part of it — the model exposes <strong>both shared and private</strong> regions.</span></div>
-      <p class="small muted">Languages: UPC, Co-Array Fortran, Chapel, Titanium.</p>
+      <p class="small muted"><strong>Languages:</strong> UPC, Coarray Fortran, Chapel, Titanium.<br><strong>Libraries:</strong> OpenSHMEM, NVSHMEM (multi-GPU), Global Arrays.</p>
     </div>
     <div class="center">
       <svg viewBox="0 0 240 170" class="chart" style="max-width:280px">

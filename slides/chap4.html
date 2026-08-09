@@ -975,6 +975,31 @@ void IntList_Insert(pIntList l, node *p) {
   </div>
 </section>
 
+<!-- Example 2 with R/W locks: read locks don't conflict -->
+<section data-background-color="#ffffff">
+  <h2>Example 2 Revisited — Read/Write Locks</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">P1 deletes V; P2 inserts X between V and Y. With typed locks:</p>
+      <ul class="small">
+        <li><strong>P1</strong>: write-lock U, V; <strong>read-lock Y</strong> (must survive, only read)</li>
+        <li><strong>P2</strong>: write-lock V; <strong>read-lock Y</strong> (must survive, only read)</li>
+      </ul>
+      <table>
+        <tr><th>Node</th><th>P1</th><th>P2</th></tr>
+        <tr><td>U</td><td>Write</td><td></td></tr>
+        <tr><td>V</td><td class="hi">Write</td><td class="hi">Write</td></tr>
+        <tr><td>Y</td><td>Read</td><td>Read</td></tr>
+      </table>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Conflict only at V</span>
+        Both write V → they serialize there. But both only <strong>read Y</strong>, and Read + Read is compatible → <strong>no conflict on Y</strong>.</div>
+      <p class="small muted">Read/write locks pay off here: the shared "must-survive" node Y doesn't force serialization when nobody writes it. The next example shows where read/write still falls short.</p>
+    </div>
+  </div>
+</section>
+
 <!-- Insertion between Y and Z: unnecessary conflict -->
 <section data-background-color="#ffffff">
   <h2>Example 3 — An <em>Unnecessary</em> Conflict</h2>

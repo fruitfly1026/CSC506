@@ -321,6 +321,91 @@ for (i=1; i&lt;=n; i++)
   </div>
 </section>
 
+<!-- ITG/LDG practice -->
+<section data-background-color="#ffffff">
+  <h2>Practice: Draw the ITG &amp; LDG</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="code-label">Loop nest</div>
+      <pre><code class="language-c" data-trim>
+for (i = 1; i &lt; N; i++)
+  for (j = 2; j &lt; N; j++) {
+    S1: a[i][j]   = a[i][j-1] + a[i][j-2];
+    S2: a[i+1][j] = a[i][j] * b[i-1][j];
+    S3: b[i][j]   = a[i][j];
+  }
+</code></pre>
+      <div class="callout"><span class="lbl">Your task</span>Draw the <strong>ITG</strong> (traversal order) and the <strong>LDG</strong> — label each edge <em>true</em> (T) or <em>output</em> (O). Then say <strong>which loop carries</strong> each dependence.</div>
+    </div>
+    <div class="center">
+      <div class="fragment">
+        <div style="display:flex;gap:14px;justify-content:center;align-items:flex-start;flex-wrap:wrap">
+          <div>
+            <svg viewBox="0 0 210 180" class="chart" style="max-width:200px">
+              <text x="110" y="14" text-anchor="middle" class="lbl">j →</text>
+              <text x="12" y="100" text-anchor="middle" class="lbl" transform="rotate(-90 12 100)">i →</text>
+              <defs><marker id="arITGp" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#1d4ed8"/></marker></defs>
+              <g stroke="#1d4ed8" stroke-width="2" fill="none" marker-end="url(#arITGp)">
+                <line x1="57" y1="50" x2="98" y2="50"/><line x1="122" y1="50" x2="163" y2="50"/>
+                <line x1="57" y1="100" x2="98" y2="100"/><line x1="122" y1="100" x2="163" y2="100"/>
+                <line x1="57" y1="150" x2="98" y2="150"/><line x1="122" y1="150" x2="163" y2="150"/>
+                <path d="M175,60 C200,76 200,84 112,96"/>
+                <path d="M175,110 C200,126 200,134 112,146"/>
+              </g>
+              <g fill="#3b82f6" stroke="#1d4ed8">
+                <circle cx="45" cy="50" r="8"/><circle cx="110" cy="50" r="8"/><circle cx="175" cy="50" r="8"/>
+                <circle cx="45" cy="100" r="8"/><circle cx="110" cy="100" r="8"/><circle cx="175" cy="100" r="8"/>
+                <circle cx="45" cy="150" r="8"/><circle cx="110" cy="150" r="8"/><circle cx="175" cy="150" r="8"/>
+              </g>
+            </svg>
+            <div class="src">ITG — row-major traversal</div>
+          </div>
+          <div>
+            <svg viewBox="0 0 210 180" class="chart" style="max-width:200px">
+              <text x="110" y="14" text-anchor="middle" class="lbl">j →</text>
+              <text x="12" y="100" text-anchor="middle" class="lbl" transform="rotate(-90 12 100)">i →</text>
+              <defs><marker id="arLDGp" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#0f172a"/></marker></defs>
+              <g stroke="#0f172a" stroke-width="2" marker-end="url(#arLDGp)">
+                <line x1="57" y1="50" x2="98" y2="50"/><line x1="122" y1="50" x2="163" y2="50"/>
+                <line x1="57" y1="100" x2="98" y2="100"/><line x1="122" y1="100" x2="163" y2="100"/>
+                <line x1="57" y1="150" x2="98" y2="150"/><line x1="122" y1="150" x2="163" y2="150"/>
+                <line x1="45" y1="58" x2="45" y2="92"/><line x1="110" y1="58" x2="110" y2="92"/><line x1="175" y1="58" x2="175" y2="92"/>
+                <line x1="45" y1="108" x2="45" y2="142"/><line x1="110" y1="108" x2="110" y2="142"/><line x1="175" y1="108" x2="175" y2="142"/>
+              </g>
+              <g fill="#dc2626" style="font-size:11px;font-weight:700">
+                <text x="70" y="44">T</text><text x="135" y="44">T</text>
+                <text x="70" y="94">T</text><text x="135" y="94">T</text>
+                <text x="70" y="144">T</text><text x="135" y="144">T</text>
+              </g>
+              <g fill="#b45309" style="font-size:10px;font-weight:700">
+                <text x="52" y="79">T,O</text><text x="117" y="79">T,O</text>
+                <text x="52" y="129">T,O</text><text x="117" y="129">T,O</text>
+              </g>
+              <g fill="#3b82f6" stroke="#1d4ed8">
+                <circle cx="45" cy="50" r="8"/><circle cx="110" cy="50" r="8"/><circle cx="175" cy="50" r="8"/>
+                <circle cx="45" cy="100" r="8"/><circle cx="110" cy="100" r="8"/><circle cx="175" cy="100" r="8"/>
+                <circle cx="45" cy="150" r="8"/><circle cx="110" cy="150" r="8"/><circle cx="175" cy="150" r="8"/>
+              </g>
+            </svg>
+            <div class="src">LDG — <span style="color:#dc2626;font-weight:700">T</span> horizontal (carried by j), <span style="color:#b45309;font-weight:700">T,O</span> vertical (carried by i)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="fragment">
+    <div class="callout ok"><span class="lbl">Answer — dependences</span>
+      <ul class="tiny" style="margin:.3em 0 0 .9em">
+        <li><strong>True, carried by <code class="inline">j</code> (inner):</strong> <code class="inline">S1[i,j] T S1[i,j+1]</code> and <code class="inline">S1[i,j] T S1[i,j+2]</code> — via <code class="inline">a[i][j]</code>.</li>
+        <li><strong>True, loop-independent:</strong> <code class="inline">S1[i,j] T S2[i,j]</code>, <code class="inline">S1[i,j] T S3[i,j]</code> — same iteration.</li>
+        <li><strong>True, carried by <code class="inline">i</code> (outer):</strong> <code class="inline">S2[i,j] T S1/S2/S3[i+1,…]</code> via <code class="inline">a[i+1][j]</code>; <code class="inline">S3[i,j] T S2[i+1,j]</code> via <code class="inline">b[i][j]</code>.</li>
+        <li><strong>Output, carried by <code class="inline">i</code>:</strong> <code class="inline">S2[i,j] O S1[i+1,j]</code> — both write row <code class="inline">i+1</code> of <code class="inline">a</code>. No anti dependences.</li>
+      </ul>
+      <p class="tiny" style="margin:.4em 0 0 0">The <code class="inline">j</code> loop carries S1's <code class="inline">a[i][j]</code> chain; the <code class="inline">i</code> loop carries the S2/S3/output edges → <strong>neither loop is DOALL as written.</strong></p>
+    </div>
+  </div>
+</section>
+
 <!-- Review 3.1 -->
 <section data-background-color="#f6f8fb">
   <h2>Module 3.1 — Review</h2>
@@ -379,7 +464,7 @@ for (i=3; i&lt;=n; i+=2)   // odd chain
     </div>
   </div>
   <div class="callout takeaway"><span class="lbl">DOALL</span>
-    When a loop level has <strong>no loop-carried dependence</strong>, every iteration is independent — a <strong>DOALL</strong> loop, the gold standard. The inner <code class="inline">j</code> loop of <code class="inline">a[i][j]=a[i][j-1]+1</code> gives <code class="inline">n</code> independent tasks (one per <code class="inline">i</code>).</p></div>
+    When a loop level has <strong>no loop-carried dependence</strong>, every iteration is independent — a <strong>DOALL</strong> loop, the gold standard. In <code class="inline">a[i][j]=a[i][j-1]+1</code> the carried dependence is on <code class="inline">j</code>, so the <strong>outer <code class="inline">i</code> loop</strong> is DOALL: <code class="inline">n</code> independent tasks (one per <code class="inline">i</code>), each running its <code class="inline">j</code> chain serially.</div>
 </section>
 
 <!-- Anti-diagonal example -->
@@ -539,6 +624,35 @@ for (i=0; i&lt;n; i++)       // task B
     </div>
   </div>
   <p class="tiny muted"><code class="inline">S1[i] A S2[i+1]</code> only requires all S1's finish before any S2 of a later iteration — preserved within task A's order.</p>
+</section>
+
+<!-- OpenMP sections -->
+<section data-background-color="#ffffff">
+  <h2>Independent Blocks: <code class="inline">#pragma omp sections</code></h2>
+  <p class="small">When the tasks are <strong>distinct code blocks</strong> — not iterations of one loop — put each block in its own <code class="inline">#pragma omp section</code>. Every section runs <strong>once</strong>, on its own thread; the enclosing <code class="inline">sections</code> region ends with an implicit barrier.</p>
+  <div class="cols">
+    <div>
+      <div class="code-label">Even &amp; odd chains as two sections</div>
+      <pre><code class="language-c" data-trim>
+#pragma omp parallel sections
+{
+  #pragma omp section
+  for (i = 2; i &lt;= n; i += 2)   // even chain
+    a[i] = a[i-2];
+
+  #pragma omp section
+  for (i = 3; i &lt;= n; i += 2)   // odd chain
+    a[i] = a[i-2];
+}
+</code></pre>
+      <p class="small ok-text" style="color:var(--ok)">✓ The two chains never touch → each runs as its own section, in parallel.</p>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">sections vs. for</span>
+        <code class="inline">omp for</code> splits <em>one</em> loop's iterations across threads (data parallelism); <code class="inline">omp sections</code> hands <em>each named block</em> to a thread — the natural fit for <strong>function parallelism</strong> like the two distributed loops (task A / task B) on the previous slide.</div>
+      <div class="callout warn"><span class="lbl">Degree</span>Parallelism is capped by the <strong>number of sections</strong> you write — here just 2 — so it does <em>not</em> grow with <code class="inline">n</code>.</div>
+    </div>
+  </div>
 </section>
 
 <!-- Function parallelism notes -->

@@ -951,6 +951,58 @@ Rd F
   <div class="callout small"><span class="lbl">Note</span>The <code class="inline">Rd B → Wr B</code> data dependence is enforced by the hardware even under SC, so no fence is needed there.</div>
 </section>
 
+<!-- Fence insertion: PC machine -->
+<section data-background-color="#ffffff">
+  <h2>Exercise 2 — On a Processor-Consistent Machine</h2>
+  <p class="small">Now the machine is already <strong>PC</strong>: it preserves every order <em>except</em> <span class="pill">ST→LD</span>. So we only add fences where a store-then-load ordering actually matters.</p>
+  <div class="cols c3">
+    <div>
+      <div class="code-label" style="color:#CC0000">SC — restore ST→LD only</div>
+      <pre class="tiny"><code class="language-x86asm" data-trim>
+Lock L1
+Rd A
+Rd B
+Wr B
+Wr D
+fence       ; Wr D → Rd E
+Rd E
+Unlock L1
+fence       ; Unlock(st) → Rd F
+Rd F
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label" style="color:#2563eb">PC — nothing to do</div>
+      <pre class="tiny"><code class="language-x86asm" data-trim>
+Lock L1
+Rd A
+Rd B
+Wr B
+Wr D
+Rd E
+Unlock L1
+Rd F
+; machine is already PC
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label" style="color:#16a34a">WO — fence at the release</div>
+      <pre class="tiny"><code class="language-x86asm" data-trim>
+Lock L1
+Rd A
+Rd B
+Wr B
+Wr D
+Rd E
+Unlock L1
+fence       ; synch → ld/st
+Rd F
+</code></pre>
+    </div>
+  </div>
+  <div class="callout small"><span class="lbl">Contrast with Exercise 1</span>Because the PC baseline already keeps LD→LD, LD→ST, and ST→ST, far fewer fences are needed than on the fully-relaxed machine — only the ST→LD gaps must be closed.</div>
+</section>
+
 <!-- Latency example -->
 <section data-background-color="#ffffff">
   <h2>Latency Example — SC vs. PC vs. WO</h2>
