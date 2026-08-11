@@ -47,7 +47,7 @@
     <div class="callout"><span class="lbl">Module 10.3</span><strong>Cache-Based Directory</strong><br>
       <span class="small">The SCI linked-list scheme: tiny storage, but longer write latency and trickier races.</span></div>
   </div>
-  <div class="callout takeaway"><span class="lbl">The thread that ties it together</span>
+  <div class="callout takeaway"><span class="lbl">The takeaway</span>
     A directory <strong>filters coherence traffic</strong> so only the caches that actually share a block get involved. That filtering is what lets shared memory scale to <strong>tens–hundreds</strong> of processors — but it costs storage, extra hops, and a much more complex protocol.</div>
 </section>
 
@@ -269,7 +269,7 @@
     <div class="callout"><span class="lbl">Non-LLC (L2/L3 slices)</span>
       Directory can track <strong>inner cache levels</strong> (e.g. L3 slices), with memory controllers feeding off-chip memory.</div>
   </div>
-  <div class="callout takeaway"><span class="lbl">Common thread</span>
+  <div class="callout takeaway"><span class="lbl">The takeaway</span>
     Wherever it lives, the directory is <strong>distributed with the memory it tracks</strong> — there is no single hot-spot table the way a single bus is a single hot-spot wire.</div>
 </section>
 
