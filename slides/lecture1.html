@@ -131,50 +131,19 @@
   <p class="small muted">Module 1.1 answers the "why now"; Module 1.2 gives the physics.</p>
 </section>
 <section data-background-color="#ffffff">
-  <h2>Feature Size Scaling</h2>
+  <h2>Moore's Law</h2>
   <div class="cols w-64">
     <div class="center">
-      <svg viewBox="0 0 430 240" class="chart">
-        <line class="axis" x1="60" y1="22" x2="60" y2="200"/>
-        <line class="axis" x1="60" y1="200" x2="412" y2="200"/>
-        <text x="54" y="34"  text-anchor="end" class="lbl">10 µm</text>
-        <text x="54" y="76"  text-anchor="end" class="lbl">1 µm</text>
-        <text x="54" y="118" text-anchor="end" class="lbl">100 nm</text>
-        <text x="54" y="160" text-anchor="end" class="lbl">10 nm</text>
-        <text x="54" y="200" text-anchor="end" class="lbl">1 nm</text>
-        <line class="grid" x1="60" y1="72"  x2="412" y2="72"/>
-        <line class="grid" x1="60" y1="114" x2="412" y2="114"/>
-        <line class="grid" x1="60" y1="156" x2="412" y2="156"/>
-        <text x="70"  y="216" text-anchor="middle" class="lbl">1971</text>
-        <text x="167" y="216" text-anchor="middle" class="lbl">1986</text>
-        <text x="264" y="216" text-anchor="middle" class="lbl">2001</text>
-        <text x="400" y="216" text-anchor="middle" class="lbl">2022</text>
-        <g class="dot">
-          <circle cx="70" cy="30" r="4"/><circle cx="96" cy="39" r="4"/><circle cx="122" cy="52" r="4"/>
-          <circle cx="141" cy="65" r="4"/><circle cx="167" cy="72" r="4"/><circle cx="186" cy="76" r="4"/>
-          <circle cx="212" cy="81" r="4"/><circle cx="225" cy="91" r="4"/><circle cx="238" cy="97" r="4"/>
-          <circle cx="251" cy="103" r="4"/><circle cx="264" cy="109" r="4"/><circle cx="277" cy="116" r="4"/>
-          <circle cx="290" cy="122" r="4"/><circle cx="303" cy="129" r="4"/><circle cx="322" cy="135" r="4"/>
-          <circle cx="335" cy="142" r="4"/><circle cx="348" cy="150" r="4"/><circle cx="361" cy="156" r="4"/>
-          <circle cx="374" cy="163" r="4"/><circle cx="387" cy="169" r="4"/><circle cx="400" cy="178" r="4"/>
-        </g>
-        <!-- two-segment trend: shallower pre-1990, steeper after -->
-        <path class="trend" d="M70,30 L193,72 L400,178"/>
-        <text x="170" y="48" text-anchor="middle" class="note" style="font-size:15px">Shrinks 30% / 3 yrs</text>
-        <text x="300" y="156" text-anchor="middle" class="note" style="font-size:15px">Shrinks 30% / 1.5 yrs</text>
-      </svg>
-      <div class="src">Process-node introduction years. Data: Wikipedia, &ldquo;List of semiconductor scale examples&rdquo; (ITRS / IRDS roadmaps). Recent &ldquo;nm&rdquo; node names are commercial labels, not physical gate lengths.</div>
+      <img src="assets/moore-rupp.png" alt="50 years of microprocessor trend data: transistors keep doubling while frequency and power flatten after ~2005 and core count rises" style="max-width:100%;border-radius:8px">
+      <div class="src">figure: &ldquo;50 Years of Microprocessor Trend Data&rdquo; &mdash; original data by Horowitz, Labonte, Shacham, Olukotun, Hammond &amp; Batten; 2010&ndash;2021 update by <a href="https://github.com/karlrupp/microprocessor-trend-data">K. Rupp</a> (CC BY 4.0)</div>
     </div>
     <div>
-      <div class="callout"><span class="lbl">Moore's Law</span>
-        Gordon Moore's 1965 observation that the number of transistors on a chip <strong>doubles roughly every ~2 years</strong> (originally yearly; revised to ~2 years in 1975) as feature sizes shrink. It's an empirical trend, <em>not</em> a physical law.</div>
-      <div class="callout takeaway"><span class="lbl">Result of scaling</span>
-        <strong>2,300</strong> transistors (Intel 4004, 1971) &rarr; <strong>2.3 billion</strong> transistors (2012).</div>
-      <ul class="small">
-        <li>Feature size: <strong>10 µm</strong> (1971) → <strong>~1 µm</strong> (late 1980s) → <strong>90 nm</strong> (2003) → <strong>3 nm</strong> (2022)</li>
-        <li>Early pace ~<strong>30% / 3 yrs</strong>, accelerating to ~<strong>30% / 1.5 yrs</strong> after ~1990</li>
-      </ul>
-      <p class="src">Abundant transistors are <em>not</em> the same as abundant performance — that's the twist in Module 1.2.</p>
+      <div class="callout"><span class="lbl">The traditional statement</span>
+        Gordon Moore, <strong>1965</strong>: the number of transistors on a chip <strong>doubles about every two years</strong> (he first said ~1 year; revised to ~2 years in 1975). On a log axis it&rsquo;s a straight line &mdash; an <em>empirical trend, not a physical law</em>.</div>
+      <div class="callout takeaway"><span class="lbl">In plain terms</span>
+        Every ~2 years you get <strong>roughly twice the transistors for the same price</strong> &mdash; so computing per dollar keeps doubling. It&rsquo;s why the phone in your pocket outruns a 1990s supercomputer.</div>
+      <div class="callout warn"><span class="lbl">The twist this course is about</span>
+        Transistors (<span style="color:#c8791f;font-weight:700">orange</span>) keep doubling &mdash; but <strong>frequency (<span style="color:#2e8b30;font-weight:700">green</span>) and power (<span style="color:#c0392b;font-weight:700">red</span>) went flat ~2005</strong>, so single-thread speed (<span style="color:#2554c7;font-weight:700">blue</span>) stalled. The spare transistors now buy <strong>more cores</strong> (black) &mdash; the pivot to multicore.</div>
     </div>
   </div>
 </section>
