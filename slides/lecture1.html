@@ -396,7 +396,7 @@ gcc main.o code1.o code2.o
 <section data-background-color="#ffffff">
   <h2>Multicore in Clusters &amp; Data Centers</h2>
   <div class="cols">
-    <div class="callout"><span class="lbl">Cloud / warehouse-scale</span>Each server node = <strong>1&#8211;2 multicore CPUs</strong>. A dual-socket AMD EPYC &ldquo;Genoa&rdquo; node = <strong>2 &#215; 96 = 192 cores</strong> (384 threads). Hyperscalers <span class="small">(AWS, Microsoft Azure, Google Cloud)</span> stack <strong>thousands</strong> of such nodes per data center.</div>
+    <div class="callout"><span class="lbl">Cloud / warehouse-scale</span>Each server node = <strong>1&#8211;2 multicore CPUs</strong>. A dual-socket AMD EPYC &ldquo;Genoa&rdquo; node = <strong>2 &#215; 96 = 192 cores</strong> (384 threads). Hyperscalers <span class="small">(e.g., AWS, Microsoft Azure, Google Cloud)</span> stack <strong>thousands</strong> of such nodes per data center.</div>
     <div class="callout"><span class="lbl">HPC clusters</span>Campus / lab clusters link multicore nodes with a fast fabric (<strong>InfiniBand / high-speed Ethernet</strong>). A job runs <strong>across nodes</strong> via MPI and <strong>across cores</strong> within a node via OpenMP / threads.</div>
   </div>
   <div class="callout takeaway"><span class="lbl">The unit of scale-out</span>The multicore <strong>node</strong> is what gets replicated &#8212; clouds and clusters are just <strong>many multicore nodes on a network</strong>.</div>
