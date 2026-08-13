@@ -130,14 +130,14 @@
     <strong>Why then? Why not earlier or later?</strong></div>
   <p class="small muted">Module 1.1 answers the "why now"; Module 1.2 gives the physics.</p>
 </section>
-<section data-background-color="#ffffff">
+<section data-background-color="#ffffff" data-fit="0.78">
   <h2>Moore's Law</h2>
   <div class="cols w-64">
     <div class="center">
-      <img src="assets/moore-rupp.png" alt="50 years of microprocessor trend data: transistors keep doubling while frequency and power flatten after ~2005 and core count rises" style="max-width:100%;border-radius:8px">
+      <img src="assets/moore-rupp.png" alt="50 years of microprocessor trend data: transistors keep doubling while frequency and power flatten after ~2005 and core count rises" style="max-width:100%;max-height:430px;border-radius:8px">
       <div class="src">figure: &ldquo;50 Years of Microprocessor Trend Data&rdquo; &mdash; original data by Horowitz, Labonte, Shacham, Olukotun, Hammond &amp; Batten; 2010&ndash;2021 update by <a href="https://github.com/karlrupp/microprocessor-trend-data">K. Rupp</a> (CC BY 4.0)</div>
     </div>
-    <div style="font-size:1.28em;line-height:1.5">
+    <div style="font-size:1.06em;line-height:1.4">
       <div class="callout"><span class="lbl">The traditional statement</span>
         Gordon Moore, <strong>1965</strong>: the number of transistors on a chip <strong>doubles about every two years</strong> (he first said ~1 year; revised to ~2 years in 1975). On a log axis it&rsquo;s a straight line &mdash; an <em>empirical trend, not a physical law</em>.</div>
       <div class="callout takeaway"><span class="lbl">In plain terms</span>
@@ -492,6 +492,8 @@ gcc main.o code1.o code2.o
    is px-based and unaffected. */
 (function(){
   function fit(s){ if(!s) return;
+    var forced=s.getAttribute('data-fit');          // slides that measure poorly can pin their own fit
+    if(forced){ s.style.setProperty('--nc-fit', forced); return; }
     s.style.setProperty('--nc-fit','1');           // reset, then measure natural height
     var h=s.scrollHeight;
     if(h>724){ var k=Math.max(0.6, Math.min(1, 720/h));
