@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CSC/ECE 506 · Chapter 10 — Distributed Shared Memory Multiprocessors</title>
+<title>CSC/ECE 506 · Chapter 11 — Distributed Shared Memory Multiprocessors</title>
 
 <!-- reveal.js core (CDN) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
@@ -24,10 +24,10 @@
 <!-- ============================ TITLE ============================ -->
 <section class="title-slide" data-background-color="#ffffff">
   <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
-  <h1>Chapter 10</h1>
+  <h1>Chapter 11</h1>
   <div class="sub">Distributed Shared Memory Multiprocessors — Scalable Directory Coherence</div>
   <aside class="notes">
-    Chapter 10 asks: how do we keep caches coherent once a machine is too big for a
+    Chapter 11 asks: how do we keep caches coherent once a machine is too big for a
     shared bus and broadcast snooping? The answer is the <em>directory</em> — a structure
     at the "home" memory that tracks who has a copy of each block, so coherence traffic
     is sent point-to-point only to the caches that matter. Three modules: (10.1) the basic
@@ -1154,7 +1154,7 @@
 
 <!-- Chapter summary -->
 <section data-background-color="#ffffff">
-  <h2>Chapter 10 — Big Picture</h2>
+  <h2>Chapter 11 — Big Picture</h2>
   <div class="cols c3">
     <div class="callout"><span class="lbl">10.1 Directory</span>Track sharers at the <strong>home</strong> so coherence traffic is filtered point-to-point. Storage formats trade space vs. precision.</div>
     <div class="callout"><span class="lbl">10.2 Races</span>Real machines aren't atomic — handle races with <strong>transient states, NACKs, and node cooperation</strong>.</div>
@@ -1176,7 +1176,7 @@
 </div>
 
 <!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
-<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 10 — Distributed Shared Memory</div>
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 11 — Distributed Shared Memory</div>
 </div>
 
 <!-- reveal.js core + plugins -->

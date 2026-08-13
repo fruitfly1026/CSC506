@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CSC/ECE 506 · Chapter 8 — Hardware Support for Synchronization</title>
+<title>CSC/ECE 506 · Chapter 9 — Hardware Support for Synchronization</title>
 
 <!-- reveal.js core (CDN) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
@@ -24,10 +24,10 @@
 <!-- ============================ TITLE ============================ -->
 <section class="title-slide" data-background-color="#ffffff">
   <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
-  <h1>Chapter 8</h1>
+  <h1>Chapter 9</h1>
   <div class="sub">Hardware Support for Synchronization — Locks, Barriers &amp; Transactional Memory</div>
   <aside class="notes">
-    Chapter 8 is about the machinery underneath every lock, barrier, and atomic section you have ever used.
+    Chapter 9 is about the machinery underneath every lock, barrier, and atomic section you have ever used.
     Threads must cooperate, and cooperation requires synchronization. We build it as a stack: atomic
     read-modify-write primitives in hardware, software locks and barriers above them, and transactional
     memory as a higher-level alternative. Two modules: (8.1) simple lock implementations and the atomic
@@ -911,7 +911,7 @@ atomic {
 
 <!-- Chapter summary -->
 <section data-background-color="#ffffff">
-  <h2>Chapter 8 — Big Picture</h2>
+  <h2>Chapter 9 — Big Picture</h2>
   <div class="cols c3">
     <div class="callout"><span class="lbl">8.1 Primitives</span>Atomic RMW (t&amp;s, CAS, LL/SC) underpins all locks. TTSL spins on reads; LL/SC adds no traffic on failed acquires.</div>
     <div class="callout"><span class="lbl">8.2 Scalable locks</span>Ticket adds fairness; ABQL adds O(1) release traffic at O(p) storage. No single lock wins everywhere.</div>
@@ -933,7 +933,7 @@ atomic {
 </div>
 
 <!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
-<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 8 — Hardware Support for Synchronization</div>
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 9 — Hardware Support for Synchronization</div>
 </div>
 
 <!-- reveal.js core + plugins -->

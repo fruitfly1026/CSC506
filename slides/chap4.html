@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CSC/ECE 506 · Chapter 4 — Parallel Programming for Linked Data Structures</title>
+<title>CSC/ECE 506 · Chapter 5 — Parallel Programming for Linked Data Structures</title>
 
 <!-- reveal.js core (CDN) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
@@ -24,10 +24,10 @@
 <!-- ============================ TITLE ============================ -->
 <section class="title-slide" data-background-color="#ffffff">
   <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
-  <h1>Chapter 4</h1>
+  <h1>Chapter 5</h1>
   <div class="sub">Parallel Programming for Linked Data Structures</div>
   <aside class="notes">
-    Chapter 4 is the pointer-chasing counterpart to the loop-based parallelism of the earlier
+    Chapter 5 is the pointer-chasing counterpart to the loop-based parallelism of the earlier
     chapters. Linked data structures (lists, trees, graphs, hash tables) defeat ordinary loop
     parallelization because following pointers creates a loop-carried dependence. We study three
     angles: (4.1) why LDS resist parallelism and what serializability means for correct concurrent
@@ -1158,7 +1158,7 @@ while (p != NULL) {
 
 <!-- Chapter summary -->
 <section data-background-color="#ffffff">
-  <h2>Chapter 4 — Big Picture</h2>
+  <h2>Chapter 5 — Big Picture</h2>
   <div class="cols c3">
     <div class="callout"><span class="lbl">4.1 Problem</span>Pointer chasing kills loop parallelism. Correctness for concurrent ops = <strong>serializability</strong>.</div>
     <div class="callout"><span class="lbl">4.2 Strategies</span>Among-readers → global lock → fine-grain: rising concurrency, rising complexity.</div>
@@ -1180,7 +1180,7 @@ while (p != NULL) {
 </div>
 
 <!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
-<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 4 — Parallel Programming for Linked Data Structures</div>
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 5 — Parallel Programming for Linked Data Structures</div>
 </div>
 
 <!-- reveal.js core + plugins -->

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CSC/ECE 506 · Chapter 5 — Introduction to Memory Hierarchy Organization</title>
+<title>CSC/ECE 506 · Chapter 6 — Introduction to Memory Hierarchy Organization</title>
 
 <!-- reveal.js core (CDN) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
@@ -24,10 +24,10 @@
 <!-- ============================ TITLE ============================ -->
 <section class="title-slide" data-background-color="#ffffff">
   <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
-  <h1>Chapter 5</h1>
+  <h1>Chapter 6</h1>
   <div class="sub">Introduction to Memory Hierarchy Organization</div>
   <aside class="notes">
-    Chapter 5 reviews the cache concepts from CDA 5106 and then extends them to the multicore setting.
+    Chapter 6 reviews the cache concepts from CDA 5106 and then extends them to the multicore setting.
     Three modules: (5.1) basic cache architecture — the ABCs of caches: placement, mapping, replacement,
     and write policy; (5.2) more basic architecture — inclusion, split caches, addressing, the 3 (really 5) C's
     of misses, performance metrics, prefetching; (5.3) how physically distributed caches are organized in a
@@ -1302,15 +1302,15 @@
 
 <!-- Chapter summary -->
 <section data-background-color="#ffffff">
-  <h2>Chapter 5 — Big Picture</h2>
+  <h2>Chapter 6 — Big Picture</h2>
   <div class="cols c3">
     <div class="callout"><span class="lbl">5.1 ABCs</span>A cache is sets × ways; address = tag/index/offset; pick associativity, replacement (pseudo-LRU), and write policy.</div>
     <div class="callout"><span class="lbl">5.2 More</span>Inclusion vs. NINE vs. exclusion, split/multi-banked, VIPT, the 3 C's, AMAT, and prefetching.</div>
     <div class="callout"><span class="lbl">5.3 Multicore</span>United/distributed/hybrid × private/shared; hashing, victim replication, capacity sharing.</div>
   </div>
   <div class="callout takeaway"><span class="lbl">One sentence</span>
-    <strong>Caches exploit locality; in a multicore the cache is scattered across the die, so every choice trades the distance to data against wasted capacity.</strong> Chapter 6 builds coherence on top of these organizations.</div>
-  <p class="center muted small">Next up → <strong>Chapter 6:</strong> keeping all those cached copies consistent — cache coherence.</p>
+    <strong>Caches exploit locality; in a multicore the cache is scattered across the die, so every choice trades the distance to data against wasted capacity.</strong> Chapter 7 builds coherence on top of these organizations.</div>
+  <p class="center muted small">Next up → <strong>Chapter 7:</strong> keeping all those cached copies consistent — cache coherence.</p>
 </section>
 
 
@@ -1324,7 +1324,7 @@
 </div>
 
 <!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
-<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 5 — Memory Hierarchy Organization</div>
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 6 — Memory Hierarchy Organization</div>
 </div>
 
 <!-- reveal.js core + plugins -->

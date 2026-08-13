@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CSC/ECE 506 · Chapter 6 — Introduction to Shared Memory Multiprocessors</title>
+<title>CSC/ECE 506 · Chapter 7 — Introduction to Shared Memory Multiprocessors</title>
 
 <!-- reveal.js core (CDN) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
@@ -24,7 +24,7 @@
 <!-- ============================ TITLE ============================ -->
 <section class="title-slide" data-background-color="#ffffff">
   <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
-  <h1>Chapter 6</h1>
+  <h1>Chapter 7</h1>
   <div class="sub">Introduction to Shared Memory Multiprocessors</div>
   <aside class="notes">
     This chapter introduces the shared-memory abstraction: any processor can touch any address with
@@ -305,7 +305,7 @@ Print sum;
   <div class="callout takeaway"><span class="lbl">We need a protocol</span>
     A mechanism that guarantees both is a <strong>cache coherence protocol</strong>. It can be built in
     <strong>hardware</strong> or <strong>software</strong> — but software implementations usually carry very
-    high overhead, so real machines do it in hardware (Chapter 7 onward).</div>
+    high overhead, so real machines do it in hardware (Chapter 8 onward).</div>
 </section>
 
 <!-- Memory consistency problem intro -->
@@ -642,7 +642,7 @@ while(turn==0 &amp;&amp; interested[1]) {};
 
 <!-- Chapter summary -->
 <section data-background-color="#ffffff">
-  <h2>Chapter 6 — Big Picture</h2>
+  <h2>Chapter 7 — Big Picture</h2>
   <div class="cols c3">
     <div class="callout"><span class="lbl">Abstraction</span>Shared memory = load/store to any address. Convenient, but
       not free on real hardware with caches.</div>
@@ -654,7 +654,7 @@ while(turn==0 &amp;&amp; interested[1]) {};
   <div class="callout takeaway"><span class="lbl">One sentence</span>
     <strong>Shared memory is an abstraction that hardware must actively maintain</strong> — through coherence, a
     consistency model, and synchronization primitives.</div>
-  <p class="center muted small">Next up → <strong>Chapter 7:</strong> how cache coherence protocols actually work (snooping &amp; directories).</p>
+  <p class="center muted small">Next up → <strong>Chapter 8:</strong> how cache coherence protocols actually work (snooping &amp; directories).</p>
 </section>
 
 
@@ -668,7 +668,7 @@ while(turn==0 &amp;&amp; interested[1]) {};
 </div>
 
 <!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
-<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 6 — Shared Memory Multiprocessors</div>
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 7 — Shared Memory Multiprocessors</div>
 </div>
 
 <!-- reveal.js core + plugins -->

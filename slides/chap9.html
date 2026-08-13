@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CSC/ECE 506 · Chapter 9 — Memory Consistency Models</title>
+<title>CSC/ECE 506 · Chapter 10 — Memory Consistency Models</title>
 
 <!-- reveal.js core (CDN) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
@@ -24,10 +24,10 @@
 <!-- ============================ TITLE ============================ -->
 <section class="title-slide" data-background-color="#ffffff">
   <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
-  <h1>Chapter 9</h1>
+  <h1>Chapter 10</h1>
   <div class="sub">Memory Consistency Models — what order do other threads see your memory accesses in?</div>
   <aside class="notes">
-    Coherence (Chapters 6–8) answered: for a <em>single</em> location, what value does a read return?
+    Coherence (Chapters 7–9) answered: for a <em>single</em> location, what value does a read return?
     Consistency answers a broader question: across <em>all</em> locations, in what order are one thread's
     reads and writes seen by every other thread? Two modules: (9.1) sequential consistency and processor
     consistency; (9.2) the more relaxed models — weak ordering, release consistency, lazy release consistency,
@@ -74,7 +74,7 @@
   <div class="cols">
     <div class="callout"><span class="lbl">Cache coherence</span>
       Orders writes to a <strong>single</strong> memory location.<br>
-      <span class="small">Only needed for systems <em>with caches</em>. (Chapters 6–8.)</span></div>
+      <span class="small">Only needed for systems <em>with caches</em>. (Chapters 7–9.)</span></div>
     <div class="callout warn"><span class="lbl">Memory consistency</span>
       Orders reads/writes across <strong>all</strong> memory locations.<br>
       <span class="small">Concerns systems <em>with or without</em> caches.</span></div>
@@ -1041,7 +1041,7 @@ Rd F
 
 <!-- Chapter summary -->
 <section data-background-color="#ffffff">
-  <h2>Chapter 9 — Big Picture</h2>
+  <h2>Chapter 10 — Big Picture</h2>
   <div class="cols c3">
     <div class="callout"><span class="lbl">Consistency ≠ coherence</span>Coherence orders one location; consistency orders <em>all</em> locations as seen across threads.</div>
     <div class="callout"><span class="lbl">SC is the intuition</span>Program order + atomicity. Easy to reason about, expensive to enforce — but prefetch &amp; load speculation help.</div>
@@ -1063,7 +1063,7 @@ Rd F
 </div>
 
 <!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
-<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 9 — Memory Consistency Models</div>
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 10 — Memory Consistency Models</div>
 </div>
 
 <!-- reveal.js core + plugins -->
