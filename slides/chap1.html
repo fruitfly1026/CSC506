@@ -1064,6 +1064,28 @@ MOVUPS [Ret], XMM0   ; store C[0..3]
     <br><strong>Real systems combine all of them:</strong> a cloud/HPC server is SISD cores, SIMD GPUs, in a MIMD fabric.</div>
 </section>
 
+<section data-background-color="#ffffff">
+  <h2>Beyond Flynn: Dataflow</h2>
+  <div class="cols">
+    <div class="callout"><span class="lbl">What is dataflow?</span>
+      No program counter, no central instruction stream. An operation <strong>fires the moment its input operands (tokens) are ready</strong> — execution is <strong>data-driven</strong>, not control-driven.
+      <ul class="small">
+        <li>The program is a <strong>graph</strong> of operations; data <em>flows</em> along the edges</li>
+        <li><strong>Systolic arrays</strong> and modern AI matrix / tensor engines are <em>spatial</em> dataflow — the program is laid out across a grid of PEs</li>
+      </ul></div>
+    <div class="callout warn"><span class="lbl">Why it's not in Flynn</span>
+      Flynn (1966) classifies <strong>control-flow</strong> machines by counting <em>instruction streams × data streams</em>. Dataflow breaks that frame:
+      <ul class="small">
+        <li>No global <strong>instruction stream</strong> to count</li>
+        <li>The "program" lives in <strong>space &amp; timing</strong> (the PE grid + interconnect), not a control sequence</li>
+        <li>Data-driven &amp; spatial → <strong>orthogonal</strong> to Flynn's two axes</li>
+      </ul></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">So</span>
+    Dataflow isn't <em>misclassified</em> by Flynn — it falls <strong>outside</strong> it. That's why newer terms like <strong>SPMD</strong>, <strong>SIMT</strong> (GPUs), and <em>spatial / dataflow</em> get bolted on beyond the original four classes.</div>
+  <aside class="notes">Dataflow (Dennis &amp; Misunas, ~1974) and systolic arrays (Kung &amp; Leiserson, ~1978) postdate Flynn (1966). Flynn assumes a von Neumann control-flow machine; a data-driven, spatially-laid-out fabric has no single instruction stream to count, so it sits orthogonal to the taxonomy rather than inside it.</aside>
+</section>
+
 <!-- Top500 -->
 <section data-background-color="#ffffff">
   <h2>The TOP500 &amp; the Race to Exascale</h2>
