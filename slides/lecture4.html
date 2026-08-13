@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CSC/ECE 506 · Chapter 2 — Perspectives on Parallel Programming</title>
+<title>CSC/ECE 506 · Lecture 4 — Parallel Programming Models</title>
 
 <!-- reveal.js core (CDN) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
@@ -24,10 +24,11 @@
 <!-- ============================ TITLE ============================ -->
 <section class="title-slide" data-background-color="#ffffff">
   <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
-  <h1>Chapter 2</h1>
+  <h1>Lecture 4</h1>
   <div class="sub">Perspectives on Parallel Programming — Models for Expressing Parallelism</div>
+  <div class="sub" style="display:block;font-size:.72em;opacity:.72;margin-top:.4em">(Chapter 2 in Yan Solihin's textbook)</div>
   <aside class="notes">
-    Chapter 1 told us <em>why</em> the industry went parallel. Chapter 2 asks <em>how</em> we express that
+    Lectures 1–2 told us <em>why</em> the industry went parallel. Lecture 4 asks <em>how</em> we express that
     parallelism: what abstraction does the programmer write against? The two pillars are
     <strong>shared memory</strong> and <strong>message passing</strong>; almost every other model
     (PGAS, data-parallel, MapReduce, transactional memory) builds on one of them.
@@ -36,7 +37,7 @@
 
 <!-- Roadmap -->
 <section data-background-color="#ffffff">
-  <h2>Chapter Roadmap</h2>
+  <h2>Lecture 4 Roadmap</h2>
   <div class="cols c3">
     <div class="callout"><span class="lbl">Module 2.1</span><strong>Programming Models</strong><br>
       <span class="small">What a programming model is; the thread/process analogy; <em>shared memory</em> vs. <em>message passing</em>.</span></div>
@@ -278,7 +279,7 @@ void main() {
   </div>
   <div class="callout takeaway fragment"><span class="lbl">Real lesson</span><span class="small">It is correct only under
     <strong>sequential consistency</strong> &mdash; the poster child for <em>why</em> we need
-    <strong>memory-consistency models, atomics &amp; fences</strong>, the subject of <strong>Chapter 10</strong>.</span></div>
+    <strong>memory-consistency models, atomics &amp; fences</strong>, the subject of a <strong>later lecture on memory consistency</strong>.</span></div>
 </section>
 
 <!-- Message passing example -->
@@ -439,7 +440,7 @@ print sum;
           <li><strong>Lock:</strong> protects the <code class="inline">sum</code> reduction</li>
           <li><strong>Barrier:</strong> all threads finish a phase before the next</li>
         </ul></div>
-      <p class="tiny muted">These three primitives map directly onto OpenMP — the subject of <strong>Chapter 3</strong>.</p>
+      <p class="tiny muted">These three primitives map directly onto OpenMP — the subject of the <strong>shared-memory programming lectures</strong>.</p>
     </div>
   </div>
 </section>
@@ -832,9 +833,9 @@ atomic {
   </div>
 </section>
 
-<!-- Chapter summary -->
+<!-- Lecture summary -->
 <section data-background-color="#ffffff">
-  <h2>Chapter 2 — Big Picture</h2>
+  <h2>Lecture 4 — Big Picture</h2>
   <div class="cols c3">
     <div class="callout"><span class="lbl">2.1 Models</span>A programming model is the hardware's abstraction; shared memory and message passing are the two pillars.</div>
     <div class="callout"><span class="lbl">2.2 In code</span>Same loop, two styles: shared memory annotates (scope, locks, barriers); message passing reshapes (scatter/gather).</div>
@@ -843,7 +844,7 @@ atomic {
   <div class="callout takeaway"><span class="lbl">One sentence</span>
     <strong>The model decides how hard the program is to write — but every model still leaves performance to tuning.</strong>
     Next we look at how the hardware actually makes shared memory work.</div>
-  <p class="center muted small">Next up → <strong>Chapter 3:</strong> the shared-memory parallel programming process in depth.</p>
+  <p class="center muted small">Next up → <strong>Lecture 5:</strong> the shared-memory parallel programming process in depth.</p>
 </section>
 
 
@@ -856,7 +857,7 @@ atomic {
 </div>
 
 <!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
-<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 2 — Perspectives on Parallel Programming</div>
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Lecture 4 — Parallel Programming Models</div>
 </div>
 
 <!-- reveal.js core + plugins -->
