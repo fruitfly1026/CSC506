@@ -1215,28 +1215,5 @@
   }
 })();
 </script>
-<script>
-/* In-class activity: set this to THIS chapter's Google Form link (one form per chapter). */
-const FORM_URL = "PASTE_GOOGLE_FORM_LINK_HERE";
-(function(){
-  function paint(){
-    var set = FORM_URL && FORM_URL.indexOf("PASTE_") === -1;
-    document.querySelectorAll('.activity').forEach(function(a){
-      var lnk=a.querySelector('.form-link'), img=a.querySelector('.qr-img'), ph=a.querySelector('.qr-ph');
-      if(set){
-        if(lnk) lnk.href=FORM_URL;
-        if(img){ img.src='https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=0&data='+encodeURIComponent(FORM_URL); img.style.display=''; }
-        if(ph) ph.style.display='none';
-      } else {
-        if(lnk) lnk.href='#';
-        if(img) img.style.display='none';
-        if(ph) ph.style.display='';
-      }
-    });
-  }
-  if(window.Reveal){ Reveal.on('ready', paint); }
-  document.addEventListener('DOMContentLoaded', paint); paint();
-})();
-</script>
 </body>
 </html>
