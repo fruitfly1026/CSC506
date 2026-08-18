@@ -26,7 +26,7 @@
   <h1>Lecture 2</h1>
   <div class="sub">Perspectives II — The Power Wall &amp; Parallel Computers</div>
   <div class="sub" style="display:block;font-size:.72em;opacity:.72;margin-top:.4em">(Chapter 1.2–1.3 in Yan Solihin's textbook)</div>
-  <aside class="notes">Lecture 2 opens with Module 1.2 (the power wall — the physics behind the switch to multicore), then Module 1.3 (parallel computers &amp; Flynn's taxonomy). Performance metrics &amp; scalability move to Lecture 3.</aside>
+  <aside class="notes">Lecture 2 opens with Module 1.2 (the power wall, the physics behind the switch to multicore), then Module 1.3 (parallel computers &amp; Flynn's taxonomy). Performance metrics &amp; scalability move to Lecture 3.</aside>
 </section>
 <section data-background-color="#ffffff">
   <h2>Lecture 2 Roadmap</h2>
@@ -52,9 +52,9 @@
   <div class="symkey"><span>\(V\) voltage</span><span>\(I\) current</span><span>\(C\) capacitance</span><span>\(f\) switching frequency (clock)</span></div>
   <div class="cols">
     <div>
-      <div class="callout"><span class="lbl">Energy</span>Ability to do work — unit <strong>joule</strong>.
+      <div class="callout"><span class="lbl">Energy</span>Ability to do work, unit <strong>joule</strong>.
         <ul class="small"><li>1 J ≈ lift an apple to shoulder height</li><li>4 J ≈ heat a teaspoon of water by 1 °C</li></ul></div>
-      <div class="callout"><span class="lbl">Power</span>Rate of energy transfer — <strong>1 watt = 1 J/s</strong>. &nbsp; \(P = V \cdot I\)</div>
+      <div class="callout"><span class="lbl">Power</span>Rate of energy transfer, <strong>1 watt = 1 J/s</strong>. &nbsp; \(P = V \cdot I\)</div>
     </div>
     <div>
       <p class="small">For a capacitor: \(E_{stored} = \tfrac{1}{2} C V^2\)</p>
@@ -71,8 +71,8 @@
     <div>
       <h3>Energy efficiency</h3>
       <ul class="small">
-        <li>Energy per work — e.g. <strong>EPI</strong> (energy/instruction)</li>
-        <li>Power per throughput — e.g. Watt/IPS, Watt/FLOPS</li>
+        <li>Energy per work, e.g. <strong>EPI</strong> (energy/instruction)</li>
+        <li>Power per throughput, e.g. Watt/IPS, Watt/FLOPS</li>
       </ul>
       <div class="eq small">\( \frac{Watt}{thruput}=\frac{J/s}{work/s}=\frac{J}{work} \)</div>
       <p class="small muted" style="margin:.2em 0">= amount of energy required to perform the work</p>
@@ -82,9 +82,9 @@
       <h3>Weighting performance in</h3>
       <ul class="small">
         <li><strong>EDP</strong> (Energy-Delay Product) = Energy × Delay</li>
-        <li><strong>ED²P</strong> (Energy-Delay² Product) = Energy × Delay² — emphasizes <em>speed</em> even more</li>
+        <li><strong>ED²P</strong> (Energy-Delay² Product) = Energy × Delay², emphasizes <em>speed</em> even more</li>
       </ul>
-      <div class="callout small"><span class="lbl">Why?</span>Two systems both use 1 J: A = 0.5 W for 2 s, B = 1 W for 1 s. Most prefer <strong>B</strong> — so we weight energy by delay.</div>
+      <div class="callout small"><span class="lbl">Why?</span>Two systems both use 1 J: A = 0.5 W for 2 s, B = 1 W for 1 s. Most prefer <strong>B</strong>, so we weight energy by delay.</div>
     </div>
   </div>
 </section>
@@ -98,13 +98,13 @@
       <div class="eq small">\( P_{dynamic} = A\,C\,V^2 f \)</div></div>
     <div class="callout warn"><span class="lbl">Static power</span>Leakage even when idle
       <div class="eq small">\( P_{static} = V \cdot I_{leak} \)</div>
-      <span class="tiny">\(I_{leak}\) grows fast as transistors shrink — the modern villain.</span></div>
+      <span class="tiny">\(I_{leak}\) grows fast as transistors shrink, the modern villain.</span></div>
   </div>
   <div class="callout takeaway">Traditionally (older / larger technology node, while the chip is active), <strong>dynamic power dominates</strong>.</div>
 </section>
 <section data-background-color="#ffffff">
   <h2>Max Frequency vs. Threshold Voltage</h2>
-  <div class="symkey"><span><strong>V_thd</strong> = threshold voltage — minimum voltage to make a transistor conductive</span></div>
+  <div class="symkey"><span><strong>V_thd</strong> = threshold voltage, minimum voltage to make a transistor conductive</span></div>
   <div class="cols">
     <div class="center">
       <svg viewBox="0 0 300 180" class="chart">
@@ -152,17 +152,17 @@
       <div class="callout takeaway"><span class="lbl">Takeaway</span>Reducing threshold voltage increases static power consumption <strong>exponentially</strong>.</div>
     </div>
   </div>
-  <div class="callout">As the process shrinks (nanometer nodes) — and whenever the chip is idle — <strong>static power grows increasingly important, even overtaking dynamic</strong>.</div>
+  <div class="callout">As the process shrinks (nanometer nodes), and whenever the chip is idle, <strong>static power grows increasingly important, even overtaking dynamic</strong>.</div>
 </section>
 <section data-background-color="#ffffff">
   <h2>Threshold Voltage Dilemma</h2>
   <div class="cols">
-    <div class="callout ok"><span class="lbl">Decreasing V_thd</span>improves <strong>f_max</strong> (and hence performance) — <em>almost linearly</em>.
+    <div class="callout ok"><span class="lbl">Decreasing V_thd</span>improves <strong>f_max</strong> (and hence performance), <em>almost linearly</em>.
       <div class="eq small">\( f_{max} \approx c\,\dfrac{(V - V_{thd})^{1.3}}{V} \)</div></div>
-    <div class="callout warn"><span class="lbl">Decreasing V_thd</span>increases <strong>leakage current</strong> (hence static power) — <em>exponentially</em>.
+    <div class="callout warn"><span class="lbl">Decreasing V_thd</span>increases <strong>leakage current</strong> (hence static power), <em>exponentially</em>.
       <div class="eq small">\( I_{leak} > e^{-\frac{q\,V_{thd}}{kT}} \)</div></div>
   </div>
-  <div class="callout takeaway"><span class="lbl">The dilemma</span>You cannot keep lowering V_thd to chase speed — leakage punishes you.</div>
+  <div class="callout takeaway"><span class="lbl">The dilemma</span>You cannot keep lowering V_thd to chase speed, leakage punishes you.</div>
 </section>
 <section data-background-color="#ffffff">
   <h2>Old Rule: Dennard Scaling</h2>
@@ -180,7 +180,7 @@
     <div class="callout fragment"><span class="lbl">Why is chip power constant?</span>
       <p class="small">Per device, substitute \(C\!\to\!SC,\ V\!\to\!SV,\ f\!\to\!f/S\):</p>
       <div class="eq small">\( A(SC)(SV)^2\tfrac{f}{S} = ACV^2 f\cdot S^2 \)</div>
-      <p class="small">Power per device \(\times S^2\), but transistors/chip \(\times 1/S^2\) ⇒ <strong>\(S^2\cdot\tfrac{1}{S^2}=1\)</strong> — constant for any S.</p>
+      <p class="small">Power per device \(\times S^2\), but transistors/chip \(\times 1/S^2\) ⇒ <strong>\(S^2\cdot\tfrac{1}{S^2}=1\)</strong>, constant for any S.</p>
     </div>
   </div>
   <div class="src">Named after R. H. Dennard et al., &ldquo;Design of Ion-Implanted MOSFET&rsquo;s with Very Small Physical Dimensions,&rdquo; <em>IEEE J. Solid-State Circuits</em>, 1974 (a.k.a. classical / constant-field scaling).</div>
@@ -207,25 +207,25 @@
 </section>
 <section data-background-color="#ffffff">
   <h2>The Power Wall</h2>
-  <div class="callout takeaway"><span class="lbl">Power Wall</span>Dennard scaling ended (~2005). More transistors no longer come "for free" in power — so we <strong>can't just crank frequency</strong> anymore.</div>
-  <p>The fix: stop raising frequency, spend the extra transistors on <strong>more cores</strong> — and push performance onto <strong>software &amp; architecture</strong>.</p>
+  <div class="callout takeaway"><span class="lbl">Power Wall</span>Dennard scaling ended (~2005). More transistors no longer come "for free" in power, so we <strong>can't just crank frequency</strong> anymore.</div>
+  <p>The fix: stop raising frequency, spend the extra transistors on <strong>more cores</strong>, and push performance onto <strong>software &amp; architecture</strong>.</p>
 </section>
 <section data-background-color="#ffffff">
   <h2>Implications for Architecture Design</h2>
   <div class="cols c3">
     <div class="callout"><span class="lbl">Frequency</span>Cranking the clock has hit a <strong>dead end</strong>.</div>
-    <div class="callout"><span class="lbl">Resources</span><strong>Area is abundant, power is scarce</strong> — the inversion.</div>
+    <div class="callout"><span class="lbl">Resources</span><strong>Area is abundant, power is scarce</strong>, the inversion.</div>
     <div class="callout"><span class="lbl">Per-core budget</span>Declining power budget <em>per core</em>.</div>
   </div>
   <div class="callout takeaway"><span class="lbl">New objective function</span>
-    Architectures must improve <strong>energy efficiency</strong>. The dominant metric becomes <strong>performance / watt</strong> (ops / joule) — and the answer is many simpler, cooler cores: <strong>multicore</strong>.</div>
+    Architectures must improve <strong>energy efficiency</strong>. The dominant metric becomes <strong>performance / watt</strong> (ops / joule), and the answer is many simpler, cooler cores: <strong>multicore</strong>.</div>
 </section>
 <section data-background-color="#ffffff">
   <h2>Evidence: Frequency Went Flat (~2001–2005)</h2>
   <div class="cols w-64">
     <div class="center">
       <span style="position:relative;display:inline-block">
-        <img src="assets/clock-frequency.png" alt="Clock frequency (MHz, log) vs year, by vendor — rises then plateaus ~2005" style="max-width:100%;display:block;border-radius:8px">
+        <img src="assets/clock-frequency.png" alt="Clock frequency (MHz, log) vs year, by vendor, rises then plateaus ~2005" style="max-width:100%;display:block;border-radius:8px">
         <svg viewBox="0 0 2236 1327" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none">
           <line x1="360" y1="800" x2="1498" y2="170" stroke="#e60000" stroke-width="14" stroke-linecap="round"/>
           <line x1="1498" y1="170" x2="1820" y2="170" stroke="#e60000" stroke-width="14" stroke-linecap="round"/>
@@ -234,7 +234,7 @@
       <div class="src">source: CPU DB (real per-chip data) · red = trend</div>
     </div>
     <div>
-      <p>For decades clock frequency climbed every generation. Then, around <strong>2001–2005</strong>, it <strong>flattened</strong> — and has stayed on a plateau ever since.</p>
+      <p>For decades clock frequency climbed every generation. Then, around <strong>2001–2005</strong>, it <strong>flattened</strong>, and has stayed on a plateau ever since.</p>
       <div class="callout takeaway"><span class="lbl">The symptom</span>The first visible sign of the power wall: <strong>clock frequency stopped climbing</strong>.</div>
     </div>
   </div>
@@ -245,7 +245,7 @@
     <div class="center"><img src="assets/pipe-stage.png" alt="Relative length of a pipe stage (FO4 per cycle) vs year, by vendor" style="max-width:100%;border-radius:8px"></div>
     <div>
       <p>Logic per pipeline stage (<strong>FO4 per cycle</strong>) <strong>fell</strong> through the 1990s as designers super-pipelined to chase frequency.</p>
-      <div class="callout takeaway"><span class="lbl">After ~2005</span>The trend <strong>reversed</strong> — stages grew <em>longer</em> again. Deep pipelines cost too much power for too little gain.</div>
+      <div class="callout takeaway"><span class="lbl">After ~2005</span>The trend <strong>reversed</strong>, stages grew <em>longer</em> again. Deep pipelines cost too much power for too little gain.</div>
       <div class="src">source: CPU DB · FO4 = fan-out-of-4 gate delay (a process-independent unit of logic)</div>
     </div>
   </div>
@@ -256,14 +256,14 @@
     <div class="center"><img src="assets/power-proj-vs-actual.png" alt="Actual vs projected processor power in watts vs year" style="max-width:100%;border-radius:8px"></div>
     <div>
       <p><strong>Projected</strong> power kept rising exponentially; <strong>actual</strong> shipped power <strong>flattened</strong> around 2004–2005.</p>
-      <div class="callout takeaway"><span class="lbl">The ceiling</span>Designers <strong>capped power</strong> at the packaging / cooling limit instead of following the projection — the power wall, in data.</div>
+      <div class="callout takeaway"><span class="lbl">The ceiling</span>Designers <strong>capped power</strong> at the packaging / cooling limit instead of following the projection, the power wall, in data.</div>
       <div class="src">source: CPU DB</div>
     </div>
   </div>
 </section>
 <section data-background-color="#ffffff">
   <h2>Three Signatures of the Power Wall</h2>
-  <p>All three appear in the <strong>same 2001–2005 window</strong> — the same window as the multicore transition:</p>
+  <p>All three appear in the <strong>same 2001–2005 window</strong>, the same window as the multicore transition:</p>
   <div class="cols c3">
     <div class="callout"><span class="lbl">1 · Frequency</span><strong>Clock frequency</strong> stops climbing.</div>
     <div class="callout"><span class="lbl">2 · Pipelining</span><strong>Logic per pipeline stage</strong> stops shrinking (pipelining reverses).</div>
@@ -273,7 +273,7 @@
 <section data-background-color="#ffffff">
   <h2>Not a Coincidence</h2>
   <div class="callout takeaway"><span class="lbl">Same event, two angles</span>The <strong>power wall</strong> and the <strong>multicore pivot</strong> are the <strong>same event</strong> seen from two angles.</div>
-  <p>Once frequency could no longer rise, the only way to keep using the extra transistors Moore's law still delivered was to add <strong>more cores</strong> — pushing the burden of performance onto <strong>software &amp; architecture</strong>.</p>
+  <p>Once frequency could no longer rise, the only way to keep using the extra transistors Moore's law still delivered was to add <strong>more cores</strong>, pushing the burden of performance onto <strong>software &amp; architecture</strong>.</p>
 </section>
 <section data-background-color="#f6f8fb">
   <h2>In-Class Exercises — Q1</h2>
@@ -295,7 +295,7 @@
     <p class="q">Answer (S = 0.7, V &amp; f fixed)</p>
     <div class="a">
       <ul class="small" style="margin:0 0 .3em .9em">
-        <li><strong>Per device:</strong> only C scales — \(C\to SC=0.7C\). So one transistor's power \(ACV^2f \to 0.7\times\).</li>
+        <li><strong>Per device:</strong> only C scales, \(C\to SC=0.7C\). So one transistor's power \(ACV^2f \to 0.7\times\).</li>
         <li><strong>Same die area:</strong> transistors/chip \(\times 1/S^2 = 2\times\). Chip power \(= 2\times0.7 = \mathbf{1.4\times}\) (too high).</li>
         <li><strong>Shrink area by factor \(a\)</strong> (transistors ∝ area): power \(=(2a)(0.7)=1.4a\). Set \(=1\):</li>
       </ul>
@@ -331,7 +331,7 @@
     "A parallel computer is a collection of processing elements that can <strong>communicate</strong> and <strong>cooperate</strong> to solve a large problem fast."
     <div class="src" style="margin-top:.4em">— Almasi &amp; Gottlieb</div>
   </blockquote>
-  <p>Three design axes hide in that sentence — we unpack each next.</p>
+  <p>Three design axes hide in that sentence, we unpack each next.</p>
   <div class="callout small" style="background:#fff7f7;border-color:var(--wolf-red)"><span class="lbl">☺ aside</span>Q: Why did the parallel computers refuse to work together?<br>A: Too many "threads" of disagreement.</div>
 </section>
 <section data-background-color="#ffffff">
@@ -345,14 +345,14 @@
       <span class="small">Synchronization sequences operations for correctness. Granularity &amp; mechanism affect latency, load balance, fairness.</span></div>
   </div>
   <div class="callout takeaway"><span class="lbl">"…solve a large problem fast"</span>
-    General- vs. special-purpose: any machine solves <em>some</em> problems well. These axes — PEs, communication, cooperation — recur for the rest of the course.</div>
+    General- vs. special-purpose: any machine solves <em>some</em> problems well. These axes, PEs, communication, cooperation, recur for the rest of the course.</div>
 </section>
 <section data-background-color="#ffffff">
   <h2>Where Are Parallel Computers Used?</h2>
   <div class="cols c3">
-    <div class="callout ok"><span class="lbl">Embarrassingly parallel</span>Many scientific codes — scale easily.</div>
+    <div class="callout ok"><span class="lbl">Embarrassingly parallel</span>Many scientific codes, scale easily.</div>
     <div class="callout"><span class="lbl">Medium parallel</span>Engineering apps: finite-elements, VLSI-CAD.</div>
-    <div class="callout warn"><span class="lbl">Not parallel</span>Compilers, editors — limited parallelism.</div>
+    <div class="callout warn"><span class="lbl">Not parallel</span>Compilers, editors, limited parallelism.</div>
   </div>
   <div class="callout"><span class="lbl">Modern reality</span>AI/ML training &amp; inference, data analytics, and graphics are now the dominant <em>embarrassingly-parallel</em> workloads driving GPUs and accelerators.</div>
 </section>
@@ -363,7 +363,7 @@
       <h3>Why parallel?</h3>
       <ul class="small">
         <li><strong>Absolute performance</strong>: protein folding = years on one CPU, days on a parallel machine; weather forecasts must be timely</li>
-        <li><strong>Cost-/power-adjusted</strong> performance, esp. small 2–8 chip systems — the smallest of which is a multicore</li>
+        <li><strong>Cost-/power-adjusted</strong> performance, esp. small 2–8 chip systems, the smallest of which is a multicore</li>
       </ul>
     </div>
     <div>
@@ -417,8 +417,8 @@
   </div>
   <table style="margin-top:.4em">
     <tr><th></th><th>Single Data</th><th>Multiple Data</th></tr>
-    <tr><td><strong>Single Instruction</strong></td><td><strong>SISD</strong> — classic uniprocessor</td><td><strong>SIMD</strong> — vector, GPU</td></tr>
-    <tr><td><strong>Multiple Instruction</strong></td><td><strong>MISD</strong> — systolic (rare)</td><td class="hi"><strong>MIMD</strong> — multicore, clusters</td></tr>
+    <tr><td><strong>Single Instruction</strong></td><td><strong>SISD</strong>, classic uniprocessor</td><td><strong>SIMD</strong>, vector, GPU</td></tr>
+    <tr><td><strong>Multiple Instruction</strong></td><td><strong>MISD</strong>, systolic (rare)</td><td class="hi"><strong>MIMD</strong>, multicore, clusters</td></tr>
   </table>
 </section>
 <section data-background-color="#ffffff">
@@ -483,7 +483,7 @@ mov  [ebp-12], 2
   <h2>SIMD in Code: SSE</h2>
   <div class="cols">
     <div>
-      <div class="code-label">SISD style — scalar loop</div>
+      <div class="code-label">SISD style, scalar loop</div>
       <pre><code class="language-c" data-trim>
 // C = A + B, element by element
 for (i = 0; i &lt; 4; i++)
@@ -492,7 +492,7 @@ for (i = 0; i &lt; 4; i++)
       <p class="tiny">Four separate add instructions.</p>
     </div>
     <div>
-      <div class="code-label">SIMD style — 4×32-bit in a 128-bit reg</div>
+      <div class="code-label">SIMD style, 4×32-bit in a 128-bit reg</div>
       <pre><code class="language-x86asm" data-trim>
 MOVUPS XMM0, [EAX]   ; load A[0..3]
 MOVUPS XMM1, [EBX]   ; load B[0..3]
@@ -509,7 +509,7 @@ MOVUPS [Ret], XMM0   ; store C[0..3]
     <div>
       <p><strong>MISD</strong> = multiple instruction streams, single data stream. The rarest class.</p>
       <ul class="small">
-        <li>Systolic arrays <span class="src">[Kung &amp; Leiserson '79]</span> — data "pulses" through a grid of PEs, each applying its own operation</li>
+        <li>Systolic arrays <span class="src">[Kung &amp; Leiserson '79]</span>, data "pulses" through a grid of PEs, each applying its own operation</li>
         <li>Examples: space-shuttle computers (1984), Intel iWARP (1990)</li>
       </ul>
       <div class="callout"><span class="lbl">Comeback</span>The systolic idea is alive in modern <strong>AI accelerators</strong> (matrix / tensor engines).</div>
@@ -562,21 +562,21 @@ MOVUPS [Ret], XMM0   ; store C[0..3]
 <section data-background-color="#ffffff">
   <h2>The Taxonomy Today</h2>
   <div class="cols c3">
-    <div class="callout"><span class="lbl">SISD</span>Lives inside a single core — handles ILP.</div>
-    <div class="callout blue" style="border-color:var(--accent)"><span class="lbl" style="color:var(--accent)">SIMD</span>Thrives in <strong>GPUs &amp; TPUs</strong> — data parallelism for HPC, blockchain, <strong>AI</strong>.</div>
-    <div class="callout"><span class="lbl">MIMD</span>Multicore CPUs — TLP &amp; complex parallelism.</div>
+    <div class="callout"><span class="lbl">SISD</span>Lives inside a single core, handles ILP.</div>
+    <div class="callout blue" style="border-color:var(--accent)"><span class="lbl" style="color:var(--accent)">SIMD</span>Thrives in <strong>GPUs &amp; TPUs</strong>, data parallelism for HPC, blockchain, <strong>AI</strong>.</div>
+    <div class="callout"><span class="lbl">MIMD</span>Multicore CPUs, TLP &amp; complex parallelism.</div>
   </div>
-  <div class="callout takeaway"><span class="lbl">MISD</span>Still a niche — but systolic arrays power AI matrix engines.
+  <div class="callout takeaway"><span class="lbl">MISD</span>Still a niche, but systolic arrays power AI matrix engines.
     <br><strong>Real systems combine all of them:</strong> a cloud/HPC server is SISD cores, SIMD GPUs, in a MIMD fabric.</div>
 </section>
 <section data-background-color="#ffffff">
   <h2>Beyond Flynn: Dataflow</h2>
   <div class="cols">
     <div class="callout"><span class="lbl">What is dataflow?</span>
-      No program counter, no central instruction stream. An operation <strong>fires the moment its input operands (tokens) are ready</strong> — execution is <strong>data-driven</strong>, not control-driven.
+      No program counter, no central instruction stream. An operation <strong>fires the moment its input operands (tokens) are ready</strong>, execution is <strong>data-driven</strong>, not control-driven.
       <ul class="small">
         <li>The program is a <strong>graph</strong> of operations; data <em>flows</em> along the edges</li>
-        <li><strong>Systolic arrays</strong> and modern AI matrix / tensor engines are <em>spatial</em> dataflow — the program is laid out across a grid of PEs</li>
+        <li><strong>Systolic arrays</strong> and modern AI matrix / tensor engines are <em>spatial</em> dataflow, the program is laid out across a grid of PEs</li>
       </ul></div>
     <div class="callout warn"><span class="lbl">Why it's not in Flynn</span>
       Flynn (1966) classifies <strong>control-flow</strong> machines by counting <em>instruction streams × data streams</em>. Dataflow breaks that frame:
@@ -587,7 +587,7 @@ MOVUPS [Ret], XMM0   ; store C[0..3]
       </ul></div>
   </div>
   <div class="callout takeaway"><span class="lbl">So</span>
-    Dataflow isn't <em>misclassified</em> by Flynn — it falls <strong>outside</strong> it. That's why newer terms like <strong>SPMD</strong>, <strong>SIMT</strong> (GPUs), and <em>spatial / dataflow</em> get bolted on beyond the original four classes.</div>
+    Dataflow isn't <em>misclassified</em> by Flynn, it falls <strong>outside</strong> it. That's why newer terms like <strong>SPMD</strong>, <strong>SIMT</strong> (GPUs), and <em>spatial / dataflow</em> get bolted on beyond the original four classes.</div>
   <aside class="notes">Dataflow (Dennis &amp; Misunas, ~1974) and systolic arrays (Kung &amp; Leiserson, ~1978) postdate Flynn (1966). Flynn assumes a von Neumann control-flow machine; a data-driven, spatially-laid-out fabric has no single instruction stream to count, so it sits orthogonal to the taxonomy rather than inside it.</aside>
 </section>
 <section data-background-color="#f6f8fb">
