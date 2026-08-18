@@ -541,12 +541,12 @@ gcc main.o code1.o code2.o
 <!-- Power wall problem: dynamic + static -->
 <section data-background-color="#ffffff">
   <h2>Power Consumption</h2>
-  <div class="symkey"><span>\(A\) fraction of gates switching</span><span>\(C\) capacitance</span><span>\(V\) supply voltage</span><span>\(f\) frequency</span><span>\(I_{leak}\) leakage current</span></div>
+  <div class="symkey"><span>\(\alpha\) activity factor (fraction of gates switching)</span><span>\(C\) capacitance</span><span>\(V\) supply voltage</span><span>\(f\) frequency</span><span>\(I_{leak}\) leakage current</span></div>
   <p class="small">Total power is capped by packaging (e.g. ~65–150 W desktop). It has two parts:</p>
   <div class="eq">\( P_{consumption} = P_{dynamic} + P_{static} \)</div>
   <div class="cols">
     <div class="callout"><span class="lbl">Dynamic power</span>Charging/discharging capacitive loads
-      <div class="eq small">\( P_{dynamic} = A\,C\,V^2 f \)</div></div>
+      <div class="eq small">\( P_{dynamic} = \alpha\,C\,V^2 f \)</div></div>
     <div class="callout warn"><span class="lbl">Static power</span>Leakage even when idle
       <div class="eq small">\( P_{static} = V \cdot I_{leak} \)</div>
       <span class="tiny">\(I_{leak}\) grows fast as transistors shrink — the modern villain.</span></div>
@@ -630,7 +630,7 @@ gcc main.o code1.o code2.o
         <li>Supply voltage (V) scales by S = 0.7</li>
         <li>Frequency (f) scales by 1/S = 1.4</li>
       </ul>
-      <div class="eq small">\(P_{dynamic} = ACV^2f \Rightarrow\) <strong>chip power constant</strong> 🎉</div>
+      <div class="eq small">\(P_{dynamic} = \alpha CV^2f \Rightarrow\) <strong>chip power constant</strong> 🎉</div>
     </div>
     <div class="callout fragment"><span class="lbl">Why is chip power constant?</span>
       <p class="small">Per device, substitute \(C\!\to\!SC,\ V\!\to\!SV,\ f\!\to\!f/S\):</p>
@@ -739,7 +739,7 @@ gcc main.o code1.o code2.o
 <section data-background-color="#f6f8fb">
   <h2>In-Class Exercises — Q1</h2>
   <div class="callout"><span class="lbl">Q1</span>If Moore's law slows so gate length scales at <strong>S = 0.8</strong> (instead of 0.7), find dynamic power consumption for the next generation under <em>unlimited</em> vs. <em>limited</em> voltage scaling.</div>
-  <div class="eq small">recall &nbsp; \( P_{dynamic} = A\,C\,V^2 f \)</div>
+  <div class="eq small">recall &nbsp; \( P_{dynamic} = \alpha\,C\,V^2 f \)</div>
   <div class="cols">
     <div class="fragment"><div class="callout ok"><span class="lbl">Old / unlimited scaling</span>
       <span class="small">C↓0.8 · area↓0.64 → 1.56× transistors · V↓0.8 · f↑1.25</span>
