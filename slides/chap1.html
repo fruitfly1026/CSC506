@@ -634,7 +634,7 @@ gcc main.o code1.o code2.o
     </div>
     <div class="callout fragment"><span class="lbl">Why is chip power constant?</span>
       <p class="small">Per device, substitute \(C\!\to\!SC,\ V\!\to\!SV,\ f\!\to\!f/S\):</p>
-      <div class="eq small">\( A(SC)(SV)^2\tfrac{f}{S} = ACV^2 f\cdot S^2 \)</div>
+      <div class="eq small">\( \alpha(SC)(SV)^2\tfrac{f}{S} = \alpha CV^2 f\cdot S^2 \)</div>
       <p class="small">Power per device \(\times S^2\), but transistors/chip \(\times 1/S^2\) ⇒ <strong>\(S^2\cdot\tfrac{1}{S^2}=1\)</strong> — constant for any S.</p>
     </div>
   </div>
@@ -654,7 +654,7 @@ gcc main.o code1.o code2.o
     </div>
     <div class="callout fragment"><span class="lbl">Why power doubles</span>
       <p class="small">Now V is <strong>fixed</strong>:</p>
-      <div class="eq small">\( A(SC)(V)^2\tfrac{f}{S} = ACV^2 f \)</div>
+      <div class="eq small">\( \alpha(SC)(V)^2\tfrac{f}{S} = \alpha CV^2 f \)</div>
       <p class="small">Per-device power <strong>unchanged</strong>; transistors/chip \(\times 1/S^2\):</p>
       <div class="eq small">\( 1\times\tfrac{1}{S^2} = \tfrac{1}{S^2}\approx 2 \Rightarrow\) <strong>power doubles / generation!</strong> 🔥</div>
     </div>
@@ -756,7 +756,7 @@ gcc main.o code1.o code2.o
     <p class="q">Answer (S = 0.7, V &amp; f fixed)</p>
     <div class="a">
       <ul class="small" style="margin:0 0 .3em .9em">
-        <li><strong>Per device:</strong> only C scales — \(C\to SC=0.7C\). So one transistor's power \(ACV^2f \to 0.7\times\).</li>
+        <li><strong>Per device:</strong> only C scales — \(C\to SC=0.7C\). So one transistor's power \(\alpha CV^2f \to 0.7\times\).</li>
         <li><strong>Same die area:</strong> transistors/chip \(\times 1/S^2 = 2\times\). Chip power \(= 2\times0.7 = \mathbf{1.4\times}\) (too high).</li>
         <li><strong>Shrink area by factor \(a\)</strong> (transistors ∝ area): power \(=(2a)(0.7)=1.4a\). Set \(=1\):</li>
       </ul>
