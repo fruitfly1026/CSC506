@@ -621,7 +621,7 @@ gcc main.o code1.o code2.o
 <!-- Old vs new scaling rule (split into 3) -->
 <section data-background-color="#ffffff">
   <h2>Old Rule: Dennard Scaling</h2>
-  <p class="small muted">Per generation, gate length scales by <strong>S = 0.7</strong>.</p>
+  <p class="small muted">Per generation, shrink linear dimensions <strong>and</strong> supply voltage together by <strong>S = 0.7</strong> (<strong>constant-field scaling</strong>: the field V/length stays fixed).</p>
   <div class="cols">
     <div class="callout ok"><span class="lbl">Scaling per generation</span>
       <ul class="small" style="margin-left:.9em">
@@ -635,14 +635,14 @@ gcc main.o code1.o code2.o
     <div class="callout fragment"><span class="lbl">Why is chip power constant?</span>
       <p class="small">Per device, substitute \(C\!\to\!SC,\ V\!\to\!SV,\ f\!\to\!f/S\):</p>
       <div class="eq small">\( \alpha(SC)(SV)^2\tfrac{f}{S} = \alpha CV^2 f\cdot S^2 \)</div>
-      <p class="small">Power per device \(\times S^2\), but transistors/chip \(\times 1/S^2\) ⇒ <strong>\(S^2\cdot\tfrac{1}{S^2}=1\)</strong> — constant for any S.</p>
+      <p class="small">Power <strong>per device</strong> \(\times S^2\!\approx\!0.5\); but you pack \(1/S^2\!\approx\!2\times\) transistors per chip ⇒ <strong>\(0.5\times 2 = 1\)</strong>, chip power constant for any S.</p>
     </div>
   </div>
   <div class="src">Named after R. H. Dennard et al., &ldquo;Design of Ion-Implanted MOSFET&rsquo;s with Very Small Physical Dimensions,&rdquo; <em>IEEE J. Solid-State Circuits</em>, 1974 (a.k.a. classical / constant-field scaling).</div>
 </section>
 <section data-background-color="#ffffff">
   <h2>New Rule: Leakage-Limited</h2>
-  <p class="small muted">Same S = 0.7, but supply voltage <strong>V can no longer scale down</strong> (lowering it needs lower V_thd → leakage explodes).</p>
+  <p class="small muted">Same S = 0.7, but supply voltage <strong>V can no longer scale down</strong> (<strong>constant-voltage</strong> era: lowering V needs a lower V_thd → leakage explodes).</p>
   <div class="cols">
     <div class="callout warn"><span class="lbl">Scaling per generation</span>
       <ul class="small" style="margin-left:.9em">
@@ -655,8 +655,8 @@ gcc main.o code1.o code2.o
     <div class="callout fragment"><span class="lbl">Why power doubles</span>
       <p class="small">Now V is <strong>fixed</strong>:</p>
       <div class="eq small">\( \alpha(SC)(V)^2\tfrac{f}{S} = \alpha CV^2 f \)</div>
-      <p class="small">Per-device power <strong>unchanged</strong>; transistors/chip \(\times 1/S^2\):</p>
-      <div class="eq small">\( 1\times\tfrac{1}{S^2} = \tfrac{1}{S^2}\approx 2 \Rightarrow\) <strong>power doubles / generation!</strong> 🔥</div>
+      <p class="small">Power <strong>per device</strong> \(\times 1\) (unchanged); but still \(1/S^2\!\approx\!2\times\) transistors per chip ⇒</p>
+      <div class="eq small">\( 1\times 2 = 2 \Rightarrow\) <strong>chip power doubles / generation!</strong> 🔥</div>
     </div>
   </div>
 </section>
