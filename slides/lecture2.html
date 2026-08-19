@@ -186,19 +186,6 @@
   <div class="src">Named after R. H. Dennard et al., &ldquo;Design of Ion-Implanted MOSFET&rsquo;s with Very Small Physical Dimensions,&rdquo; <em>IEEE J. Solid-State Circuits</em>, 1974 (a.k.a. classical / constant-field scaling).</div>
 </section>
 <section data-background-color="#ffffff">
-  <h2>Constant-Field vs Constant-Voltage Scaling</h2>
-  <p class="small muted">The whole difference between the two rules is one question: <strong>when a transistor shrinks, does its voltage shrink too?</strong> It comes down to the electric field inside the device.</p>
-  <div class="eq">\( E = \dfrac{V}{\text{length}} \) &nbsp;:&nbsp; shrink length by \(S\) and the field <em>rises</em>, unless \(V\) shrinks by \(S\) as well.</div>
-  <div class="cols">
-    <div class="callout ok"><span class="lbl">Constant-field (Dennard's ideal)</span>
-      Scale <strong>dimensions and V together</strong> by S = 0.7, so \(E\) stays <strong>constant</strong>. Per-device power falls ×S² while you pack ×1/S² transistors, so <strong>power density stays constant</strong>. Gentle on reliability (no added field stress).</div>
-    <div class="callout warn"><span class="lbl">Constant-voltage</span>
-      Scale dimensions but <strong>hold V fixed</strong>, so \(E\) <strong>rises</strong> (×1/S). Per-device power stops dropping, so <strong>power density climbs</strong>. Field stress brings hot carriers, oxide breakdown, and more leakage.</div>
-  </div>
-  <div class="callout takeaway"><span class="lbl">Why V stopped scaling (~2005)</span>
-    To lower V you must lower the threshold \(V_{thd}\), but the subthreshold slope (~60 mV/decade) means a lower \(V_{thd}\) makes <strong>leakage current \(I_{off}\) explode exponentially</strong>. So V <strong>froze</strong>, and the industry slid from constant-field into constant-voltage: the <strong>power wall</strong>.</div>
-</section>
-<section data-background-color="#ffffff">
   <h2>New Rule: Leakage-Limited</h2>
   <p class="small muted">Same S = 0.7, but supply voltage <strong>V can no longer scale down</strong> (<strong>constant-voltage</strong> era: lowering V needs a lower V_thd → leakage explodes).</p>
   <div class="cols">
@@ -214,9 +201,22 @@
       <p class="small">Now V is <strong>fixed</strong>:</p>
       <div class="eq small">\( \alpha(SC)(V)^2\tfrac{f}{S} = \alpha CV^2 f \)</div>
       <p class="small">Power <strong>per device</strong> \(\times 1\) (unchanged); but still \(1/S^2\!\approx\!2\times\) transistors per chip ⇒</p>
-      <div class="eq small">\( 1\times 2 = 2 \Rightarrow\) <strong>chip power doubles / generation!</strong> 🔥</div>
+      <div class="eq small">\( 1\times 2 = 2 \Rightarrow\) <strong>chip power doubles every generation!</strong> 🔥</div>
     </div>
   </div>
+</section>
+<section data-background-color="#ffffff">
+  <h2>Constant-Field vs Constant-Voltage Scaling</h2>
+  <p class="small muted">The whole difference between the two rules is one question: <strong>when a transistor shrinks, does its voltage shrink too?</strong> It comes down to the electric field inside the device.</p>
+  <div class="eq">\( E = \dfrac{V}{\text{length}} \) &nbsp;:&nbsp; shrink length by \(S\) and the field <em>rises</em>, unless \(V\) shrinks by \(S\) as well.</div>
+  <div class="cols">
+    <div class="callout ok"><span class="lbl">Constant-field (Dennard's ideal)</span>
+      Scale <strong>dimensions and V together</strong> by S = 0.7, so \(E\) stays <strong>constant</strong>. Per-device power falls ×S² while you pack ×1/S² transistors, so <strong>power density stays constant</strong>. Gentle on reliability (no added field stress).</div>
+    <div class="callout warn"><span class="lbl">Constant-voltage</span>
+      Scale dimensions but <strong>hold V fixed</strong>, so \(E\) <strong>rises</strong> (×1/S). Per-device power stops dropping, so <strong>power density climbs</strong>. Field stress brings hot carriers, oxide breakdown, and more leakage.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Why V stopped scaling (~2005)</span>
+    To lower V you must lower the threshold \(V_{thd}\), but the subthreshold slope (~60 mV/decade) means a lower \(V_{thd}\) makes <strong>leakage current \(I_{off}\) explode exponentially</strong>. So V <strong>froze</strong>, and the industry slid from constant-field into constant-voltage: the <strong>power wall</strong>.</div>
 </section>
 <section data-background-color="#ffffff">
   <h2>The Power Wall</h2>
