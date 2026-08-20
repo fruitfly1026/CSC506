@@ -113,6 +113,36 @@
     <strong>distributed-systems</strong> problem — the subject of this topic.</div>
 </section>
 
+<!-- Transformer recap -->
+<section data-background-color="#ffffff">
+  <h2>Recap: The Transformer (What We're Parallelizing)</h2>
+  <p class="small muted">Text is cut into <strong>tokens</strong>; each token becomes a vector, and the model is a stack of identical layers. <span class="src">[Vaswani et al. 2017]</span></p>
+  <div class="eq small">tokens → <strong>embeddings</strong> [seq × d] → N × { <strong>self-attention</strong> → <strong>FFN</strong> → LayerNorm } → predict the <strong>next token</strong></div>
+  <div class="cols">
+    <div class="callout ok"><span class="lbl">Per-token (independent)</span>
+      <span class="small"><strong>Embedding, FFN/MLP, LayerNorm, residual</strong> — every token is processed on its own, no mixing across the sequence → <strong>zero cross-GPU communication under CP</strong>.</span></div>
+    <div class="callout warn"><span class="lbl">Cross-token (the mixer)</span>
+      <span class="small"><strong>Self-attention</strong> is the <em>only</em> step where a token looks at all other tokens. It is why long context is expensive, and the one place <strong>CP must exchange K/V</strong>.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">LLM generation</span>
+    An LLM is <strong>autoregressive</strong>: predict one token, append it, repeat. At inference the past tokens' K/V are stored in a <strong>KV cache</strong> to avoid recomputation.</div>
+</section>
+
+<!-- Self-attention Q/K/V -->
+<section data-background-color="#ffffff">
+  <h2>Self-Attention: Q, K, V</h2>
+  <p class="small muted">Each token vector \(x\) is projected three ways by <strong>learned</strong> weight matrices — these are the layer weights that tensor parallelism splits:</p>
+  <div class="eq">\( q = x\,W_Q,\qquad k = x\,W_K,\qquad v = x\,W_V \)</div>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Q — query</span><span class="small">what this token is <strong>looking for</strong></span></div>
+    <div class="callout"><span class="lbl">K — key</span><span class="small">what a token <strong>offers</strong> to be matched on</span></div>
+    <div class="callout"><span class="lbl">V — value</span><span class="small">the <strong>content</strong> that actually gets aggregated</span></div>
+  </div>
+  <div class="eq">\( \text{Attention}(Q,K,V) = \text{softmax}\!\left(\dfrac{QK^\top}{\sqrt{d_k}}\right)V \)</div>
+  <div class="callout takeaway"><span class="lbl">Why it matters here</span>
+    <span class="small">Generating Q/K/V is <strong>per-token</strong>; the \(QK^\top\) score is <strong>cross-token</strong>. <strong>Multi-head</strong> runs several Q/K/V sets at once — exactly how <strong>tensor parallelism splits attention (by head)</strong>, while <strong>context parallelism</strong> splits the sequence.</span></div>
+</section>
+
 <!-- SGD recap + memory anatomy -->
 <section data-background-color="#ffffff">
   <h2>Recap: Mini-Batch SGD &amp; the Memory Budget</h2>
@@ -1003,6 +1033,8 @@
       <a href="https://arxiv.org/abs/2205.05198">arxiv.org/abs/2205.05198</a></li>
     <li><strong>[Liu et al. 2023]</strong> H. Liu, M. Zaharia, P. Abbeel. "Ring Attention with Blockwise Transformers for Near-Infinite Context" (context parallelism). arXiv:2310.01889.
       <a href="https://arxiv.org/abs/2310.01889">arxiv.org/abs/2310.01889</a></li>
+    <li><strong>[Vaswani et al. 2017]</strong> A. Vaswani et al. "Attention Is All You Need" (the Transformer; self-attention, Q/K/V, multi-head). NeurIPS 2017. arXiv:1706.03762.
+      <a href="https://arxiv.org/abs/1706.03762">arxiv.org/abs/1706.03762</a></li>
   </ol>
   <div class="callout"><span class="lbl">Docs &amp; further reading</span>
     <span class="small">NVIDIA Megatron-LM: <a href="https://github.com/NVIDIA/Megatron-LM">github.com/NVIDIA/Megatron-LM</a> ·
