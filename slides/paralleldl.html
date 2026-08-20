@@ -882,6 +882,22 @@
     communication pattern on top of the 3D-parallel stack.</div>
 </section>
 
+<!-- More axes: expert / sequence / context -->
+<section data-background-color="#ffffff">
+  <h2>More Axes: Expert, Sequence &amp; Context Parallelism</h2>
+  <p class="small muted">Beyond the three core axes (data · tensor · pipeline), three more appear once models go <strong>sparse</strong> (MoE) or contexts get <strong>very long</strong>.</p>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Expert parallelism (EP)</span>
+      <span class="small">For <strong>MoE</strong>: shard the <strong>experts</strong> across GPUs and route each token to its assigned experts through an <strong>all-to-all</strong>. Scales parameters, not FLOPs. <span class="src">[Lepikhin et al. 2020; Fedus et al. 2021]</span></span></div>
+    <div class="callout"><span class="lbl">Sequence parallelism (SP)</span>
+      <span class="small">Split activations along the <strong>sequence</strong> dimension for the <strong>LayerNorm / Dropout</strong> regions tensor-parallelism leaves replicated → cuts activation memory, no extra compute. <span class="src">[Korthikanti et al. 2022]</span></span></div>
+    <div class="callout"><span class="lbl">Context parallelism (CP)</span>
+      <span class="small">Split <strong>all</strong> activations (including <strong>attention</strong>) along the sequence dimension, using <strong>ring attention</strong> to pass K/V between GPUs → trains <strong>very long contexts</strong>. Broader than SP. <span class="src">[Liu et al. 2023]</span></span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Putting it together</span>
+    Large-scale <strong>MoE + long-context</strong> training now stacks up to <strong>5 axes</strong>: data · tensor · pipeline · <strong>expert</strong> · <strong>context</strong> (with sequence parallelism as a memory-saving companion to tensor parallelism).</div>
+</section>
+
 <!-- Summary -->
 <section data-background-color="#ffffff">
   <h2>Topic 6 — Big Picture</h2>
@@ -955,6 +971,10 @@
       <a href="https://arxiv.org/abs/2201.11990">arxiv.org/abs/2201.11990</a></li>
     <li><strong>[Zhao et al. 2023]</strong> Y. Zhao et al. "PyTorch FSDP: Experiences on Scaling Fully Sharded Data Parallel." arXiv:2304.11277.
       <a href="https://arxiv.org/abs/2304.11277">arxiv.org/abs/2304.11277</a></li>
+    <li><strong>[Korthikanti et al. 2022]</strong> V. Korthikanti et al. "Reducing Activation Recomputation in Large Transformer Models" (sequence parallelism). arXiv:2205.05198.
+      <a href="https://arxiv.org/abs/2205.05198">arxiv.org/abs/2205.05198</a></li>
+    <li><strong>[Liu et al. 2023]</strong> H. Liu, M. Zaharia, P. Abbeel. "Ring Attention with Blockwise Transformers for Near-Infinite Context" (context parallelism). arXiv:2310.01889.
+      <a href="https://arxiv.org/abs/2310.01889">arxiv.org/abs/2310.01889</a></li>
   </ol>
   <div class="callout"><span class="lbl">Docs &amp; further reading</span>
     <span class="small">NVIDIA Megatron-LM: <a href="https://github.com/NVIDIA/Megatron-LM">github.com/NVIDIA/Megatron-LM</a> ·
