@@ -898,6 +898,34 @@
     Large-scale <strong>MoE + long-context</strong> training now stacks up to <strong>5 axes</strong>: data · tensor · pipeline · <strong>expert</strong> · <strong>context</strong> (with sequence parallelism as a memory-saving companion to tensor parallelism).</div>
 </section>
 
+<!-- Five axes cheat-sheet -->
+<section data-background-color="#ffffff">
+  <h2>The Five Axes at a Glance</h2>
+  <table class="small">
+    <tr>
+      <th>Axis</th><th>What's split</th><th>Each GPU holds</th><th>Main communication</th><th>Bottleneck it solves</th><th>Key work</th>
+    </tr>
+    <tr>
+      <td><strong>Data (DP)</strong></td><td>mini-batch data</td><td>full model + data shard</td><td>All-Reduce gradients <em>(once / step)</em></td><td>training throughput</td><td>Ring All-Reduce; ZeRO/FSDP</td>
+    </tr>
+    <tr>
+      <td><strong>Tensor (TP)</strong></td><td>weights <em>inside</em> a layer</td><td>a slice of every layer</td><td>All-Reduce <em>(per layer, NVLink)</em></td><td>layer too big / too slow</td><td>Megatron-LM</td>
+    </tr>
+    <tr>
+      <td><strong>Pipeline (PP)</strong></td><td>layers → stages</td><td>consecutive layers</td><td>point-to-point <em>(per stage)</em></td><td>too many layers</td><td>GPipe; PipeDream (1F1B)</td>
+    </tr>
+    <tr>
+      <td><strong>Expert (EP)</strong></td><td>MoE experts</td><td>a subset of experts</td><td>All-to-All <em>(token routing)</em></td><td>params ≫ FLOPs (MoE)</td><td>GShard; Switch</td>
+    </tr>
+    <tr>
+      <td><strong>Context (CP)</strong></td><td>sequence length</td><td>a segment of the sequence</td><td>ring K/V <em>(ring attention)</em></td><td>very long context</td><td>Ring Attention</td>
+    </tr>
+  </table>
+  <div class="src">Sequence parallelism (SP) is a memory-saving companion to TP: it splits the LayerNorm / Dropout activations along the sequence dimension.</div>
+  <div class="callout takeaway"><span class="lbl">Wiring rule</span>
+    Communication <strong>frequency</strong> decides placement: <strong>TP innermost</strong> (per-layer, needs NVLink) · <strong>PP / EP</strong> in the middle · <strong>DP outermost</strong> (once per step, cheapest link). CP overlays along the sequence dimension.</div>
+</section>
+
 <!-- Summary -->
 <section data-background-color="#ffffff">
   <h2>Topic 6 — Big Picture</h2>
