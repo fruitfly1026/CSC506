@@ -576,21 +576,20 @@ for (i=1; i&lt;=N; i++)        // serial
       <p class="small">Names can be structured: <code class="inline">post(i+1)</code> / <code class="inline">wait(i)</code> chains successive iterations.</p>
     </div>
     <div>
-      <div class="code-label">DOACROSS with post/wait</div>
+      <div class="code-label">DOACROSS in OpenMP 4.5+ (doacross loop)</div>
       <pre><code class="language-c" data-trim>
-post(0);
-#pragma omp parallel for ordered
+#pragma omp parallel for ordered(1)
 for (i=1; i&lt;=N; i++) {
-  S1: temp = b[i]*c[i];   // independent
-  wait(i-1);              // need a[i-1]
-  S2: a[i] = a[i-1] + temp;
-  post(i);                // release a[i]
+  temp = b[i]*c[i];        // S1: independent → parallel
+  #pragma omp ordered depend(sink: i-1)   // ≡ wait(i-1)
+  a[i] = a[i-1] + temp;    // S2: carried dep
+  #pragma omp ordered depend(source:)     // ≡ post(i)
 }
 </code></pre>
-      <p class="small">Time → <code class="inline">T<sub>S1</sub> + N·T<sub>S2</sub></code>, and <code class="inline">temp</code> is now <strong>per-thread</strong>, not per-iteration.</p>
+      <p class="small"><code class="inline">ordered(1)</code> declares that <strong>1</strong> loop carries a dependence; <code class="inline">depend(sink:)</code>/<code class="inline">depend(source:)</code> are the <strong>wait</strong>/<strong>post</strong>. Time → <code class="inline">T<sub>S1</sub> + N·T<sub>S2</sub></code>; <code class="inline">temp</code> is <strong>per-thread</strong>.</p>
     </div>
   </div>
-  <aside class="notes">post/wait is the conceptual primitive; in OpenMP the natural realizations are an `ordered` clause or explicit atomic counters. The point is overlap: the independent S1 of iteration i runs while the dependent S2 chain catches up.</aside>
+  <div class="callout"><span class="lbl">Note</span><span class="small"><strong>OpenMP 4.5 (2015) added the doacross loop</strong>, so DOACROSS <em>can</em> be expressed with directives — the textbook (pre-4.5) says it cannot. OpenMP <strong>5.2</strong> renames the clauses to <code class="inline">doacross(sink:)</code> / <code class="inline">doacross(source:)</code>. <span class="src">[OpenMP 4.5 / 5.2 specification]</span></span></div>
 </section>
 
 <!-- Function parallelism / loop distribution -->
@@ -707,6 +706,7 @@ for (i=2; i&lt;=N; i++) {    // stage 2
       <p class="small">Stage 2 consumes <code class="inline">a[i]</code> as soon as stage 1 posts it — the two stages overlap like a pipeline.</p>
     </div>
   </div>
+  <div class="callout"><span class="lbl">In OpenMP 4.5+</span><span class="small">Realize the stages with <strong>task dependences</strong> — <code class="inline">#pragma omp task depend(out: a[i])</code> for stage 1, <code class="inline">#pragma omp task depend(in: a[i])</code> for stage 2 — and the runtime overlaps them (no manual post/wait). Like DOACROSS, the textbook predates this. <span class="src">[OpenMP 4.5+ task depend]</span></span></div>
 </section>
 
 <!-- Review 3.2 -->
