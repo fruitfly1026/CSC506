@@ -256,13 +256,9 @@ int main(void) {
     <div>
       <div class="code-label">Compile — the <code class="inline">-fopenmp</code> flag is required</div>
       <pre><code class="language-bash" data-trim>
-# GNU
+# GNU (gcc / g++)
 gcc  -fopenmp hello.c   -o hello    # C
 g++  -fopenmp hello.cpp -o hello    # C++
-
-# Intel
-icc  -fopenmp hello.c   -o hello    # C
-icpc -fopenmp hello.cpp -o hello    # C++
 </code></pre>
       <div class="callout warn"><span class="lbl">Forget the flag?</span>
         Without <code class="inline">-fopenmp</code> the compiler <strong>ignores every <code class="inline">#pragma omp</code></strong> — the code still builds and runs, but serially on one thread. A "no speedup" bug is very often a missing flag.</div>

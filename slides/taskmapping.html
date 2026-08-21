@@ -26,6 +26,7 @@
   <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
   <h1>Task Mapping</h1>
   <div class="sub">Work Distribution &amp; Performance — Decomposition, Granularity &amp; Data Distribution</div>
+  <div class="sub" style="display:block;font-size:.72em;opacity:.72;margin-top:.4em">(Chapter 3 in Yan Solihin's textbook)</div>
   <aside class="notes">
     This deck is the performance half of parallelization. Chapter 3 built a <em>correct</em> parallel program:
     it found tasks, scoped variables, and synchronized. Here we ask the next question — once the tasks exist,
@@ -402,6 +403,21 @@
     A parallel phase runs only as fast as its <strong>slowest processor</strong>. When per-task work is uniform, block is fine; when it varies, cyclic or block-cyclic spreads the heavy tasks so no single processor is overloaded.</div>
 </section>
 
+<!-- Two more mapping axes (from source slide 1 taxonomy) -->
+<section data-background-color="#ffffff">
+  <h2>Two More Mapping Axes: Static/Dynamic &amp; Row/Column</h2>
+  <p class="small muted">Beyond block vs. cyclic, task mapping has two more choices. <span class="src">[Solihin Ch. 3]</span></p>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Static vs. dynamic</span>
+      <span class="small"><strong>Static</strong>: the task&rarr;processor assignment is fixed <em>before/at launch</em> — lowest overhead, best when work per task is uniform and known (block and cyclic are static schemes).
+      <strong>Dynamic</strong>: tasks are handed out <em>at runtime</em> from a shared work pool (or by work-stealing) — adapts to irregular or unpredictable work, at the cost of scheduling/synchronization overhead.</span></div>
+    <div class="callout"><span class="lbl">Dimension mapping: row- vs. column-wise</span>
+      <span class="small">Which matrix <em>dimension</em> is split across processors — <strong>row-wise</strong> (each processor owns whole rows) or <strong>column-wise</strong> (whole columns). The choice decides which accesses stay local vs. become communication: in \(y = A\cdot x\), a <strong>row-wise</strong> split keeps each \(y[i]\) update local (a processor owns row \(i\) and reads all of \(x\)).</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The full taxonomy</span>
+    Task mapping = <strong>static/dynamic</strong> &times; <strong>block/cyclic/block-cyclic</strong> &times; <strong>row/column dimension</strong>, all judged by <strong>load balance</strong> and <strong>data locality</strong>.</div>
+</section>
+
 <!-- Review Module 4 -->
 <section data-background-color="#f6f8fb">
   <h2>Module 4 — Review</h2>
@@ -439,7 +455,14 @@
 <section data-background-color="#f6f8fb">
   <h2>References</h2>
   <div class="callout"><span class="lbl">Course textbook</span>
-    Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em>, Chapman &amp; Hall/CRC, 2015.</div>
+    Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em>, Chapman &amp; Hall/CRC, 2015 —
+    Ch. 3 (task creation &amp; mapping, granularity, static/dynamic, data distribution).</div>
+  <div class="callout"><span class="lbl">Further reading</span>
+    <span class="small">
+    D. Culler, J. P. Singh, A. Gupta, <em>Parallel Computer Architecture: A Hardware/Software Approach</em>,
+    Morgan Kaufmann, 1999 — &sect;2.3 (the decomposition &rarr; assignment &rarr; orchestration &rarr; mapping framework) &amp; &sect;2.4 (granularity, load balance). ·
+    L. S. Blackford et al., <em>ScaLAPACK Users' Guide</em>, SIAM, 1997 — block-cyclic data distribution:
+    <a href="https://www.netlib.org/scalapack/slug/">netlib.org/scalapack/slug</a></span></div>
 </section>
 </div>
 

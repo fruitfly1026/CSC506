@@ -324,7 +324,7 @@
         latency). <span class="src">[Sergeev &amp; Del Balso 2018]</span></span></div>
       <div class="callout"><span class="lbl">In hardware</span>
         <span class="small">NVIDIA's <strong>NCCL</strong> implements ring (and tree) all-reduce over NVLink/InfiniBand;
-        it is the collective under PyTorch DDP.</span></div>
+        it is the collective under PyTorch DDP. <span class="src">[NVIDIA NCCL docs; PyTorch DDP docs]</span></span></div>
       <div class="callout takeaway"><span class="lbl">Connects to</span>
         <span class="small">This is the same <em>all-reduce collective</em> from message passing — here applied to
         gradient vectors, and made topology-aware for the interconnect.</span></div>
@@ -1039,7 +1039,9 @@
   <div class="callout"><span class="lbl">Docs &amp; further reading</span>
     <span class="small">NVIDIA Megatron-LM: <a href="https://github.com/NVIDIA/Megatron-LM">github.com/NVIDIA/Megatron-LM</a> ·
     DeepSpeed ZeRO: <a href="https://www.deepspeed.ai/tutorials/zero/">deepspeed.ai/tutorials/zero</a> ·
-    PyTorch FSDP: <a href="https://pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api/">pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api</a></span></div>
+    PyTorch FSDP: <a href="https://pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api/">pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api</a> ·
+    NVIDIA NCCL: <a href="https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/index.html">docs.nvidia.com/deeplearning/nccl</a> ·
+    PyTorch DDP: <a href="https://pytorch.org/docs/stable/notes/ddp.html">pytorch.org/docs/stable/notes/ddp</a></span></div>
 </section>
 </div>
 
