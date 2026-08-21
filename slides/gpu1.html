@@ -271,7 +271,8 @@ int main() {
         <li>A <strong>grid</strong> = one or more <strong>blocks</strong> (1D / 2D / 3D)</li>
         <li>A <strong>block</strong> = an array of <strong>threads</strong> (1D / 2D / 3D), the <strong>same #threads</strong> in each block</li>
         <li>Threads <strong>in a block</strong> can <strong>synchronize</strong> &amp; <strong>share memory</strong></li>
-        <li>Threads in <strong>different blocks</strong> <strong>cannot</strong> cooperate</li>
+        <li><strong>Older GPUs:</strong> threads in <strong>different blocks</strong> <strong>cannot</strong> cooperate</li>
+        <li><strong>Newer GPUs (Hopper, CC 9.0+):</strong> optional <strong>thread block clusters</strong> let blocks co-scheduled on a GPC share <em>distributed shared memory</em></li>
       </ul>
       <div class="callout"><span class="lbl">Shape the block to the data</span>
         <span class="small"><strong>1D</strong> → vector &nbsp;·&nbsp; <strong>2D</strong> → matrix &nbsp;·&nbsp; <strong>3D</strong> → volume</span></div>
@@ -854,8 +855,9 @@ f4.x; f4.y; f4.z; f4.w;     // NOT .r .g .b .a
     <tr><td>Pascal</td><td>20</td><td>128 each = 2560 cores</td><td>—</td></tr>
     <tr><td>Turing TU102</td><td>72</td><td>4608 CUDA + 576 Tensor + 72 RT</td><td>—</td></tr>
     <tr><td>Ampere GA102</td><td>84</td><td>10,752 FP32 + 336 Tensor (3rd) + 84 RT (2nd)</td><td>—</td></tr>
+    <tr><td class="hi">Hopper (H100 SXM5)</td><td class="hi">132 (144 on full GH100)</td><td class="hi">16,896 FP32 + 528 Tensor (4th)</td><td class="hi">64 warps = 2048 thr/SM → 132×2048 = <strong>270,336</strong></td></tr>
   </table>
-  <div class="src">NVIDIA architecture whitepapers (G80 → Ampere).</div>
+  <div class="src">NVIDIA architecture whitepapers (G80 → Hopper H100).</div>
 </section>
 
 <!-- Warp -->
@@ -875,8 +877,10 @@ f4.x; f4.y; f4.z; f4.w;     // NOT .r .g .b .a
         <li>Warps whose next instruction's <strong>operands are ready</strong> are eligible</li>
         <li>Eligible warps selected by <strong>priority</strong></li>
         <li>All <strong>32 threads</strong> of a warp execute the <strong>same</strong> instruction (SIMT)</li>
+        <li><strong>Older GPUs (pre-Volta):</strong> the 32 lanes advance in <strong>lockstep</strong> under one shared program counter</li>
+        <li><strong>Newer GPUs (Volta+):</strong> <strong>independent thread scheduling</strong> gives each thread its own PC — still SIMT, but divergent lanes can make progress independently</li>
       </ul>
-      <div class="src">[CUDA C++ Programming Guide — Hardware Implementation / Multithreading]</div></div>
+      <div class="src">[CUDA C++ Programming Guide — Hardware Implementation / SIMT Architecture]</div></div>
   </div>
 </section>
 
@@ -936,7 +940,7 @@ if (threadIdx.x &lt; 16) {
     </div>
     <div>
       <div class="callout warn"><span class="lbl">Cost</span>Not all ALUs do useful work while a path runs — the masked lanes idle.</div>
-      <div class="callout"><span class="lbl">Worst case</span>Heavy divergence can drop you to as low as <strong>1/8 of peak</strong> throughput.</div>
+      <div class="callout"><span class="lbl">Worst case</span>Fully serialized <strong>32-way</strong> divergence drops you to as low as <strong>1/32 of peak</strong> throughput — one active lane per issue.</div>
       <span class="tiny muted">No divergence cost if all 32 lanes take the same branch.</span>
     </div>
   </div>

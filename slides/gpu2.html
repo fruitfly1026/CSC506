@@ -125,6 +125,7 @@ MatrixMultiplyKernel
       </ul></div>
     <div class="callout"><span class="lbl">Result</span>Memory caps you at \( \approx \) <strong>21.6 GFLOPS</strong> (and ~15 in practice) — about <strong>4%</strong> of peak.</div>
   </div>
+  <div class="callout"><span class="lbl">Still true on H100</span><span class="small">Both numbers grew, but compute grew faster: H100 ≈ <strong>67 TFLOPS</strong> FP32 would need ~268 TB/s at 4 B/FLOP, yet HBM3 delivers only ~<strong>3.35 TB/s</strong> → still ~1–2% of peak without reuse. The arithmetic-intensity wall persists. <span class="src">[NVIDIA H100 whitepaper]</span></span></div>
   <div class="callout takeaway"><span class="lbl">Fix</span>We must <strong>cut global-memory access</strong> — reuse data on-chip via <strong>shared memory</strong>.</div>
 </section>
 
@@ -495,6 +496,7 @@ if (threadIdx.x &gt; warpSize - 1) { /* ... */ }
     <tr><td>GT200</td><td>150 GB/s</td></tr>
     <tr><td>Fermi</td><td>192 GB/s</td></tr>
     <tr><td>Kepler</td><td>240 GB/s</td></tr>
+    <tr><td class="hi">Hopper H100 (HBM3, SXM5)</td><td class="hi">~3,350 GB/s (3.35 TB/s)</td></tr>
   </table>
   <div class="callout warn"><span class="lbl">Random access</span>
     Scattered / random reads cannot be fused → effective bandwidth drops far below peak.</div>
@@ -511,7 +513,7 @@ if (threadIdx.x &gt; warpSize - 1) { /* ... */ }
     </ol></div>
   <div class="callout"><span class="lbl">Modern note</span>
     Less critical on GPUs with large on-chip caches, but the coalesced global → staged shared pattern is still the workhorse for tiled kernels.</div>
-  <div class="src">Per-GPU DRAM bandwidths from NVIDIA architecture whitepapers (G80 → Kepler); framework from UIUC ECE498/AL.</div>
+  <div class="src">Per-GPU DRAM bandwidths from NVIDIA architecture whitepapers (G80 → Hopper H100); framework from UIUC ECE498/AL.</div>
 </section>
 
 <!-- ============================ PART 4 ============================ -->
@@ -535,7 +537,7 @@ if (threadIdx.x &gt; warpSize - 1) { /* ... */ }
     <span><strong>bank</strong> independent shared-memory port</span>
     <span><strong>SP</strong> streaming processor (CUDA core)</span>
   </div>
-  <p class="small">Shared memory is divided into <strong>banks</strong> (Bank 0 … 31). Each bank serves one address per ~2 cycles. <strong>Successive 32-bit words → successive banks.</strong></p>
+  <p class="small">Shared memory is divided into <strong>32 banks</strong> (Bank 0 … 31). Each bank has a bandwidth of <strong>32 bits per clock cycle</strong> (one 32-bit word per bank per cycle). <strong>Successive 32-bit words → successive banks.</strong> <span class="src">[CUDA C++ Programming Guide — Shared Memory]</span></p>
   <table>
     <tr><th>Generation</th><th>Banks</th><th>SPs concurrent</th></tr>
     <tr><td>G80 / GT200</td><td>16</td><td>8</td></tr>
@@ -614,13 +616,14 @@ float f = shared[index + s * threadIdx.x];
     <span><strong>TLP</strong> thread-level parallelism</span>
   </div>
   <p class="small">Each SM splits four resources across resident blocks: <strong>block slots · thread slots · registers · shared memory</strong>.</p>
-  <table>
-    <tr><th>Resource</th><th>G80</th><th>Fermi</th><th>Kepler</th></tr>
-    <tr><td>Thread-block slots</td><td>8</td><td>8</td><td>16</td></tr>
-    <tr><td>Thread slots</td><td>768</td><td>1536</td><td>2048</td></tr>
-    <tr><td>Registers</td><td>32 KB (8K)</td><td>32 KB</td><td>64 KB</td></tr>
-    <tr><td>Shared memory</td><td>16 KB</td><td>48 KB</td><td>48 KB</td></tr>
+  <table style="font-size:.82em">
+    <tr><th>Resource</th><th>G80</th><th>Fermi</th><th>Kepler</th><th>Hopper (H100)</th></tr>
+    <tr><td>Thread-block slots</td><td>8</td><td>8</td><td>16</td><td class="hi">32</td></tr>
+    <tr><td>Thread slots</td><td>768</td><td>1536</td><td>2048</td><td class="hi">2048</td></tr>
+    <tr><td>32-bit registers / SM</td><td>8K</td><td>32K</td><td>64K</td><td class="hi">64K (256 KB file)</td></tr>
+    <tr><td>Shared memory / SM</td><td>16 KB</td><td>48 KB</td><td>48 KB</td><td class="hi">up to 228 KB</td></tr>
   </table>
+  <div class="src">Register &amp; shared-memory limits: NVIDIA CUDA C++ Programming Guide, "Technical Specifications per Compute Capability" (G80 = cc 1.0 … Hopper H100 = cc 9.0). Earlier "KB" register labels corrected to register <em>counts</em>.</div>
 </section>
 
 <!-- G80 occupancy example -->
