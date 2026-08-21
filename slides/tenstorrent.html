@@ -144,7 +144,7 @@
         <rect x="22" y="158" width="196" height="34" rx="4" fill="#fca5a5" stroke="#991b1b"/>
         <text x="120" y="179" text-anchor="middle" style="fill:#450a0a;font-size:9px;font-weight:700">192 GB HBM3 · 8 stacks</text>
       </svg>
-      <div class="src">Compute chiplets over a base die, ringed by HBM3.</div>
+      <div class="src">Compute chiplets over a base die, ringed by HBM3. <strong>Specs:</strong> AMD Instinct MI300X data sheet.</div>
     </div>
   </div>
 </section>
@@ -179,7 +179,7 @@
         <text x="110" y="163" text-anchor="middle" class="tiny" style="font-weight:700">128 GB unified HBM3</text>
         <text x="110" y="177" text-anchor="middle" class="tiny">one coherent address space</text>
       </svg>
-      <div class="src">CPU + GPU chiplets sharing coherent HBM.</div>
+      <div class="src">CPU + GPU chiplets sharing coherent HBM. <strong>Specs:</strong> AMD MI300A product brief; El Capitan on TOP500.</div>
     </div>
   </div>
 </section>
@@ -279,7 +279,7 @@ saxpy&lt;&lt;&lt;blocks, threads&gt;&gt;&gt;(n, 2.0f, d_x, d_y);
         <text x="119" y="145" text-anchor="middle" style="fill:#082f49;font-size:8px;font-weight:700">HBM2e tiles (128 GB)</text>
         <text x="120" y="176" text-anchor="middle" style="fill:#bae6fd;font-size:8px">tiles across 5 process nodes, 3-D bonded</text>
       </svg>
-      <div class="src">A GPU built as dozens of bonded chiplets.</div>
+      <div class="src">A GPU built as dozens of bonded chiplets. <strong>Specs:</strong> Intel Data Center GPU Max 1550 product specifications.</div>
     </div>
   </div>
 </section>
@@ -316,7 +316,7 @@ saxpy&lt;&lt;&lt;blocks, threads&gt;&gt;&gt;(n, 2.0f, d_x, d_y);
         <text x="110" y="167" text-anchor="middle" class="tiny" style="font-weight:700">24 × 200 GbE RoCE on-die</text>
         <text x="110" y="180" text-anchor="middle" class="tiny">scale-out over standard Ethernet</text>
       </svg>
-      <div class="src">Matrix engines + vector cores + integrated Ethernet.</div>
+      <div class="src">Matrix engines + vector cores + integrated Ethernet. <strong>Specs:</strong> Intel Gaudi 3 AI Accelerator white paper (2024).</div>
     </div>
   </div>
 </section>
@@ -414,7 +414,7 @@ q.wait();
         </g>
         <text x="105" y="192" text-anchor="middle" class="tiny" style="fill:#b45309">~900k cores + local SRAM, one mesh</text>
       </svg>
-      <div class="src">The whole wafer is one processor, not hundreds of dies.</div>
+      <div class="src">The whole wafer is one processor, not hundreds of dies. <strong>Specs:</strong> Cerebras WSE-3 press release (2024).</div>
     </div>
   </div>
 </section>
@@ -510,7 +510,7 @@ q.wait();
         <text x="116" y="132" text-anchor="middle" class="tiny" style="font-weight:700">2-D NoC — any core reads any SRAM</text>
         <text x="116" y="156" text-anchor="middle" class="tiny" style="fill:#16a34a">explicit, programmer-scheduled moves</text>
       </svg>
-      <div class="src">No caches; a flat sea of directly-addressable SRAM.</div>
+      <div class="src">No caches; a flat sea of directly-addressable SRAM. <strong>Specs:</strong> Tenstorrent TT-Metalium guide (METALIUM_GUIDE.md).</div>
     </div>
   </div>
 </section>
@@ -589,7 +589,7 @@ q.wait();
         <text x="150" y="121" text-anchor="middle" style="fill:#fff;font-size:9px;font-weight:700">Hardware: Tensix grid · RISC-V · NoC</text>
         <text x="150" y="132" text-anchor="middle" style="fill:#cbd5e1;font-size:8px">all layers open source</text>
       </svg>
-      <div class="src">Open, RISC-V-based stack — contrast closed CUDA.</div>
+      <div class="src">Open, RISC-V-based stack — contrast closed CUDA. <strong>Specs:</strong> Tenstorrent docs; Blackhole microbenchmark study (2025).</div>
     </div>
   </div>
 </section>
