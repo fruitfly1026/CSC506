@@ -240,7 +240,7 @@
     <tr><td>1997</td><td>Pentium MMX</td><td>233–450 MHz, 32 KB L1 cache, 4.5M transistors</td><td>dynamic branch prediction, MMX instruction sets</td></tr>
     <tr><td>1999</td><td>Pentium III</td><td>450–1400 MHz, 256 KB L2 cache on chip, 28M transistors</td><td>SSE instruction sets</td></tr>
     <tr><td>2000</td><td>Pentium IV</td><td>1.4–3 GHz, 55M transistors</td><td class="hi">hyper-pipelining, SMT</td></tr>
-    <tr><td>2006</td><td>Pentium Dual-Core</td><td>64-bit, 2 GHz, 167M transistors, 4 MB L2 cache on chip</td><td class="hi">Dual core, virtualization support</td></tr>
+    <tr><td>2006</td><td>Xeon</td><td>64-bit, 2 GHz, 167M transistors, 4 MB L2 cache on chip</td><td class="hi">Dual core, virtualization support</td></tr>
     <tr><td>2011</td><td>Sandy Bridge (i7)</td><td>64-bit, up to 3.5 GHz, 2.37B transistors, up to 20 MB L3 cache</td><td>graphics processor, TurboBoost</td></tr>
   </table>
   <div class="callout">Pipelining → caches → OoO → SMT → <strong>multicore</strong>. Why exactly that order? Next slide.</div>
@@ -1038,7 +1038,7 @@ MOVUPS [Ret], XMM0   ; store C[0..3]
   <div class="cols w-64">
     <div>
       <p><strong>MIMD</strong> = independent PEs, each with its <em>own</em> instruction and data stream. <span class="pill">Most CPU parallel computers today</span></p>
-      <p class="small">Solihin's <strong>Fig 1.7</strong> names four sub-classes by <strong>what is shared</strong>:</p>
+      <p class="small">Solihin's <strong>Fig 1.2</strong> names four sub-classes by <strong>what is shared</strong>:</p>
       <ul class="small">
         <li><strong>Shared cache</strong> — cores on one die share a cache level</li>
         <li><strong>UMA</strong> (uniform memory access) — all PEs share main memory at the <em>same</em> latency (classic SMP)</li>

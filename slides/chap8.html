@@ -892,7 +892,7 @@ atomic {
         <li>A snooped external access to a marked line = <strong>conflict</strong> → abort + flash-clear the bits (rollback)</li>
         <li><strong>Commit</strong> = clear the speculation bits, making the writes globally visible</li>
       </ul>
-      <div class="src">After Solihin Fig 8.3 — cache state through commit and abort.</div>
+      <div class="src">Cache-based HTM speculation (read/write sets, commit/abort). Not in Solihin — after [Herlihy &amp; Moss 1993].</div>
     </div>
   </div>
 </section>
