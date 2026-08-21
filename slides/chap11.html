@@ -155,6 +155,7 @@
 <!-- Switching policies -->
 <section data-background-color="#ffffff">
   <h2>Switching Policies</h2>
+  <div class="src">Source: Dally &amp; Towles, <em>Principles and Practices of Interconnection Networks</em>, 2004.</div>
   <div class="cols">
     <div class="callout"><span class="lbl">Circuit switching</span>Set up a connection along the whole path <em>before</em> sending the message.
       <p class="tiny" style="margin:.4em 0 0"><strong style="color:var(--ok)">Pros:</strong> fast transmission, low per-packet overhead, energy efficient, no buffers needed, predictable latency.</p>
@@ -304,6 +305,7 @@
 <!-- Fully connected endpoints: bus & crossbar -->
 <section data-background-color="#ffffff">
   <h2>Endpoints of the Space: Bus &amp; Crossbar</h2>
+  <div class="src">Source: Dally &amp; Towles, 2004; Culler, Singh &amp; Gupta, <em>Parallel Computer Architecture</em>, 1999.</div>
   <p class="small">Fully-connected networks give <strong>unit distance</strong> (diameter 1) between any pair of nodes — they bracket the cost/bandwidth extremes of the whole topology space.</p>
   <div class="cols w-64">
     <div>
@@ -361,6 +363,7 @@
 <!-- Dragonfly -->
 <section data-background-color="#ffffff">
   <h2>Dragonfly (Cray XE)</h2>
+  <div class="src">Source: Kim, Dally, Scott &amp; Abts, "Technology-Driven, Highly-Scalable Dragonfly Topology," ISCA 2008; Valiant routing: L. Valiant, SIAM J. Computing, 1982.</div>
   <div class="cols w-64">
     <div>
       <p class="small">A <strong>hierarchical</strong> topology — a flattened butterfly with extra <em>local</em> hops so it needs <strong>fewer global hops</strong>, cutting the number of long, expensive cables.</p>
@@ -402,6 +405,7 @@
 <!-- Real interconnect technology families -->
 <section data-background-color="#ffffff">
   <h2>Real Interconnect Technologies</h2>
+  <div class="src">Source: vendor specifications &amp; HPC interconnect surveys.</div>
   <p class="small muted">The families actually deployed in clusters and supercomputers, from commodity to custom.</p>
   <table>
     <tr><th>Family</th><th>Variants / rates</th><th>Notes</th></tr>
@@ -513,6 +517,7 @@
 <!-- Routing in mesh/torus -->
 <section data-background-color="#ffffff">
   <h2>Routing in Mesh / Torus</h2>
+  <div class="src">Valiant routing: L. Valiant, "A Scheme for Fast Parallel Communication," SIAM J. Computing, 1982.</div>
   <div class="cols w-64">
     <div>
       <div class="callout"><span class="lbl">Dimension-ordered (X-Y)</span>
@@ -544,6 +549,7 @@
 <!-- Up*/Down* routing construction -->
 <section data-background-color="#ffffff">
   <h2>Up*/Down* Routing — Construction</h2>
+  <div class="src">Source: Schroeder et al., "Autonet: A High-Speed, Self-Configuring LAN," 1991.</div>
   <p class="small">A general scheme that <strong>enables routing in any topology</strong>, regular or irregular.</p>
   <ol class="small">
     <li><strong>Choose a root</strong> node.</li>
@@ -570,6 +576,7 @@
 <!-- Up*/Down* valid paths -->
 <section data-background-color="#ffffff">
   <h2>Up*/Down* Routing — Valid Paths</h2>
+  <div class="src">Source: Schroeder et al., "Autonet: A High-Speed, Self-Configuring LAN," 1991.</div>
   <div class="cols">
     <div>
       <div class="callout"><span class="lbl">Rule</span>A valid path may go <strong>up first, then down</strong>, until the destination. <strong>Down-then-up is forbidden.</strong></div>
@@ -598,6 +605,7 @@
 <!-- Adaptive routing -->
 <section data-background-color="#ffffff">
   <h2>Adaptive Routing</h2>
+  <div class="src">Source: Dally &amp; Towles, 2004.</div>
   <div class="cols">
     <div>
       <p>Adapts to the <strong>state of the network</strong> — avoids congestion by <strong>deflecting</strong> a packet to another port. May be minimal or non-minimal.</p>
@@ -744,6 +752,7 @@
 <!-- Deadlock avoidance & escape -->
 <section data-background-color="#ffffff">
   <h2>Deadlock Avoidance &amp; Escape</h2>
+  <div class="src">Source: J. Duato, "A New Theory of Deadlock-Free Adaptive Routing," IEEE TPDS 1993; Dally &amp; Towles, 2004.</div>
   <div class="cols">
     <div>
       <div class="callout"><span class="lbl">Avoidance (irregular)</span>In up*/down* routing, forbidding the <strong>down→up turn</strong> avoids deadlock — the same cycle-breaking idea applied to any topology.</div>
@@ -766,6 +775,7 @@
 <!-- Router architecture -->
 <section data-background-color="#ffffff">
   <h2>Router Architecture</h2>
+  <div class="src">Source: Dally &amp; Towles, 2004; Peh &amp; Dally, "A Delay Model and Speculative Architecture for Pipelined Routers," HPCA 2001.</div>
   <div class="cols w-64">
     <div class="center">
       <svg viewBox="0 0 280 200" class="chart" style="max-width:340px">
@@ -812,6 +822,7 @@
 <!-- Router pipeline -->
 <section data-background-color="#ffffff">
   <h2>The Router Pipeline</h2>
+  <div class="src">Source: Peh &amp; Dally, "A Delay Model and Speculative Architecture for Pipelined Routers," HPCA 2001; Dally &amp; Towles, 2004.</div>
   <p class="small">The <strong>head flit</strong> traverses four stages; body and tail flits inherit its route and only need switch traversal.</p>
   <div class="cols w-64">
     <div>
@@ -854,6 +865,7 @@
 <!-- Case study Alpha 21364 -->
 <section data-background-color="#ffffff">
   <h2>Case Study: Alpha 21364 Network</h2>
+  <div class="src">Source: Mukherjee et al., "The Alpha 21364 Network Architecture," IEEE Micro 2002.</div>
   <div class="cols w-64">
     <div>
       <ul class="small">
@@ -892,6 +904,7 @@
 <!-- Alpha 21364 details -->
 <section data-background-color="#ffffff">
   <h2>Alpha 21364 — Flits, VCs &amp; Deadlock</h2>
+  <div class="src">Source: Mukherjee et al., "The Alpha 21364 Network Architecture," IEEE Micro 2002.</div>
   <div class="cols">
     <div>
       <div class="callout"><span class="lbl">Flits</span><strong>Phit = Flit = 39 bits</strong> (32 data + 7 ECC). The head flit holds the header (2-bit direction + 8-bit destination + 6 others).</div>
@@ -907,6 +920,7 @@
 <!-- Alpha 21364 pipeline -->
 <section data-background-color="#ffffff">
   <h2>Alpha 21364 — Router Pipeline</h2>
+  <div class="src">Source: Mukherjee et al., "The Alpha 21364 Network Architecture," IEEE Micro 2002.</div>
   <p class="small">A deep <strong>13-stage</strong> pipeline: a 7-stage scheduling pipeline plus 6 more stages.</p>
   <div class="cols">
     <div>
@@ -949,6 +963,7 @@
 <section class="divider" data-background-color="#ffffff">
   <div class="mod-num">Module 11.3</div>
   <div class="mod-title">LogP — A Realistic Model of Parallel Computation</div>
+  <div class="src">Source: D. Culler et al., "LogP: Towards a Realistic Model of Parallel Computation," PPoPP 1993.</div>
   <div class="objectives" style="margin-top:1em;">
     <h4>By the end you can…</h4>
     <ul>
@@ -974,6 +989,7 @@
 <!-- LogP parameters -->
 <section data-background-color="#ffffff">
   <h2>The LogP Parameters</h2>
+  <div class="src">Source: D. Culler et al., "LogP: Towards a Realistic Model of Parallel Computation," PPoPP 1993.</div>
   <p class="small">A distributed-memory model that captures <strong>network performance</strong> while <em>ignoring network structure</em> (and cache effects).</p>
   <div class="cols">
     <div class="callout"><span class="lbl">L — Latency</span>Upper bound on the delay in sending a small message from source to destination through the network.</div>
@@ -990,6 +1006,7 @@
 <!-- Determining the parameters -->
 <section data-background-color="#ffffff">
   <h2>Measuring the Parameters: Ping-Pong</h2>
+  <div class="src">Source: D. Culler et al., "LogP: Towards a Realistic Model of Parallel Computation," PPoPP 1993.</div>
   <div class="cols w-64">
     <div>
       <div class="callout"><span class="lbl">Round-trip</span>Repeat a send → reply many times; the steady-state round-trip time measures
@@ -1022,6 +1039,7 @@
 <!-- Broadcast & Summation -->
 <section data-background-color="#ffffff">
   <h2>LogP in Action: Broadcast &amp; Summation</h2>
+  <div class="src">Source: D. Culler et al., "LogP: Towards a Realistic Model of Parallel Computation," PPoPP 1993.</div>
   <div class="cols w-64">
     <div>
       <div class="callout"><span class="lbl">Optimal broadcast</span>Every processor that already holds the value <strong>forwards it immediately</strong>; the source injects a fresh copy every \(g\). One message costs
@@ -1056,6 +1074,7 @@
 <!-- Algorithm design: FFT -->
 <section data-background-color="#ffffff">
   <h2>Designing Algorithms with LogP: FFT</h2>
+  <div class="src">Source: D. Culler et al., "LogP: Towards a Realistic Model of Parallel Computation," PPoPP 1993.</div>
   <div class="cols">
     <div class="callout"><span class="lbl">Cyclic vs. blocked layout</span>An \(n\)-point butterfly FFT over \(P\) processors (\(P \ll n\)). Either layout pays the same communication:
       <div class="eq small">\( (gn/P + L)\log P \)</div>
@@ -1116,6 +1135,18 @@
   <h2>References</h2>
   <div class="callout"><span class="lbl">Course textbook</span>
     Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em>, Chapman &amp; Hall/CRC, 2015.</div>
+  <ol class="small">
+    <li>D. Culler et al., "LogP: Towards a Realistic Model of Parallel Computation," <em>PPoPP</em>, 1993.</li>
+    <li>J. Kim, W. Dally, S. Scott, D. Abts, "Technology-Driven, Highly-Scalable Dragonfly Topology," <em>ISCA</em>, 2008.</li>
+    <li>W. Dally &amp; B. Towles, <em>Principles and Practices of Interconnection Networks</em>, Morgan Kaufmann, 2004.</li>
+    <li>L.-S. Peh &amp; W. Dally, "A Delay Model and Speculative Architecture for Pipelined Routers," <em>HPCA</em>, 2001.</li>
+    <li>M. Schroeder et al., "Autonet: A High-Speed, Self-Configuring LAN," 1991.</li>
+    <li>L. Valiant, "A Scheme for Fast Parallel Communication," <em>SIAM J. Computing</em>, 1982.</li>
+    <li>J. Duato, "A New Theory of Deadlock-Free Adaptive Routing," <em>IEEE TPDS</em>, 1993.</li>
+    <li>S. Mukherjee et al., "The Alpha 21364 Network Architecture," <em>IEEE Micro</em>, 2002.</li>
+    <li>D. Culler, J. P. Singh &amp; A. Gupta, <em>Parallel Computer Architecture: A Hardware/Software Approach</em>, Morgan Kaufmann, 1999.</li>
+    <li>Real interconnect technologies (Ethernet, InfiniBand, Myrinet, Cray Gemini, Fujitsu Tofu): vendor specifications &amp; HPC interconnect surveys.</li>
+  </ol>
 </section>
 </div>
 

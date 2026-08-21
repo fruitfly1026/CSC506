@@ -123,6 +123,7 @@
   </div>
   <div class="callout takeaway"><span class="lbl">Direction of this chapter</span>
     We take Approach 2. Memory is <strong>physically distributed</strong> across nodes, but still presents a <strong>single shared address space</strong> — a directory keeps it coherent.</div>
+  <div class="src">System examples: IBM Cell Broadband Engine (EIB ring); Intel Larrabee (ring); SGI Altix (directory/NUMAlink).</div>
 </section>
 
 <!-- Memory mapping on DSM -->
@@ -636,6 +637,7 @@
     <li>Larger machines: <strong>coarse vector</strong>, each bit = p/64 nodes; the machine chooses bit-vector vs. coarse-vector <em>dynamically</em>.</li>
   </ul>
   <div class="callout"><span class="lbl">Takeaway</span>Production DSMs don't pick one format — they <strong>adapt</strong> the directory representation to the sharing pattern and the machine size.</div>
+  <div class="src">Origin 2000 specifics (16-/64-bit directory, coarse vector): Laudon &amp; Lenoski, "The SGI Origin: A ccNUMA Highly Scalable Server," ISCA 1997.</div>
 </section>
 
 <!-- Module 10.1 review -->
@@ -991,6 +993,7 @@
       </svg>
     </div>
   </div>
+  <div class="src">Cache-based / linked-list directories: Culler, Singh &amp; Gupta, <em>Parallel Computer Architecture</em>, Morgan Kaufmann, 1999 (Ch. 8). SCI = IEEE Std 1596-1992 (Scalable Coherent Interface).</div>
 </section>
 
 <!-- SSCI assumptions -->
@@ -1013,6 +1016,7 @@
   </div>
   <div class="callout"><span class="lbl">New transaction</span>
     <code class="inline">WB+Int+UpdPtr</code> — writeback + intervention + update of <strong>next / prev / head pointers</strong>. This is the extra work cache-based schemes pay to maintain the list.</div>
+  <div class="src">SCI protocol detail: IEEE Std 1596-1992. SSCI teaching protocol after Culler, Singh &amp; Gupta, 1999 (Ch. 8).</div>
 </section>
 
 <!-- SSCI visualization -->
@@ -1057,6 +1061,7 @@
       <div class="callout warn"><span class="lbl">4 hops</span>Read to Modified data costs <strong>4 hops</strong> here (3 if the home forwards the read to the owner).</div>
     </div>
   </div>
+  <div class="src">SSCI walkthrough after Culler, Singh &amp; Gupta, 1999 (Ch. 8); SCI = IEEE Std 1596-1992.</div>
 </section>
 
 <!-- SSCI example table -->
@@ -1073,6 +1078,7 @@
     <tr><td>R3</td><td>S,0,3</td><td>–</td><td>S,1,0</td><td>S,1</td><td>—</td><td>0</td></tr>
     <tr><td>R2</td><td>S,2,3</td><td class="hi">S,0,1</td><td>S,1,0</td><td>S,2</td><td>Read(P2→H), ReplyD/ID(H→P2), UpdPtr(P2→P1)</td><td>3</td></tr>
   </table>
+  <div class="src">Trace after Culler, Singh &amp; Gupta, 1999 (Ch. 8); SCI = IEEE Std 1596-1992.</div>
 </section>
 
 <!-- Observations cache vs memory -->
@@ -1099,6 +1105,7 @@
         Quite a few more — pointer updates and state transitions must be <strong>atomic</strong>.</div>
     </div>
   </div>
+  <div class="src">Cache- vs. memory-based comparison: Culler, Singh &amp; Gupta, 1999 (Ch. 8).</div>
 </section>
 
 <!-- Scaling properties cache-based -->
@@ -1118,6 +1125,7 @@
   </div>
   <div class="callout takeaway"><span class="lbl">The key trade</span>
     Memory-based: <strong>O(1) write latency</strong> but <strong>O(p²)</strong> storage. Cache-based (SCI): tiny storage but <strong>O(sharers) write latency</strong>. You pay either in space or in time.</div>
+  <div class="src">Scaling analysis: Culler, Singh &amp; Gupta, 1999 (Ch. 8); SCI = IEEE Std 1596-1992.</div>
 </section>
 
 <!-- Comparison table -->
@@ -1133,6 +1141,7 @@
   </table>
   <div class="callout takeaway"><span class="lbl">Read the latency row</span>
     Every memory-based directory keeps <strong>O(1)</strong> invalidation latency (parallel Invs). Only <strong>SCI</strong> trades that away for tiny storage — its list-walk makes invalidation <strong>O(sharers)</strong>.</div>
+  <div class="src">Storage formulas (Mp², Mp²/g, …) after Culler, Singh &amp; Gupta, 1999 (Ch. 8); SCI = IEEE Std 1596-1992.</div>
 </section>
 
 <!-- Module 10.3 review -->
@@ -1171,6 +1180,12 @@
   <h2>References</h2>
   <div class="callout"><span class="lbl">Course textbook</span>
     Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em>, Chapman &amp; Hall/CRC, 2015.</div>
+  <div class="callout"><span class="lbl">Cache-based directories &amp; scheme comparison</span>
+    D. Culler, J. P. Singh &amp; A. Gupta, <em>Parallel Computer Architecture: A Hardware/Software Approach</em>, Morgan Kaufmann, 1999 (Ch. 8).</div>
+  <div class="callout"><span class="lbl">SCI standard</span>
+    IEEE Std 1596-1992, <em>Scalable Coherent Interface (SCI)</em>, IEEE, 1992.</div>
+  <div class="callout"><span class="lbl">SGI Origin 2000</span>
+    J. Laudon &amp; D. Lenoski, "The SGI Origin: A ccNUMA Highly Scalable Server," <em>Proc. ISCA</em>, 1997.</div>
 </section>
 </div>
 

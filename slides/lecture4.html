@@ -593,6 +593,7 @@ if (id == 0) {
       </svg>
     </div>
   </div>
+  <div class="src">Sources: UPC Language Specification v1.3 (2013); OpenSHMEM Specification; NVIDIA NVSHMEM documentation.</div>
 </section>
 
 <!-- PGAS example UPC -->
@@ -626,6 +627,7 @@ void main(void) {
         <span class="small"><code class="inline">&amp;A[i][0]</code> in <code class="inline">upc_forall</code> assigns
         iteration <code class="inline">i</code> to the thread <strong>where <code class="inline">A[i][0]</code> lives</strong>
         — computation follows the data.</span></div>
+      <div class="src">Source: UPC Language Specification v1.3 (2013).</div>
     </div>
   </div>
 </section>
@@ -656,6 +658,7 @@ void main(void) {
       <div class="src">One register, packed into lanes of varying width.</div>
     </div>
   </div>
+  <div class="src">Source: Intel 64 and IA-32 Architectures Software Developer's Manual (SSE).</div>
 </section>
 
 <!-- Data parallel example -->
@@ -685,6 +688,7 @@ MOVUPS [Result], XMM0; store C[0..3]
       <div class="src"><code class="inline">ADDPS</code>: one instruction, four parallel adds.</div>
     </div>
   </div>
+  <div class="src">Source: Intel 64 and IA-32 Architectures Software Developer's Manual (ADDPS, MOVUPS).</div>
 </section>
 
 <!-- MapReduce -->
@@ -702,6 +706,7 @@ MOVUPS [Result], XMM0; store C[0..3]
   <div class="callout takeaway"><span class="lbl">Why it caught on</span>
     The runtime handles distribution, fault tolerance, and the shuffle — the programmer writes only two pure functions.
     The modern descendants are Hadoop and Spark.</div>
+  <div class="src">Source: J. Dean &amp; S. Ghemawat, "MapReduce: Simplified Data Processing on Large Clusters," OSDI 2004.</div>
 </section>
 
 <!-- MapReduce inverted index example -->
@@ -736,6 +741,7 @@ MOVUPS [Result], XMM0; store C[0..3]
       </ul>
       <div class="callout"><span class="lbl">Result</span>
         <span class="small">An inverted index: link → list of documents. The classic web-search building block.</span></div>
+      <div class="src">Source: J. Dean &amp; S. Ghemawat, "MapReduce: Simplified Data Processing on Large Clusters," OSDI 2004.</div>
     </div>
   </div>
 </section>
@@ -763,6 +769,7 @@ MOVUPS [Result], XMM0; store C[0..3]
         all-or-nothing, isolated update.</p>
     </div>
   </div>
+  <div class="src">Sources: M. Herlihy &amp; J. E. Moss, ISCA 1993; J. Larus &amp; R. Rajwar, "Transactional Memory," 2006.</div>
 </section>
 
 <!-- Lock vs TM example -->
@@ -799,6 +806,7 @@ atomic {
   <div class="callout"><span class="lbl">The pitch</span>
     The programmer states <em>what</em> must be atomic; the system figures out <em>how</em> — higher abstraction,
     simpler reasoning.</div>
+  <div class="src">Sources: M. Herlihy &amp; J. E. Moss, ISCA 1993; J. Larus &amp; R. Rajwar, "Transactional Memory," 2006.</div>
 </section>
 
 <!-- Closing comments -->
@@ -853,6 +861,13 @@ atomic {
   <h2>References</h2>
   <div class="callout"><span class="lbl">Course textbook</span>
     Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em>, Chapman &amp; Hall/CRC, 2015.</div>
+  <div class="callout"><span class="lbl">Module 2.3 — additional sources</span>
+    <ul class="small" style="margin:.2em 0 0 .9em">
+      <li><strong>PGAS:</strong> UPC Language Specification v1.3 (2013); OpenSHMEM Specification; NVIDIA NVSHMEM documentation.</li>
+      <li><strong>Data parallel / SSE:</strong> Intel 64 and IA-32 Architectures Software Developer's Manual (SSE; ADDPS, MOVUPS).</li>
+      <li><strong>MapReduce:</strong> J. Dean &amp; S. Ghemawat, "MapReduce: Simplified Data Processing on Large Clusters," OSDI 2004.</li>
+      <li><strong>Transactional memory:</strong> M. Herlihy &amp; J. E. Moss, ISCA 1993; J. Larus &amp; R. Rajwar, "Transactional Memory," Morgan &amp; Claypool, 2006.</li>
+    </ul></div>
 </section>
 </div>
 

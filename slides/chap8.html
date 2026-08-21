@@ -183,6 +183,7 @@ unlock: sti &amp;lockvar, #0  ; MEM[&amp;lockvar] = 0
     <tr><td class="hi"><code class="inline">compare-and-swap Rx, Ry, M</code></td><td class="hi">Compare <code class="inline">M</code> with <code class="inline">Rx</code>; if equal, write <code class="inline">Ry</code> into <code class="inline">M</code> and copy <code class="inline">Rx</code> into <code class="inline">Ry</code>.</td></tr>
   </table>
   <div class="callout"><span class="lbl">Today</span>Real ISAs expose these as x86 <code class="inline">XCHG</code>/<code class="inline">LOCK CMPXCHG</code>, ARM/RISC-V <code class="inline">LL/SC</code>, and C/C++ <code class="inline">std::atomic</code> primitives.</div>
+  <div class="src">ISA mappings beyond Solihin: RISC-V "A" extension (<code class="inline">LR</code>/<code class="inline">SC</code>), <em>RISC-V ISA Manual</em>; C/C++ <code class="inline">std::atomic</code>, ISO/IEC 14882 (<code class="inline">&lt;atomic&gt;</code>).</div>
 </section>
 
 <!-- atomicity guaranteed -->
@@ -773,6 +774,7 @@ atomic {
       <p class="small muted">Two questions remain: what are the isolation requirements, and what hardware support is needed?</p>
     </div>
   </div>
+  <div class="src">Transactional memory (beyond Solihin Ch.9): M. Herlihy &amp; J. E. Moss, "Transactional Memory," ISCA 1993. General ref: Harris, Larus &amp; Rajwar, <em>Transactional Memory</em>, 2nd ed., Morgan &amp; Claypool, 2010.</div>
 </section>
 
 <!-- Isolation -->
@@ -814,6 +816,7 @@ atomic {
     </div>
   </div>
   <div class="callout warn"><span class="lbl">The hazard</span>Interleaving lets each transaction see the other's partial writes — the outcome matches <strong>no</strong> serial order.</div>
+  <div class="src">Serializability as the isolation criterion — after [Herlihy &amp; Moss 1993]; Harris, Larus &amp; Rajwar 2010. Not in Solihin.</div>
 </section>
 
 <!-- Requirements for isolation -->
@@ -834,6 +837,7 @@ atomic {
     </div>
   </div>
   <div class="callout takeaway"><span class="lbl">Optimistic concurrency</span>TM lets transactions run speculatively in parallel and only pays a cost when they actually conflict — unlike a lock, which serializes <em>always</em>.</div>
+  <div class="src">Read/write-set conflict rule &amp; abort–retry — after [Herlihy &amp; Moss 1993]. Not in Solihin.</div>
 </section>
 
 <!-- Needed hardware support -->
@@ -846,6 +850,7 @@ atomic {
   </div>
   <div class="callout"><span class="lbl">Rollback</span>A mechanism to <strong>discard</strong> speculative state when a transaction aborts.</div>
   <div class="callout takeaway"><span class="lbl">Four pillars</span>Speculative buffering · conflict detection · commit · rollback — every HTM design provides all four.</div>
+  <div class="src">HTM hardware requirements — after [Herlihy &amp; Moss 1993]; Harris, Larus &amp; Rajwar 2010. Not in Solihin.</div>
 </section>
 
 <!-- Example HW support diagram -->
@@ -928,6 +933,12 @@ atomic {
   <h2>References</h2>
   <div class="callout"><span class="lbl">Course textbook</span>
     Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em>, Chapman &amp; Hall/CRC, 2015.</div>
+  <div class="callout"><span class="lbl">Transactional memory</span>
+    M. Herlihy &amp; J. E. Moss, "Transactional Memory: Architectural Support for Lock-Free Data Structures," <em>Proc. ISCA</em>, 1993.</div>
+  <div class="callout"><span class="lbl">Transactional memory</span>
+    T. Harris, J. Larus &amp; R. Rajwar, <em>Transactional Memory</em>, 2nd ed., Morgan &amp; Claypool, 2010.</div>
+  <div class="callout"><span class="lbl">Atomics (ISAs)</span>
+    <em>RISC-V ISA Manual</em> ("A" extension, <code class="inline">LR</code>/<code class="inline">SC</code>); ISO/IEC 14882 C++ standard, <code class="inline">&lt;atomic&gt;</code>.</div>
 </section>
 </div>
 

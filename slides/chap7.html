@@ -211,6 +211,7 @@
       <div class="callout"><span class="lbl">Distributed w/ collision detection</span><span class="small">Optimistically transmit; back off and retry on a collision (e.g. Ethernet).</span></div>
     </div>
   </div>
+  <div class="src">Arbitration schemes not in Solihin Ch. 8 — after Culler, Singh &amp; Gupta, <em>Parallel Computer Architecture</em>, 1999.</div>
 </section>
 
 <!-- Providing cache coherence -->
@@ -721,7 +722,7 @@
     </div>
     <div>
       <div class="callout warn"><span class="lbl">Complications</span><span class="small">How does memory know <em>not</em> to supply (must wait for caches)? Which cache supplies when several are valid (a selection algorithm)?</span></div>
-      <div class="callout ok"><span class="lbl">When it pays off</span><span class="small">Distributed memory: a <em>nearby</em> cache can be cheaper than distant memory — e.g. SMP nodes in Stanford DASH.</span></div>
+      <div class="callout ok"><span class="lbl">When it pays off</span><span class="small">Distributed memory: a <em>nearby</em> cache can be cheaper than distant memory — e.g. SMP nodes in Stanford DASH <span class="src">[Lenoski et al. 1992]</span>.</span></div>
     </div>
   </div>
 </section>
@@ -735,7 +736,7 @@
     </div>
     <div>
       <div class="callout takeaway"><span class="lbl">MOESI's fix</span>Allow a <strong>dirty block to be shared</strong>. One cache is designated the <strong>Owner (O)</strong> and is responsible for eventually writing it back. Others can evict silently.</div>
-      <p class="small">Used in <strong>AMD</strong> processors since the K7 (Athlon).</p>
+      <p class="small">Used in <strong>AMD</strong> processors since the K7 (Athlon). <span class="src">Solihin cites AMD Opteron [AMD 2005]; K7/Athlon per AMD architecture documentation.</span></p>
     </div>
   </div>
   <div class="callout small"><span class="lbl">Owner's job</span>When a read/write to the block is snooped, other (Shared) caches do nothing — the <strong>Owner supplies the block</strong> and carries the write-back responsibility. Two named actions: <strong>Flush</strong> = supply the data cache-to-cache to the requester; <strong>FlushWB</strong> = write the dirty block back to memory (on eviction, or to give up ownership).</div>
@@ -988,7 +989,7 @@
   <h2>Dragon — Implementation Choices</h2>
   <div class="cols">
     <div>
-      <div class="callout"><span class="lbl">Eliminate Sm?</span><span class="small">If <code class="inline">BusUpd</code> also updated memory (e.g. DEC Firefly) you wouldn't need Sm. Dragon assumes DRAM is too slow to update on every word.</span></div>
+      <div class="callout"><span class="lbl">Eliminate Sm?</span><span class="small">If <code class="inline">BusUpd</code> also updated memory (e.g. DEC Firefly) you wouldn't need Sm. Dragon assumes DRAM is too slow to update on every word. <span class="src">[Thacker &amp; Stewart 1988 — DEC Firefly]</span></span></div>
       <div class="callout"><span class="lbl">Broadcast Sc eviction?</span><span class="small">Would let the last copy return to <strong>E</strong> (skip future updates). But the eviction transaction isn't on the critical path while a later update may be.</span></div>
     </div>
     <div>
@@ -1098,6 +1099,13 @@
   <h2>References</h2>
   <div class="callout"><span class="lbl">Course textbook</span>
     Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em>, Chapman &amp; Hall/CRC, 2015.</div>
+  <div class="callout"><span class="lbl">Additional sources (added material)</span>
+    <ul class="small" style="margin:.2em 0 0 1.1em">
+      <li>D. Culler, J. P. Singh, A. Gupta, <em>Parallel Computer Architecture: A Hardware/Software Approach</em>, Morgan Kaufmann, 1999 — bus arbitration.</li>
+      <li>D. Lenoski et al., "The Stanford DASH Multiprocessor," <em>IEEE Computer</em>, 1992 — cache-supplies-data example.</li>
+      <li>C. Thacker &amp; L. Stewart, "Firefly: A Multiprocessor Workstation," ASPLOS 1988 — update-memory-on-BusUpd.</li>
+      <li>M. Papamarcos &amp; J. Patel, ISCA 1984 — Illinois MESI cache-to-cache transfer.</li>
+    </ul></div>
 </section>
 </div>
 

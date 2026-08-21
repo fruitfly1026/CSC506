@@ -296,6 +296,7 @@ while (p != NULL) {
         <code class="inline">p</code> changes on the next loop iteration; the task must keep the value it had <strong>when spawned</strong>.</div>
     </div>
   </div>
+  <div class="src">Instructor-constructed OpenMP <code class="inline">task</code> example (not in Solihin Ch.5).</div>
 </section>
 
 <!-- Analysis venue 1 -->
@@ -374,6 +375,7 @@ int search_tree(pNode p, int key) {
         Each recursive level can spawn more tasks, so parallelism grows down the tree.</div>
     </div>
   </div>
+  <div class="src">Instructor-constructed OpenMP <code class="inline">task</code> example (not in Solihin Ch.5).</div>
 </section>
 
 <!-- Analysis venue 2 -->
@@ -867,6 +869,7 @@ void IntList_Insert(pIntList l, node *p) {
   </table>
   <div class="callout warn"><span class="lbl">Why</span>
     P2 had already stepped <em>onto</em> X before P1 unlinked it. X's <code class="inline">next</code> no longer leads to Y, so the search falls off the list.</div>
+  <div class="src">Instructor-constructed example (not in Solihin Ch.5).</div>
 </section>
 
 <!-- Hazard 3 memory deallocation -->
@@ -1046,6 +1049,7 @@ void IntList_Insert(pIntList l, node *p) {
       <p class="small">Note: Write and NoDelete are <strong>compatible</strong> — a writer can change a node while another op merely pins it alive.</p>
     </div>
   </div>
+  <div class="src">Course extension beyond Solihin Ch.5. The Delete / NoDelete types and this compatibility table follow the intention/upgrade-lock idea from databases — cf. J. Gray et al., "Granularity of Locks and Degrees of Consistency in a Shared Data Base," 1976.</div>
 </section>
 
 <!-- Example 3 resolved with NoDelete -->
@@ -1072,6 +1076,7 @@ void IntList_Insert(pIntList l, node *p) {
         More lock types = more expressible intent = more concurrency — at the cost of more programming complexity.</div>
     </div>
   </div>
+  <div class="src">Course extension beyond Solihin Ch.5; NoDelete mirrors database intention/upgrade locks — cf. J. Gray et al., "Granularity of Locks and Degrees of Consistency in a Shared Data Base," 1976.</div>
 </section>
 
 <!-- traversal locking code -->
@@ -1099,7 +1104,7 @@ while (p != NULL) {
 </code></pre>
     </div>
     <div>
-      <p class="small">Also called <strong>lock coupling</strong>: never release a node's lock until you hold the next node's.</p>
+      <p class="small">Also called <strong>lock coupling</strong>: never release a node's lock until you hold the next node's. <span class="src">Terms "hand-over-hand" / "lock coupling": M. Herlihy &amp; N. Shavit, <em>The Art of Multiprocessor Programming</em>, 2008.</span></p>
       <ul class="small">
         <li>Traversal acquires a <strong>read lock</strong> on each visited node</li>
         <li>Deletion needs a <strong>write lock</strong> on a node → it must wait for traversers to pass</li>
@@ -1175,6 +1180,9 @@ while (p != NULL) {
   <h2>References</h2>
   <div class="callout"><span class="lbl">Course textbook</span>
     Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em>, Chapman &amp; Hall/CRC, 2015.</div>
+  <div class="callout"><span class="lbl">Further reading</span>
+    M. Herlihy &amp; N. Shavit, <em>The Art of Multiprocessor Programming</em>, Morgan Kaufmann, 2008 (hand-over-hand / lock coupling).<br>
+    J. Gray, R. A. Lorie, G. R. Putzolu &amp; I. L. Traiger, "Granularity of Locks and Degrees of Consistency in a Shared Data Base," IBM Research, 1976 (database intention/upgrade locks — basis for the course's Delete / NoDelete lock types).</div>
 </section>
 </div>
 

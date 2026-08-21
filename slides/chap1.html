@@ -124,6 +124,7 @@
     <tr><td>Apple M3 Max (2023)</td><td>16 (12 P + 4 E)</td><td>~4.0 GHz</td><td>TSMC 3 nm</td><td>up to 192 KB</td><td>16 MB / cluster</td><td>48 MB SLC*</td></tr>
   </table>
   <p class="src">SMT width varies: x86 cores run <strong>2 threads</strong> (SMT-2); IBM POWER up to 8; Apple &amp; most ARM run 1 (no SMT). Process labels are commercial <strong>node names</strong>, not physical gate lengths. <strong>&dagger; &ldquo;Intel 7&rdquo;</strong> is Intel&rsquo;s former 10 nm node (&asymp; TSMC 7 nm class), not a true 7 nm. *Apple uses large shared per-cluster L2 + a system-level cache (SLC) rather than a classic L3.</p>
+  <div class="src">Chip specifications: vendor datasheets (AMD, Intel, Apple) / WikiChip.</div>
 </section>
 
 <!-- Closer look: modern chiplet multicore -->
@@ -172,6 +173,7 @@
     Starting ~2001&ndash;2005, every chipmaker turned to the multicore approach.
     <strong>Why then? Why not earlier or later?</strong></div>
   <p class="small muted">Module 1.1 answers the "why now"; Module 1.2 gives the physics.</p>
+  <div class="src">EPYC 9654 &ldquo;Genoa&rdquo; specs &amp; CCD breakdown: AMD datasheets / WikiChip.</div>
 </section>
 
 <!-- Feature size scaling chart -->
@@ -241,8 +243,9 @@
     <tr><td>1999</td><td>Pentium III</td><td>450–1400 MHz, 256 KB L2 cache on chip, 28M transistors</td><td>SSE instruction sets</td></tr>
     <tr><td>2000</td><td>Pentium IV</td><td>1.4–3 GHz, 55M transistors</td><td class="hi">hyper-pipelining, SMT</td></tr>
     <tr><td>2006</td><td>Xeon</td><td>64-bit, 2 GHz, 167M transistors, 4 MB L2 cache on chip</td><td class="hi">Dual core, virtualization support</td></tr>
-    <tr><td>2011</td><td>Sandy Bridge (i7)</td><td>64-bit, up to 3.5 GHz, 2.37B transistors, up to 20 MB L3 cache</td><td>graphics processor, TurboBoost</td></tr>
+    <tr><td>2011</td><td>Sandy Bridge (i7)</td><td>64-bit, up to 3.5 GHz, 1.16B transistors, up to 8 MB L3 cache</td><td>graphics processor, TurboBoost</td></tr>
   </table>
+  <div class="src">2011 Sandy Bridge (i7) row added from Intel / WikiChip.</div>
   <div class="callout">Pipelining → caches → OoO → SMT → <strong>multicore</strong>. Why exactly that order? Next slide.</div>
 </section>
 
@@ -536,6 +539,7 @@ gcc main.o code1.o code2.o
       <div class="callout small"><span class="lbl">Why?</span>Two systems both use 1 J: A = 0.5 W for 2 s, B = 1 W for 1 s. Most prefer <strong>B</strong> — so we weight energy by delay.</div>
     </div>
   </div>
+  <div class="src">EPI / EDP (energy·delay) / ED²P (energy·delay²): A. Gonzalez &amp; M. Horowitz, &ldquo;Energy Dissipation in General-Purpose Microprocessors,&rdquo; <em>IEEE J. Solid-State Circuits</em>, 1996; Hennessy &amp; Patterson, <em>Computer Architecture: A Quantitative Approach</em>.</div>
 </section>
 
 <!-- Power wall problem: dynamic + static -->
@@ -1122,6 +1126,7 @@ MOVUPS [Ret], XMM0   ; store C[0..3]
       <div class="callout takeaway"><span class="lbl">The pattern</span>The top of the list is now <strong>heterogeneous</strong>: MIMD CPUs orchestrating massive SIMD GPU arrays.</div>
     </div>
   </div>
+  <div class="src">Tianhe-2, Frontier (first exascale, 2022) &amp; El Capitan (~1.7 EFLOP/s, 2024) rankings: top500.org (TOP500 lists).</div>
   <aside class="notes">Earth Simulator: $40M to build, $15M/yr maintenance, ~1 processor failure per week, 640 nodes on a single-stage crossbar. Tianhe-2 cost ~$100M. Updated the top of the list to the exascale era: Frontier (2022, first exascale) and El Capitan (2024, ~1.7 EFLOP/s).</aside>
 </section>
 
@@ -1159,6 +1164,13 @@ MOVUPS [Ret], XMM0   ; store C[0..3]
   <h2>References</h2>
   <div class="callout"><span class="lbl">Course textbook</span>
     Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em>, Chapman &amp; Hall/CRC, 2015.</div>
+  <ul class="small">
+    <li><strong>Power/energy metrics (EPI, EDP, ED²P):</strong> A. Gonzalez &amp; M. Horowitz, &ldquo;Energy Dissipation in General-Purpose Microprocessors,&rdquo; <em>IEEE J. Solid-State Circuits</em>, 1996; J. Hennessy &amp; D. Patterson, <em>Computer Architecture: A Quantitative Approach</em>.</li>
+    <li><strong>Dennard scaling:</strong> R. H. Dennard et al., &ldquo;Design of Ion-Implanted MOSFET&rsquo;s with Very Small Physical Dimensions,&rdquo; <em>IEEE J. Solid-State Circuits</em>, 1974.</li>
+    <li><strong>Recent multicore &amp; EPYC &ldquo;Genoa&rdquo; specs (EPYC 9654, EPYC Turin / Zen 5, Xeon Emerald Rapids, Apple M3 Max) and CCD breakdown:</strong> vendor datasheets (AMD, Intel, Apple) / WikiChip.</li>
+    <li><strong>Evolution table (2011 Sandy Bridge row):</strong> Intel / WikiChip.</li>
+    <li><strong>TOP500 &amp; exascale (Tianhe-2, Frontier, El Capitan):</strong> top500.org (TOP500 lists).</li>
+  </ul>
 </section>
 </div>
 

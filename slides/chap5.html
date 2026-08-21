@@ -108,6 +108,7 @@
   <p class="small muted">L4 is uncommon — an eDRAM or last-level victim cache present only on some designs.</p>
   <div class="callout takeaway"><span class="lbl">Why a hierarchy</span>
     Latency grows roughly <strong>10–100×</strong> at each step down, while capacity grows by a similar factor. No single memory is both fast and large — so we <strong>stack</strong> them and let locality keep the hot data near the top.</div>
+  <div class="src">Updated from Solihin Fig 6.1 (2007) with modern CPU datasheet figures.</div>
 </section>
 
 <!-- Cache organization as a table -->
@@ -763,6 +764,7 @@
       <div class="callout"><span class="lbl">AMD compensates</span>Bigger L1 with more ports → L1 read BW <strong>80 GB/s</strong> (AMD) vs. <strong>41 GB/s</strong> (Intel).</div>
     </div>
   </div>
+  <div class="src">Latency &amp; bandwidth figures: Hackenberg, Molka &amp; Nagel, "Comparing Cache Architectures and Coherency Protocols on x86-64 Multicore SMP Systems," MICRO 2009.</div>
   <aside class="notes">
     AMD Shanghai uses a NINE (non-inclusive, non-exclusive) L3. Inclusive would incur too much wasted capacity (about 1/3); exclusive would require too much bandwidth (4 L2s feeding the L3). L3-miss latency: inclusive sends straight to the memory controller (65 ns round trip); NINE must probe all L1s and L2s first (77 ns round trip). Sustained L2 bandwidth is 31 GB/s Intel vs 21.5 GB/s AMD, likely related to AMD's exclusive L2, which AMD compensates for by making L1 large and adding more L1 ports — L1 read bandwidth 80 GB/s AMD vs 41 GB/s Intel.
   </aside>
@@ -799,6 +801,7 @@
   </div>
   <div class="callout takeaway"><span class="lbl">Same idea, opposite knobs</span>
     CPUs <em>avoid</em> stalls with big caches; GPUs <em>tolerate</em> them with massive thread-level parallelism and bandwidth. e.g. NVIDIA H100: small per-SM caches, huge register files, HBM bandwidth.</div>
+  <div class="src">NVIDIA H100 (Hopper) Architecture Whitepaper; Hennessy &amp; Patterson, <em>Computer Architecture: A Quantitative Approach</em>.</div>
 </section>
 
 <!-- Other topics -->
@@ -1255,6 +1258,7 @@
       </ul>
     </div>
   </div>
+  <div class="src">Kalla, Sinharoy, Starke &amp; Floyd, "Power7: IBM's Next-Generation Server Processor," IEEE Micro, 2010.</div>
 </section>
 
 <!-- Power7 fill/eviction -->
@@ -1281,6 +1285,7 @@
       <div class="callout"><span class="lbl">Local policy</span>Prefer evicting <strong>2nd-type</strong> over 1st-type; when a 1st-type block reaches LRU, <strong>convert it to 2nd-type</strong> (push to a remote tile rather than drop it).</div>
     </div>
   </div>
+  <div class="src">Kalla, Sinharoy, Starke &amp; Floyd, "Power7: IBM's Next-Generation Server Processor," IEEE Micro, 2010.</div>
 </section>
 
 <!-- Review 5.3 -->
@@ -1319,6 +1324,12 @@
   <h2>References</h2>
   <div class="callout"><span class="lbl">Course textbook</span>
     Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em>, Chapman &amp; Hall/CRC, 2015.</div>
+  <div class="callout"><span class="lbl">AMD vs. Intel example</span>
+    D. Hackenberg, D. Molka &amp; W. E. Nagel, "Comparing Cache Architectures and Coherency Protocols on x86-64 Multicore SMP Systems," <em>MICRO</em>, 2009.</div>
+  <div class="callout"><span class="lbl">IBM Power7 case study</span>
+    R. Kalla, B. Sinharoy, W. J. Starke &amp; M. Floyd, "Power7: IBM's Next-Generation Server Processor," <em>IEEE Micro</em>, 2010.</div>
+  <div class="callout"><span class="lbl">Latency vs. throughput</span>
+    NVIDIA H100 (Hopper) Architecture Whitepaper; J. L. Hennessy &amp; D. A. Patterson, <em>Computer Architecture: A Quantitative Approach</em>.</div>
 </section>
 </div>
 

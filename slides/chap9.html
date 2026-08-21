@@ -225,6 +225,7 @@ S2: ...=b;   S4: ...=a;
   </div>
   <div class="callout warn"><span class="lbl">This is the store-buffer litmus test</span>
     On real x86/ARM, both threads can buffer their store and read the other's <em>old</em> flag → <strong>(0,0)</strong> is observable. SC forbids it.</div>
+  <div class="src">Litmus test &amp; x86-TSO / ARM (0,0) outcome: Sewell et al., "x86-TSO: A Rigorous and Usable Programmer's Model for x86 Multiprocessors," CACM 2010. (Beyond Solihin Ch.10.)</div>
 </section>
 
 <!-- Non-SC example 2 -->
@@ -458,7 +459,8 @@ if (flag2==0) ..   if (flag1==0) ..
       <ul class="small" style="margin:.2em 0 0 .9em">
         <li>Post–wait synchronization works correctly</li>
         <li>Major OSes were ported to PC with relative ease</li>
-      </ul></div>
+      </ul>
+      <span class="src">"Ported with relative ease" is uncited folklore — treat as anecdotal, not a sourced claim.</span></div>
     <div class="callout warn"><span class="lbl">Where it bites</span>
       <ul class="small" style="margin:.2em 0 0 .9em">
         <li>Errors usually trace to <strong>races that also fail under SC</strong></li>
@@ -842,6 +844,7 @@ acquire:
         Inserted <strong>right before entering</strong> the critical section — blocks upward migration (acquire).</div>
       <div class="callout"><span class="lbl">lwsync</span>
         Inserted <strong>right before the store that releases</strong> the lock — blocks downward migration (release).</div>
+      <div class="src"><code class="inline">lwarx</code>/<code class="inline">stwcx.</code>/<code class="inline">isync</code>/<code class="inline">lwsync</code> sequence: IBM Power ISA / PowerPC Architecture Book. (Beyond Solihin Ch.10.)</div>
     </div>
   </div>
 </section>
@@ -862,6 +865,7 @@ acquire:
       <div class="callout warn"><span class="lbl">Con</span>Compiler may <strong>sacrifice performance for correctness</strong> — though benefits usually outweigh costs.</div>
     </div>
   </div>
+  <div class="src">Java Memory Model: Manson, Pugh &amp; Adve, "The Java Memory Model," POPL 2005 (JSR-133). C++11: ISO/IEC 14882:2011. (Beyond Solihin Ch.10.)</div>
 </section>
 
 <!-- Fence-insertion divider concept -->
@@ -1020,6 +1024,7 @@ Rd F
   </table>
   <div class="callout takeaway"><span class="lbl">The payoff</span>
     SC finishes at <strong>62</strong>, PC at <strong>53</strong>, WO at <strong>34</strong> cycles. More relaxation → more overlap → ~2× speedup here.</div>
+  <div class="src">Illustrative example (cycle counts constructed for teaching) — not from Solihin Ch.10.</div>
 </section>
 
 <!-- Module 9.2 review -->
@@ -1058,6 +1063,13 @@ Rd F
   <h2>References</h2>
   <div class="callout"><span class="lbl">Course textbook</span>
     Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em>, Chapman &amp; Hall/CRC, 2015.</div>
+  <div class="callout"><span class="lbl">Added beyond textbook</span>
+    <ul class="small" style="margin:.2em 0 0 .9em">
+      <li>P. Sewell, S. Sarkar, S. Owens, F. Zappa Nardelli, M. O. Myreen, "x86-TSO: A Rigorous and Usable Programmer's Model for x86 Multiprocessors," <em>Communications of the ACM</em>, 53(7), 2010. <span class="small muted">(store-buffer litmus test, x86-TSO/ARM (0,0))</span></li>
+      <li>IBM, <em>Power ISA</em> / <em>PowerPC Architecture Book</em>. <span class="small muted">(<code class="inline">lwarx</code>/<code class="inline">stwcx.</code>/<code class="inline">isync</code>/<code class="inline">lwsync</code> LL/SC lock)</span></li>
+      <li>J. Manson, W. Pugh, S. V. Adve, "The Java Memory Model," <em>POPL</em>, 2005 (JSR-133); ISO/IEC 14882:2011 (C++11). <span class="small muted">(language-level models)</span></li>
+    </ul></div>
+  <p class="tiny muted">The PC-intuition OS-porting remark and the SC/PC/WO latency cycle-count table are illustrative teaching material, not sourced from the references above.</p>
 </section>
 </div>
 

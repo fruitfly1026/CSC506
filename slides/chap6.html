@@ -115,6 +115,7 @@
         coherence bug.</p>
     </div>
   </div>
+  <p class="src">Appointment-by-mail analogy: instructor lecture material (Solihin companion slides).</p>
 </section>
 
 <!-- Coherence by analogy: appointment 2 -->
@@ -136,6 +137,7 @@
       <p class="small muted">Everyone must agree on the last write — or different cores converge to different values.</p>
     </div>
   </div>
+  <p class="src">Appointment-by-mail analogy: instructor lecture material (Solihin companion slides).</p>
 </section>
 
 <!-- Will this code work -->
@@ -165,6 +167,7 @@ Print sum;
         caches agree.</div>
     </div>
   </div>
+  <p class="src">I/O DMA raises the same coherence problem — see Hennessy &amp; Patterson, <em>Computer Architecture: A Quantitative Approach</em>.</p>
   <aside class="notes">No, assuming a write-back cache. It would be fine if sum were uncachable. The problem persists
     even with a write-through cache (other caches still hold stale copies). I/O DMA can create the same
     coherence problem.</aside>
@@ -397,6 +400,7 @@ S4: print datum;
   </div>
   <div class="callout"><span class="lbl">Key tension</span>We want ordering guarantees <strong>and</strong> performance —
     the consistency model defines exactly where the line is drawn.</div>
+  <p class="src">Write buffers, memory controller, and network as reorder sources: Hennessy &amp; Patterson, <em>Computer Architecture</em> (see Chapter 10 — consistency).</p>
 </section>
 
 <!-- Synchronization: software lock -->
@@ -596,10 +600,11 @@ while(turn==0 &amp;&amp; interested[1]) {};
       <div class="callout takeaway"><span class="lbl">The real fix</span>
         If <strong>non-atomicity</strong> is the root problem, let hardware provide an atomic
         <strong>load–modify–store</strong> sequence — typically a single <strong>atomic instruction</strong>
-        (e.g. test-and-set, fetch-and-add, compare-and-swap).</div>
+        (e.g. test-and-set, fetch-and-add, compare-and-swap <span class="src">— introduced formally in Chapter 9</span>).</div>
     </div>
   </div>
   <p class="small muted">Atomic instructions make a correct lock both simple and fast — the subject of later chapters.</p>
+  <p class="src">Hierarchical/tournament (pairwise) lock scaling: J. Mellor-Crummey &amp; M. Scott, "Algorithms for Scalable Synchronization on Shared-Memory Multiprocessors," <em>ACM TOCS</em>, 1991.</p>
 </section>
 
 <!-- ==================================================================
@@ -620,7 +625,8 @@ while(turn==0 &amp;&amp; interested[1]) {};
   <div class="qa">
     <p class="q">3. Why does the naïve spin lock fail, and what fixes it?</p>
     <div class="fragment"><div class="a">Its test-then-set isn't atomic, so two threads can both acquire. A hardware
-      <strong>atomic instruction</strong> (atomic load–modify–store) fixes it.</div></div>
+      <strong>atomic instruction</strong> (atomic load–modify–store — test-and-set, fetch-and-add, compare-and-swap,
+      <span class="src">introduced formally in Chapter 9</span>) fixes it.</div></div>
   </div>
   <p class="src">Click / press → to reveal each answer.</p>
 </section>
@@ -663,6 +669,11 @@ while(turn==0 &amp;&amp; interested[1]) {};
   <h2>References</h2>
   <div class="callout"><span class="lbl">Course textbook</span>
     Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em>, Chapman &amp; Hall/CRC, 2015.</div>
+  <div class="callout"><span class="lbl">Scalable synchronization</span>
+    J. M. Mellor-Crummey &amp; M. L. Scott, "Algorithms for Scalable Synchronization on Shared-Memory Multiprocessors,"
+    <em>ACM Transactions on Computer Systems</em>, 9(1):21–65, 1991.</div>
+  <div class="callout"><span class="lbl">Consistency &amp; I/O coherence</span>
+    J. L. Hennessy &amp; D. A. Patterson, <em>Computer Architecture: A Quantitative Approach</em>, Morgan Kaufmann.</div>
 </section>
 </div>
 
