@@ -39,38 +39,22 @@
 <section data-background-color="#ffffff">
   <h2>Roadmap</h2>
   <div class="cols c3">
-    <div class="callout"><span class="lbl">Module A</span><strong>Limits of Speedup</strong><br>
-      <span class="small">Why we parallelize, why linear speedup is hard, Amdahl's law, and the three sources of <em>parallel overhead</em>.</span></div>
-    <div class="callout"><span class="lbl">Module B</span><strong>Performance Metrics</strong><br>
+    <div class="callout"><span class="lbl">Module A</span><strong>Performance Metrics</strong><br>
       <span class="small">Execution time, <strong>speedup</strong>, <strong>efficiency</strong>, and <strong>cost</strong> — the language we use to judge parallel programs.</span></div>
-    <div class="callout"><span class="lbl">Module C</span><strong>Scalability</strong><br>
-      <span class="small">Growing problem size <em>and</em> #PEs together; the summing example; <strong>isoefficiency</strong>.</span></div>
+    <div class="callout"><span class="lbl">Module B</span><strong>Scalability</strong><br>
+      <span class="small"><strong>Strong vs. weak scaling</strong> — <strong>Amdahl's</strong> and <strong>Gustafson's</strong> laws, parallel overhead, the summing example, and <strong>isoefficiency</strong>.</span></div>
+    <div class="callout"><span class="lbl">Module C</span><strong>Reducing Overhead</strong><br>
+      <span class="small">Matmul case study — the computation–communication ratio and how <em>blocking</em> fixes it.</span></div>
   </div>
   <div class="cols">
-    <div class="callout"><span class="lbl">Module D</span><strong>Reducing Overhead</strong><br>
-      <span class="small">Matmul case study — the computation–communication ratio and how <em>blocking</em> fixes it.</span></div>
     <div class="callout takeaway"><span class="lbl">The takeaway</span>
       Performance is never free: serial fractions and overhead fight every PE you add. The whole job is to <strong>keep efficiency up as you scale</strong>.</div>
   </div>
 </section>
 
 <!-- ==================================================================
-     MODULE A — WHY PERFORMANCE, AND THE LIMITS OF SPEEDUP
+     INTRO — WHY STUDY PERFORMANCE?
      ================================================================== -->
-<section class="divider" data-background-color="#ffffff">
-  <div class="mod-num">Module A</div>
-  <div class="mod-title">Why Performance, and the Limits of Speedup</div>
-  <div class="objectives" style="margin-top:1em;">
-    <h4>By the end you can…</h4>
-    <ul>
-      <li>Say <strong>why</strong> performance analysis is done, and what optimization aims for</li>
-      <li>Explain why <strong>linear speedup</strong> is rare and state <strong>Amdahl's law</strong></li>
-      <li>Name the three sources of <strong>parallel overhead</strong></li>
-    </ul>
-  </div>
-</section>
-
-<!-- Why study performance -->
 <section data-background-color="#ffffff">
   <h2>Why Study Performance?</h2>
   <div class="cols">
@@ -96,6 +80,198 @@
 </section>
 
 <!-- Why not linear speedup -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module A</div>
+  <div class="mod-title">Performance Metrics</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Define <strong>execution time</strong> and total parallel overhead</li>
+      <li>Compute <strong>speedup</strong> (vs. the <em>best</em> sequential algorithm) and <strong>efficiency</strong></li>
+      <li>Reason about <strong>cost</strong> as a processor–time product</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Metrics overview -->
+<section data-background-color="#ffffff">
+  <h2>The Four Metrics</h2>
+  <div class="cols">
+    <div>
+      <p>Before optimizing, <strong>define the way you will measure</strong> — in advance.</p>
+      <div class="callout takeaway"><span class="lbl">We will define</span>
+        <ul class="small" style="margin:.2em 0 0 .9em">
+          <li><strong>Execution time</strong></li>
+          <li><strong>Speedup</strong></li>
+          <li><strong>Efficiency</strong></li>
+          <li><strong>Cost</strong></li>
+        </ul></div>
+    </div>
+    <div>
+      <table>
+        <tr><th>Metric</th><th>Definition</th></tr>
+        <tr><td>Execution time</td><td>\(T_P\) (parallel), \(T_S\) (serial)</td></tr>
+        <tr><td class="hi">Speedup</td><td class="hi">\(S = T_S / T_P\)</td></tr>
+        <tr><td>Efficiency</td><td>\(E = S/p\)</td></tr>
+        <tr><td>Cost</td><td>\(C = p\,T_P\)</td></tr>
+      </table>
+      <p class="src">All four are connected — we derive the links as we go.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Execution time -->
+<section data-background-color="#ffffff">
+  <h2>Execution Time</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Definition</span>
+        <strong>Elapsed (wall-clock) time</strong> from start to when the <strong>last PE finishes</strong>.</div>
+      <ul class="small">
+        <li>\(T_P\) = parallel execution time, \(T_S\) = serial execution time</li>
+        <li>Used both for <strong>performance</strong> and for <strong>usage charging</strong></li>
+      </ul>
+      <p class="small">Typical charging policy (e.g. on a shared cluster):</p>
+      <div class="eq small">SUs = #processors allocated &times; wall time &times; priority</div>
+      <span class="src">Cluster-accounting convention (e.g. ACCESS / XSEDE allocations); the "priority" factor is site-specific.</span>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Associated metric</span>
+        <strong>Total parallel overhead</strong>
+        <div class="eq">\( T_o \;=\; p\,T_P \;-\; T_S \)</div>
+        <span class="small">All the extra processor–time spent that the serial run never paid.</span></div>
+      <p class="src">Note the "last PE finishes" rule: one straggler sets the whole wall-clock time — which is exactly why load imbalance is so costly.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Speedup -->
+<section data-background-color="#ffffff">
+  <h2>Speedup</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Definition</span>
+        <div class="eq">\( S \;=\; \dfrac{T_S}{T_P} \)</div>
+        <span class="small">How many times faster the parallel run is than the serial run.</span></div>
+      <div class="callout warn"><span class="lbl">Read the fine print</span>
+        \(T_S\) is the execution time of the <strong>BEST sequential algorithm</strong> — not a crippled serial version of the parallel code.</div>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">Super-linear speedup (S &gt; p)</span>
+        Possible! From a hardware advantage the serial run never had:
+        <ul class="small" style="margin:.2em 0 0 .9em">
+          <li>Better use of faster storage — the per-PE working set now fits in <strong>cache / memory</strong></li>
+          <li><strong>Exploratory decomposition</strong> — a parallel search finds the answer early</li>
+        </ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- Efficiency -->
+<section data-background-color="#ffffff">
+  <h2>Efficiency</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Definition</span>
+        The fraction of time a PE is <strong>usefully employed</strong>.
+        <div class="eq">\( E \;=\; \dfrac{S}{p} \)</div></div>
+      <p class="small">It is the ratio between <strong>actual</strong> and <strong>ideal</strong> performance:</p>
+      <ul class="small">
+        <li>\(E = 1\) (= 100%) → perfect linear speedup</li>
+        <li>\(E < 1\) → some PE time is wasted on overhead / idling</li>
+      </ul>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Why efficiency, not just speedup</span>
+        Speedup of 20 sounds great — but on 40 PEs that is \(E = 0.5\): half your machine is wasted. Efficiency normalizes for the resources you spent.</div>
+      <p class="src">Efficiency is the metric we hold constant when we talk about scalability (Module B).</p>
+    </div>
+  </div>
+</section>
+
+<!-- Cost -->
+<section data-background-color="#ffffff">
+  <h2>Cost</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Definition</span>
+        Resource-usage cost, charged as the <strong>processor–time product</strong>:
+        <div class="eq">\( C \;=\; p\,T_P \)</div></div>
+      <div class="callout warn"><span class="lbl">Load imbalance hurts twice</span>
+        Idle time is <em>still charged</em> — a PE waiting on a straggler costs the same as a PE working.</div>
+    </div>
+    <div>
+      <p class="small">Watch <strong>where scaling stops</strong>. Example — diminishing returns:</p>
+      <table>
+        <tr><th>p</th><th>Speedup</th><th>Efficiency</th></tr>
+        <tr><td>16</td><td>14</td><td>0.88</td></tr>
+        <tr><td class="hi">32</td><td class="hi">20</td><td class="hi">0.63</td></tr>
+      </table>
+      <div class="qa">
+        <p class="q">Relationship between efficiency and cost?</p>
+        <div class="fragment"><div class="a">\(E = \dfrac{S}{p} = \dfrac{T_S/T_P}{p} = \dfrac{T_S}{p\,T_P} = \dfrac{T_S}{C}\) — efficiency is just serial time over cost.</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Review: Metrics -->
+<section data-background-color="#f6f8fb">
+  <h2>Module A — Review</h2>
+  <div class="qa">
+    <p class="q">1. Against which serial time is speedup measured, and why does it matter?</p>
+    <div class="fragment"><div class="a">Against the <strong>best</strong> sequential algorithm's \(T_S\). Otherwise you could fake a big speedup by comparing against a bad serial baseline.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. A program gets speedup 20 on 32 PEs. What is its efficiency?</p>
+    <div class="fragment"><div class="a">\(E = S/p = 20/32 = 0.625\) — about 63% of the machine is doing useful work.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Express efficiency in terms of cost.</p>
+    <div class="fragment"><div class="a">\(E = T_S / C\), where \(C = p\,T_P\).</div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE B — SCALABILITY
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module B</div>
+  <div class="mod-title">Scalability</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Define <strong>scalability</strong> and tell <strong>strong</strong> from <strong>weak</strong> scaling</li>
+      <li>State <strong>Amdahl's law</strong> (strong scaling) and <strong>Gustafson's law</strong> (weak scaling), and name the three sources of <em>parallel overhead</em></li>
+      <li>Derive \(T_P\), speedup, and efficiency for the <strong>summing</strong> example</li>
+      <li>State <strong>isoefficiency</strong> and use it to judge whether a system scales</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Scalability definition -->
+<section data-background-color="#ffffff">
+  <h2>What Is Scalability?</h2>
+  <div class="cols">
+    <div>
+      <p>Parallel programs must accommodate growth in <strong>two dimensions</strong>:</p>
+      <ul class="small">
+        <li>The <strong>problem size</strong></li>
+        <li>The <strong>number of PEs</strong></li>
+      </ul>
+      <div class="callout"><span class="lbl">Scalability</span>
+        The capacity to increase <strong>speedup in proportion to the number of PEs</strong>.</div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Problem size W</span>
+        The amount of <strong>computation</strong> — the basic steps of the <em>best sequential algorithm</em>, <strong>not</strong> just the data size. Correlated with serial execution time.</div>
+      <div class="callout takeaway"><span class="lbl">Scalable parallel system</span>
+        One that can <strong>maintain efficiency</strong> by simultaneously increasing #PEs <em>and</em> problem size.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Summing: decomposition -->
 <section data-background-color="#ffffff">
   <h2>Why Can't We Just Get Linear Speedup?</h2>
   <p class="small">The dream: with <strong>p</strong> processing elements, shorten execution time by a factor of <strong>p</strong>. This is the constant goal of parallel programs — and <em>most cannot reach it</em>.</p>
@@ -209,7 +385,7 @@
       </ul></div>
   </div>
   <div class="callout takeaway"><span class="lbl">Tie it together</span>
-    <strong>Amdahl → strong scaling</strong> (fixed size, bounded speedup); <strong>Gustafson → weak scaling</strong> (grow the problem, near-linear speedup). <strong>Isoefficiency</strong> (Module C) makes the weak-scaling question — <em>how fast must the problem grow to hold efficiency?</em> — precise.</div>
+    <strong>Amdahl → strong scaling</strong> (fixed size, bounded speedup); <strong>Gustafson → weak scaling</strong> (grow the problem, near-linear speedup). <strong>Isoefficiency</strong> (later this module) makes the weak-scaling question — <em>how fast must the problem grow to hold efficiency?</em> — precise.</div>
 </section>
 
 <!-- Amdahl in reality -->
@@ -279,217 +455,6 @@
 </section>
 
 <!-- Review A -->
-<section data-background-color="#f6f8fb">
-  <h2>Module A — Review</h2>
-  <div class="qa">
-    <p class="q">1. State Amdahl's law and the maximum speedup for s = 0.05.</p>
-    <div class="fragment"><div class="a">Max speedup \(S = 1/s\). For s = 0.05, \(S = 1/0.05 = 20\)× — no matter how many PEs.</div></div>
-  </div>
-  <div class="qa">
-    <p class="q">2. Why does real speedup peak and then decline as p grows?</p>
-    <div class="fragment"><div class="a">Parallel overhead (communication, idling, excess computation) grows with p; past a point it outweighs the extra compute, so adding PEs hurts.</div></div>
-  </div>
-  <div class="qa">
-    <p class="q">3. Name the three sources of parallel overhead.</p>
-    <div class="fragment"><div class="a">Inter-process interaction (talking), idling (waiting), and excess computation (replicating).</div></div>
-  </div>
-  <p class="src">Click / press → to reveal each answer.</p>
-</section>
-
-<!-- ==================================================================
-     MODULE B — PERFORMANCE METRICS
-     ================================================================== -->
-<section class="divider" data-background-color="#ffffff">
-  <div class="mod-num">Module B</div>
-  <div class="mod-title">Performance Metrics</div>
-  <div class="objectives" style="margin-top:1em;">
-    <h4>By the end you can…</h4>
-    <ul>
-      <li>Define <strong>execution time</strong> and total parallel overhead</li>
-      <li>Compute <strong>speedup</strong> (vs. the <em>best</em> sequential algorithm) and <strong>efficiency</strong></li>
-      <li>Reason about <strong>cost</strong> as a processor–time product</li>
-    </ul>
-  </div>
-</section>
-
-<!-- Metrics overview -->
-<section data-background-color="#ffffff">
-  <h2>The Four Metrics</h2>
-  <div class="cols">
-    <div>
-      <p>Before optimizing, <strong>define the way you will measure</strong> — in advance.</p>
-      <div class="callout takeaway"><span class="lbl">We will define</span>
-        <ul class="small" style="margin:.2em 0 0 .9em">
-          <li><strong>Execution time</strong></li>
-          <li><strong>Speedup</strong></li>
-          <li><strong>Efficiency</strong></li>
-          <li><strong>Cost</strong></li>
-        </ul></div>
-    </div>
-    <div>
-      <table>
-        <tr><th>Metric</th><th>Definition</th></tr>
-        <tr><td>Execution time</td><td>\(T_P\) (parallel), \(T_S\) (serial)</td></tr>
-        <tr><td class="hi">Speedup</td><td class="hi">\(S = T_S / T_P\)</td></tr>
-        <tr><td>Efficiency</td><td>\(E = S/p\)</td></tr>
-        <tr><td>Cost</td><td>\(C = p\,T_P\)</td></tr>
-      </table>
-      <p class="src">All four are connected — we derive the links as we go.</p>
-    </div>
-  </div>
-</section>
-
-<!-- Execution time -->
-<section data-background-color="#ffffff">
-  <h2>Execution Time</h2>
-  <div class="cols">
-    <div>
-      <div class="callout"><span class="lbl">Definition</span>
-        <strong>Elapsed (wall-clock) time</strong> from start to when the <strong>last PE finishes</strong>.</div>
-      <ul class="small">
-        <li>\(T_P\) = parallel execution time, \(T_S\) = serial execution time</li>
-        <li>Used both for <strong>performance</strong> and for <strong>usage charging</strong></li>
-      </ul>
-      <p class="small">Typical charging policy (e.g. on a shared cluster):</p>
-      <div class="eq small">SUs = #processors allocated &times; wall time &times; priority</div>
-      <span class="src">Cluster-accounting convention (e.g. ACCESS / XSEDE allocations); the "priority" factor is site-specific.</span>
-    </div>
-    <div>
-      <div class="callout warn"><span class="lbl">Associated metric</span>
-        <strong>Total parallel overhead</strong>
-        <div class="eq">\( T_o \;=\; p\,T_P \;-\; T_S \)</div>
-        <span class="small">All the extra processor–time spent that the serial run never paid.</span></div>
-      <p class="src">Note the "last PE finishes" rule: one straggler sets the whole wall-clock time — which is exactly why load imbalance is so costly.</p>
-    </div>
-  </div>
-</section>
-
-<!-- Speedup -->
-<section data-background-color="#ffffff">
-  <h2>Speedup</h2>
-  <div class="cols">
-    <div>
-      <div class="callout"><span class="lbl">Definition</span>
-        <div class="eq">\( S \;=\; \dfrac{T_S}{T_P} \)</div>
-        <span class="small">How many times faster the parallel run is than the serial run.</span></div>
-      <div class="callout warn"><span class="lbl">Read the fine print</span>
-        \(T_S\) is the execution time of the <strong>BEST sequential algorithm</strong> — not a crippled serial version of the parallel code.</div>
-    </div>
-    <div>
-      <div class="callout ok"><span class="lbl">Super-linear speedup (S &gt; p)</span>
-        Possible! From a hardware advantage the serial run never had:
-        <ul class="small" style="margin:.2em 0 0 .9em">
-          <li>Better use of faster storage — the per-PE working set now fits in <strong>cache / memory</strong></li>
-          <li><strong>Exploratory decomposition</strong> — a parallel search finds the answer early</li>
-        </ul></div>
-    </div>
-  </div>
-</section>
-
-<!-- Efficiency -->
-<section data-background-color="#ffffff">
-  <h2>Efficiency</h2>
-  <div class="cols">
-    <div>
-      <div class="callout"><span class="lbl">Definition</span>
-        The fraction of time a PE is <strong>usefully employed</strong>.
-        <div class="eq">\( E \;=\; \dfrac{S}{p} \)</div></div>
-      <p class="small">It is the ratio between <strong>actual</strong> and <strong>ideal</strong> performance:</p>
-      <ul class="small">
-        <li>\(E = 1\) (= 100%) → perfect linear speedup</li>
-        <li>\(E < 1\) → some PE time is wasted on overhead / idling</li>
-      </ul>
-    </div>
-    <div>
-      <div class="callout takeaway"><span class="lbl">Why efficiency, not just speedup</span>
-        Speedup of 20 sounds great — but on 40 PEs that is \(E = 0.5\): half your machine is wasted. Efficiency normalizes for the resources you spent.</div>
-      <p class="src">Efficiency is the metric we hold constant when we talk about scalability (Module C).</p>
-    </div>
-  </div>
-</section>
-
-<!-- Cost -->
-<section data-background-color="#ffffff">
-  <h2>Cost</h2>
-  <div class="cols">
-    <div>
-      <div class="callout"><span class="lbl">Definition</span>
-        Resource-usage cost, charged as the <strong>processor–time product</strong>:
-        <div class="eq">\( C \;=\; p\,T_P \)</div></div>
-      <div class="callout warn"><span class="lbl">Load imbalance hurts twice</span>
-        Idle time is <em>still charged</em> — a PE waiting on a straggler costs the same as a PE working.</div>
-    </div>
-    <div>
-      <p class="small">Watch <strong>where scaling stops</strong>. Example — diminishing returns:</p>
-      <table>
-        <tr><th>p</th><th>Speedup</th><th>Efficiency</th></tr>
-        <tr><td>16</td><td>14</td><td>0.88</td></tr>
-        <tr><td class="hi">32</td><td class="hi">20</td><td class="hi">0.63</td></tr>
-      </table>
-      <div class="qa">
-        <p class="q">Relationship between efficiency and cost?</p>
-        <div class="fragment"><div class="a">\(E = \dfrac{S}{p} = \dfrac{T_S/T_P}{p} = \dfrac{T_S}{p\,T_P} = \dfrac{T_S}{C}\) — efficiency is just serial time over cost.</div></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- Review B -->
-<section data-background-color="#f6f8fb">
-  <h2>Module B — Review</h2>
-  <div class="qa">
-    <p class="q">1. Against which serial time is speedup measured, and why does it matter?</p>
-    <div class="fragment"><div class="a">Against the <strong>best</strong> sequential algorithm's \(T_S\). Otherwise you could fake a big speedup by comparing against a bad serial baseline.</div></div>
-  </div>
-  <div class="qa">
-    <p class="q">2. A program gets speedup 20 on 32 PEs. What is its efficiency?</p>
-    <div class="fragment"><div class="a">\(E = S/p = 20/32 = 0.625\) — about 63% of the machine is doing useful work.</div></div>
-  </div>
-  <div class="qa">
-    <p class="q">3. Express efficiency in terms of cost.</p>
-    <div class="fragment"><div class="a">\(E = T_S / C\), where \(C = p\,T_P\).</div></div>
-  </div>
-</section>
-
-<!-- ==================================================================
-     MODULE C — SCALABILITY
-     ================================================================== -->
-<section class="divider" data-background-color="#ffffff">
-  <div class="mod-num">Module C</div>
-  <div class="mod-title">Scalability</div>
-  <div class="objectives" style="margin-top:1em;">
-    <h4>By the end you can…</h4>
-    <ul>
-      <li>Define <strong>scalability</strong> and <strong>problem size W</strong></li>
-      <li>Derive \(T_P\), speedup, and efficiency for the <strong>summing</strong> example</li>
-      <li>State <strong>isoefficiency</strong> and use it to judge whether a system scales</li>
-    </ul>
-  </div>
-</section>
-
-<!-- Scalability definition -->
-<section data-background-color="#ffffff">
-  <h2>What Is Scalability?</h2>
-  <div class="cols">
-    <div>
-      <p>Parallel programs must accommodate growth in <strong>two dimensions</strong>:</p>
-      <ul class="small">
-        <li>The <strong>problem size</strong></li>
-        <li>The <strong>number of PEs</strong></li>
-      </ul>
-      <div class="callout"><span class="lbl">Scalability</span>
-        The capacity to increase <strong>speedup in proportion to the number of PEs</strong>.</div>
-    </div>
-    <div>
-      <div class="callout"><span class="lbl">Problem size W</span>
-        The amount of <strong>computation</strong> — the basic steps of the <em>best sequential algorithm</em>, <strong>not</strong> just the data size. Correlated with serial execution time.</div>
-      <div class="callout takeaway"><span class="lbl">Scalable parallel system</span>
-        One that can <strong>maintain efficiency</strong> by simultaneously increasing #PEs <em>and</em> problem size.</div>
-    </div>
-  </div>
-</section>
-
-<!-- Summing: decomposition -->
 <section data-background-color="#ffffff">
   <h2>Example: Summing <em>n</em> Numbers on <em>p</em> PEs</h2>
   <div class="cols w-64">
@@ -699,9 +664,27 @@
   </div>
 </section>
 
-<!-- Review C -->
+<!-- Review: Scalability 1/2 -->
 <section data-background-color="#f6f8fb">
-  <h2>Module C — Review</h2>
+  <h2>Module B — Review (1/2)</h2>
+  <div class="qa">
+    <p class="q">1. State Amdahl's law and the maximum speedup for s = 0.05.</p>
+    <div class="fragment"><div class="a">Max speedup \(S = 1/s\). For s = 0.05, \(S = 1/0.05 = 20\)× — no matter how many PEs.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. Why does real speedup peak and then decline as p grows?</p>
+    <div class="fragment"><div class="a">Parallel overhead (communication, idling, excess computation) grows with p; past a point it outweighs the extra compute, so adding PEs hurts.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. Name the three sources of parallel overhead.</p>
+    <div class="fragment"><div class="a">Inter-process interaction (talking), idling (waiting), and excess computation (replicating).</div></div>
+  </div>
+  <p class="src">Click / press → to reveal each answer.</p>
+</section>
+
+<!-- Review: Scalability 2/2 -->
+<section data-background-color="#f6f8fb">
+  <h2>Module B — Review (2/2)</h2>
   <div class="qa">
     <p class="q">1. What is "problem size W" — is it the data size?</p>
     <div class="fragment"><div class="a">No — W is the <strong>amount of computation</strong>: the basic steps of the best sequential algorithm. It correlates with serial execution time.</div></div>
@@ -717,10 +700,10 @@
 </section>
 
 <!-- ==================================================================
-     MODULE D — REDUCING PARALLEL OVERHEAD
+     MODULE C — REDUCING PARALLEL OVERHEAD
      ================================================================== -->
 <section class="divider" data-background-color="#ffffff">
-  <div class="mod-num">Module D</div>
+  <div class="mod-num">Module C</div>
   <div class="mod-title">Reducing Parallel Overhead</div>
   <div class="objectives" style="margin-top:1em;">
     <h4>By the end you can…</h4>
@@ -851,7 +834,7 @@ for (i = 0; i &lt; n; i++)
 
 <!-- Review D -->
 <section data-background-color="#f6f8fb">
-  <h2>Module D — Review</h2>
+  <h2>Module C — Review</h2>
   <div class="qa">
     <p class="q">1. What do &alpha; and &beta; represent, and which dominates?</p>
     <div class="fragment"><div class="a">\(\alpha\) = per-message (startup) cost, \(\beta\) = per-byte cost. \(\alpha \gg \beta\) by ~several thousand, so message <em>count</em> dominates.</div></div>
