@@ -505,7 +505,7 @@
   <h2>Summing: The Algorithm</h2>
   <div class="cols w-64">
     <div class="center">
-      <svg viewBox="0 0 420 230" class="chart">
+      <svg viewBox="0 0 520 230" class="chart">
         <!-- PEs row -->
         <g fill="#dbeafe" stroke="#3b82f6">
           <rect x="20"  y="16" width="64" height="26" rx="6"/><rect x="116" y="16" width="64" height="26" rx="6"/>
@@ -520,9 +520,9 @@
           <rect x="20"  y="62" width="64" height="24" rx="6"/><rect x="116" y="62" width="64" height="24" rx="6"/>
           <rect x="212" y="62" width="64" height="24" rx="6"/><rect x="320" y="62" width="64" height="24" rx="6"/>
         </g>
-        <text x="200" y="79" text-anchor="end" class="lbl">local sums</text>
+        <text x="396" y="74" text-anchor="start" class="lbl">local sums</text>
         <g class="axis"><line x1="52" y1="42" x2="52" y2="62"/><line x1="148" y1="42" x2="148" y2="62"/><line x1="244" y1="42" x2="244" y2="62"/><line x1="352" y1="42" x2="352" y2="62"/></g>
-        <text x="406" y="58" text-anchor="end" class="note">cost n/p</text>
+        <text x="396" y="90" text-anchor="start" class="note">cost n/p</text>
         <!-- tree merge level 1 -->
         <g class="axis"><line x1="52" y1="86" x2="100" y2="120"/><line x1="148" y1="86" x2="100" y2="120"/><line x1="244" y1="86" x2="300" y2="120"/><line x1="352" y1="86" x2="300" y2="120"/></g>
         <g fill="#fef3c7" stroke="#f59e0b"><rect x="70" y="120" width="60" height="24" rx="6"/><rect x="270" y="120" width="60" height="24" rx="6"/></g>
@@ -530,7 +530,8 @@
         <g class="axis"><line x1="100" y1="144" x2="200" y2="180"/><line x1="300" y1="144" x2="200" y2="180"/></g>
         <rect x="166" y="180" width="68" height="28" rx="7" fill="#fee2e2" stroke="#CC0000"/>
         <text x="200" y="198" text-anchor="middle" class="lbl" style="fill:#CC0000">global sum</text>
-        <text x="406" y="172" text-anchor="end" class="note">merge cost 2 log(p)</text>
+        <text x="396" y="156" text-anchor="start" class="lbl">tree merge</text>
+        <text x="396" y="172" text-anchor="start" class="note">cost 2 log p</text>
       </svg>
     </div>
     <div>
@@ -626,7 +627,7 @@
         <text x="350" y="186" class="note" style="fill:#d97706">n = 192</text>
         <!-- n=64: declines fast to ~0.18 -->
         <path d="M48,58 C120,120 260,180 405,196" stroke="#CC0000" stroke-width="2.5" fill="none"/>
-        <text x="200" y="212" class="note" style="fill:#CC0000">n = 64</text>
+        <text x="285" y="177" class="note" style="fill:#CC0000">n = 64</text>
       </svg>
     </div>
     <div>
