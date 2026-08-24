@@ -326,8 +326,10 @@
     </div>
     <div>
       <div class="callout"><span class="lbl">Amdahl's law</span>
-        Let <strong>s</strong> = the serial fraction of the work. As \(p \to \infty\), the maximum speedup is
-        <div class="eq">\( S \;=\; \dfrac{1}{s} \)</div></div>
+        Let <strong>s</strong> = the serial fraction of the work; the remaining \(1-s\) splits across \(p\) processors:
+        <div class="eq">\( S(p) \;=\; \dfrac{1}{\,s + \dfrac{1-s}{p}\,} \)</div>
+        As \(p \to \infty\) the second term vanishes, leaving the ceiling
+        <div class="eq">\( S_{max} \;=\; \dfrac{1}{s} \)</div></div>
       <ul class="small">
         <li><span class="pill">s = 0</span> ideal — linear, follows the diagonal</li>
         <li><span class="pill">s = 0.01</span> caps at <strong>100×</strong> (plot ≈ 50 at p = 100)</li>
