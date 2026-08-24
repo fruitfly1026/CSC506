@@ -541,6 +541,7 @@
       </ul>
       <div class="callout takeaway"><span class="lbl">Parallel time</span>
         <div class="eq">\( T_P \;=\; \dfrac{n}{p} \;+\; 2\log p \)</div>
+        <span class="small"><strong>Why the 2?</strong> Each of the \(\log p\) tree levels costs <strong>1 communication</strong> (receive the partner's partial sum) <strong>+ 1 addition</strong> — communication is counted, each at one time unit. With free communication it would be just \(\log p\).</span><br>
         <span class="small">First term shrinks with p; second term <em>grows</em> with p — that tension is the whole scalability story.</span></div>
     </div>
   </div>
