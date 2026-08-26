@@ -649,8 +649,10 @@
   <h2>Isoefficiency</h2>
   <div class="cols">
     <div>
-      <p class="small">Write efficiency in terms of problem size <strong>W</strong>, #PEs <strong>p</strong>, and the overhead function <strong>T(W,p)</strong>:</p>
-      <div class="eq small">\( E \;=\; \dfrac{1}{\,1 + T(W,p)/W\,} \)</div>
+      <p class="small">Let problem size <strong>W</strong> = \(T_S\) (the serial work) and overhead <strong>T(W,p)</strong> = \(p\,T_P - T_S\). Start from the definition of efficiency:</p>
+      <div class="eq small">\( E \;=\; \dfrac{S}{p} \;=\; \dfrac{T_S/T_P}{p} \;=\; \dfrac{T_S}{p\,T_P} \)</div>
+      <p class="small">Substituting \(T_S = W\) and \(p\,T_P = W + T(W,p)\), then dividing top and bottom by \(W\):</p>
+      <div class="eq small">\( E \;=\; \dfrac{W}{\,W + T(W,p)\,} \;=\; \dfrac{1}{\,1 + T(W,p)/W\,} \)</div>
       <p class="small">For a <strong>scalable</strong> system, hold E constant. Solving for W:</p>
       <div class="eq small">\( W \;=\; \dfrac{E}{1-E}\,T(W,p) \;=\; K\cdot T(W,p) \)</div>
       <p class="tiny muted">(K is a constant set by the target efficiency.)</p>
@@ -797,12 +799,13 @@ for (i = 0; i &lt; n; i++)
   <h2>Ratio: The Simple Dynamic Algorithm</h2>
   <div class="cols">
     <div>
-      <p class="small">Cost to compute <strong>one element</strong> of C:</p>
+      <p class="small"><strong>Per PE</strong>, for the <strong>one element</strong> of C it is assigned — the ratio below is a
+        <em>per-processor</em> quantity, computation vs. communication for the same unit of work:</p>
       <ul class="small">
         <li><strong>Computation</strong> = 2n (one <code class="inline">+</code> and one <code class="inline">*</code> per k; 1 unit time each)</li>
         <li><strong>Communication</strong> = two messages of size n = \(2(\alpha + n\beta)\)</li>
       </ul>
-      <div class="eq">\( \text{ratio} \;=\; \dfrac{n}{\alpha + n\beta} \)</div>
+      <div class="eq">\( \text{ratio}_{\text{per PE}} \;=\; \dfrac{2n}{2(\alpha + n\beta)} \;=\; \dfrac{n}{\alpha + n\beta} \)</div>
     </div>
     <div>
       <div class="callout warn"><span class="lbl">Plug in numbers</span>
@@ -818,12 +821,12 @@ for (i = 0; i &lt; n; i++)
   <h2>A Better Algorithm: Blocking</h2>
   <div class="cols">
     <div>
-      <p class="small">Store A as <strong>row-bunches</strong> (g rows each) and B as <strong>column-bunches</strong>. Each object computes a <strong>g × g section</strong> of C.</p>
+      <p class="small">Store A as <strong>row-bunches</strong> (g rows each) and B as <strong>column-bunches</strong>. <strong>Each PE</strong> computes a <strong>g × g section</strong> of C — so this ratio is again <strong>per PE</strong>, now for a larger unit of work.</p>
       <ul class="small">
         <li><strong>Computation</strong> = \(2\,g\,g\,n\) ops</li>
         <li><strong>Communication</strong> = 2 messages, \(g\,n\) bytes each</li>
       </ul>
-      <div class="eq">\( \text{ratio} \;=\; \dfrac{g^2 n}{\alpha + g n\beta} \)</div>
+      <div class="eq">\( \text{ratio}_{\text{per PE}} \;=\; \dfrac{2g^2 n}{2(\alpha + g n\beta)} \;=\; \dfrac{g^2 n}{\alpha + g n\beta} \)</div>
     </div>
     <div>
       <div class="callout ok"><span class="lbl">Plug in numbers</span>
