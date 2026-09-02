@@ -700,7 +700,7 @@ for (i=0; i&lt;n; i++)       // task B
       </ul></div>
   </div>
   <div class="callout takeaway"><span class="lbl">Rule of thumb</span>
-    Reach for <strong>data parallelism (DOALL)</strong> first; layer function/DOPIPE parallelism on top when DOALL alone doesn't fill the machine.</div>
+    Reach for <strong>DOALL</strong> first &#8212; the only form whose degree grows with the data. If the loop level carries a dependence, try <strong>DOACROSS</strong> next: still iteration-level, so still data parallelism, but its speedup is capped by the independent-to-dependent work ratio, not by <code class="inline">n</code>. Layer <strong>function / DOPIPE</strong> parallelism on top when loop-level parallelism alone doesn't fill the machine.</div>
 </section>
 
 <!-- DOPIPE -->
