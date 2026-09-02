@@ -616,7 +616,7 @@ for (i=1; i&lt;=N; i++) {
       <div class="callout"><span class="lbl">post(0)</span>needs no counterpart &#8212; a <code class="inline">sink</code> naming an iteration outside the loop&#8217;s iteration space is ignored, so iteration 1 does not wait. <span class="src">[OpenMP 4.5 specification]</span></div>
     </div>
   </div>
-  <div class="callout"><span class="lbl">Note</span><span class="small"><strong>OpenMP 4.5 (2015) added the doacross loop</strong>, so DOACROSS <em>can</em> be expressed with directives &#8212; the textbook (pre-4.5) says it cannot. OpenMP <strong>5.2</strong> renames the clauses to <code class="inline">doacross(sink:)</code> / <code class="inline">doacross(source:)</code>. <span class="src">[OpenMP 4.5 / 5.2 specification]</span></span></div>
+  <div class="callout"><span class="lbl">Note</span><span class="small"><strong>OpenMP 4.5 (2015) added the doacross loop</strong>, so DOACROSS <em>can</em> be expressed with directives &#8212; the textbook (pre-4.5) says it cannot. OpenMP <strong>5.2</strong> deprecates these clauses in favor of <code class="inline">doacross(sink:)</code> / <code class="inline">doacross(source:)</code> &#8212; <em>deprecated, not removed</em>, so the 4.5 form above still compiles. <span class="src">[OpenMP 4.5 / 5.2 specification]</span></span></div>
 </section>
 
 
