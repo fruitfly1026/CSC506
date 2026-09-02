@@ -27,10 +27,9 @@
   <h1>Lecture 5–6</h1>
   <div class="sub">Shared Memory Parallel Programming — Finding, Expressing &amp; Synchronizing Tasks</div>
   <aside class="notes">
-    Solihin's Chapter 3 is the "how do I actually parallelize a program" chapter. The goal: given source code,
-    without knowing the algorithm, find parallel tasks; decide which variables each thread can touch;
-    and coordinate threads with synchronization. We work mostly in the shared-memory model and express
-    the result in OpenMP and pthreads.
+    Solihin's Chapter 3 is the "how do I actually parallelize a program" chapter. The goal here: given source
+    code, without knowing the algorithm, find the parallel tasks. We work in the shared-memory model and
+    express the result in OpenMP. Variable scope and synchronization follow in Lecture 7.
   </aside>
 </section>
 
@@ -45,12 +44,7 @@
     <div class="callout"><span class="lbl">Module 3.3</span><strong>Algorithm-Level Parallelism</strong><br>
       <span class="small">When code analysis is too pessimistic — red/black ordering, asynchronous relaxation.</span></div>
   </div>
-  <div class="cols">
-    <div class="callout"><span class="lbl">Module 3.4</span><strong>Variable Scope &amp; OpenMP</strong><br>
-      <span class="small">Shared / private / reduction; privatization; expressing it all with <code class="inline">#pragma omp</code>.</span></div>
-    <div class="callout"><span class="lbl">Module 3.5</span><strong>Synchronization &amp; pthreads</strong><br>
-      <span class="small">Point-to-point, locks, barriers — and the pthreads primitives that implement them.</span></div>
-  </div>
+  <div class="callout"><span class="lbl">Next lecture</span><span class="small">Variable scope (shared / private / reduction) and synchronization (locks, barriers, pthreads) are covered in <strong>Lecture 7 — OpenMP in Practice</strong>.</span></div>
   <div class="callout takeaway"><span class="lbl">The takeaway</span>
     Parallelization is two problems: <strong>correctness</strong> (find tasks, scope variables, synchronize) and <strong>performance</strong> (map tasks to hardware). This chapter is the correctness half.</div>
 </section>
@@ -753,7 +747,7 @@ for (i=2; i&lt;=N; i++) {    // stage 2
 </section>
 
 <section data-background-color="#f6f8fb">
-  <h2>Module 3.2 &#8212; Review</h2>
+  <h2>Module 3.2 — Review</h2>
   <div class="qa">
     <p class="q">Is this loop DOALL? If not, can you still extract parallelism &#8212; and how much?</p>
     <pre><code class="language-c" data-trim>
@@ -877,247 +871,7 @@ while (!converged) {
   </div>
 </section>
 
-<!-- ==================================================================
-     MODULE 3.4 — VARIABLE SCOPE & OPENMP
-     ================================================================== -->
-<section class="divider" data-background-color="#ffffff">
-  <div class="mod-num">Module 3.4</div>
-  <div class="mod-title">Variable Scope &amp; OpenMP</div>
-  <div class="objectives" style="margin-top:1em;">
-    <h4>By the end you can…</h4>
-    <ul>
-      <li>Classify variable accesses: read-only, R/W non-conflicting, R/W conflicting</li>
-      <li>Apply <strong>privatization</strong> and <strong>reduction</strong> to remove conflicts</li>
-      <li>Choose the right OpenMP clause: <code class="inline">shared</code> / <code class="inline">private</code> / <code class="inline">reduction</code></li>
-    </ul>
-  </div>
-</section>
 
-<!-- Determining variable scope -->
-<section data-background-color="#ffffff">
-  <h2>Determining Variable Scope</h2>
-  <p class="small">Specific to the <strong>shared-memory</strong> model: given the parallel tasks, decide how each variable is used <em>across</em> tasks.</p>
-  <div class="cols c3">
-    <div class="callout ok"><span class="lbl">Read-only</span><span class="small">Only read by all tasks. Safe to <strong>share</strong>.</span></div>
-    <div class="callout"><span class="lbl">R/W non-conflicting</span><span class="small">Read and/or written by <strong>only one</strong> task. Also safe to share.</span></div>
-    <div class="callout warn"><span class="lbl">R/W conflicting</span><span class="small">Written by one task and read/written by <strong>another</strong> — the dangerous case.</span></div>
-  </div>
-  <div class="code-label">Example — task = each "for i" iteration</div>
-  <pre><code class="language-c" data-trim>
-for (i=1; i&lt;=n; i++)
-  for (j=1; j&lt;=n; j++) {
-    S2: a[i][j] = b[i][j] + c[i][j];
-    S3: b[i][j] = a[i][j-1] * d[i][j];
-  }
-</code></pre>
-  <p class="small">Read-only: <code class="inline">n, c, d</code> · R/W non-conflicting: <code class="inline">a, b</code> · R/W conflicting: <code class="inline">i, j</code> (the loop indices).</p>
-</section>
-
-<!-- Privatization -->
-<section data-background-color="#ffffff">
-  <h2>Privatization</h2>
-  <div class="cols">
-    <div>
-      <div class="callout"><span class="lbl">Privatization</span>
-        Convert a shared variable into a <strong>per-thread private</strong> copy to remove a conflict.
-        Goal: turn <em>R/W conflicting</em> into <em>R/W non-conflicting</em>.</div>
-      <p class="small"><strong>A conflicting variable is privatizable if:</strong></p>
-      <ul class="small">
-        <li>In program order, each task <strong>writes it before reading</strong> it, and</li>
-        <li>The values for different tasks are <strong>known ahead of time</strong> (so private copies can be initialized).</li>
-      </ul>
-    </div>
-    <div>
-      <div class="callout ok"><span class="lbl">Consequence</span>The conflict disappears once the variable is privatized — one copy per <strong>thread</strong> (not per task).</div>
-      <div class="callout"><span class="lbl">Special case: registers</span>
-        A register-allocated scalar is <em>inherently</em> private — each core has its own register file.</div>
-      <p class="small">In the previous example, <code class="inline">i</code> and <code class="inline">j</code> are conflicting but privatizable → <code class="inline">i[ID], j[ID]</code> per thread.</p>
-    </div>
-  </div>
-</section>
-
-<!-- Reduction -->
-<section data-background-color="#ffffff">
-  <h2>Reduction</h2>
-  <div class="cols">
-    <div>
-      <div class="callout"><span class="lbl">Reduction</span>
-        A special privatization where each thread accumulates into a <strong>private partial result</strong>, then all partials are merged into the shared result at the end.</div>
-      <div class="code-label">Classic example — summing an array</div>
-      <pre><code class="language-c" data-trim>
-double sum = 0.0;
-#pragma omp parallel for reduction(+:sum)
-for (i = 0; i &lt; n; i++)
-    sum += a[i];
-</code></pre>
-      <p class="small">Each thread keeps a private <code class="inline">sum</code>; OpenMP combines them with <code class="inline">+</code> at the join.</p>
-    </div>
-    <div>
-      <p class="small"><strong>Reducibility criteria</strong> — the update order must not matter, so the operator must be:</p>
-      <div class="eq small">\( u \;\text{op}\; v = v \;\text{op}\; u \quad\text{(commutative)} \)</div>
-      <div class="eq small">\( (u \;\text{op}\; v)\;\text{op}\; w = u\;\text{op}\;(v\;\text{op}\;w)\;\text{(assoc.)} \)</div>
-      <p class="small">Examples: <code class="inline">+</code>, <code class="inline">*</code>, logical <code class="inline">AND</code>/<code class="inline">OR</code>, <code class="inline">min</code>/<code class="inline">max</code>. The accumulated scalar is the <strong>reduction variable</strong>.</p>
-      <div class="callout warn"><span class="lbl">Caution</span>Floating-point <code class="inline">+</code> is not perfectly associative — reduction can change the last bits of a result.</div>
-    </div>
-  </div>
-</section>
-
-<!-- Scope determination summary + OpenMP -->
-<section data-background-color="#ffffff">
-  <h2>Putting Scope into OpenMP</h2>
-  <div class="cols">
-    <div>
-      <table>
-        <tr><th>Category</th><th>OpenMP clause</th></tr>
-        <tr><td>Privatizable</td><td class="hi"><code class="inline">private</code></td></tr>
-        <tr><td>Read-only</td><td><code class="inline">shared</code></td></tr>
-        <tr><td>R/W non-conflicting</td><td><code class="inline">shared</code></td></tr>
-        <tr><td>Reduction variable</td><td class="hi"><code class="inline">reduction(op:var)</code></td></tr>
-        <tr><td>Other conflicting</td><td><code class="inline">shared</code> + lock/atomic</td></tr>
-      </table>
-      <p class="tiny muted"><code class="inline">private</code> further splits into <code class="inline">firstprivate</code> (init from the outside value) and <code class="inline">lastprivate</code> (copy the final value out).</p>
-    </div>
-    <div>
-      <div class="code-label">Scoping the "for i" example</div>
-      <pre><code class="language-c" data-trim>
-#pragma omp parallel for \
-        default(none) \
-        shared(n, a, b, c, d) \
-        private(i, j)
-for (i=1; i&lt;=n; i++)
-  for (j=1; j&lt;=n; j++) {
-    a[i][j] = b[i][j] + c[i][j];
-    b[i][j] = a[i][j-1] * d[i][j];
-  }
-</code></pre>
-      <p class="small">Shared: <code class="inline">n, c, d, a, b</code> · Private: <code class="inline">i, j</code>. Using <code class="inline">default(none)</code> forces you to scope every variable on purpose.</p>
-    </div>
-  </div>
-</section>
-
-<!-- Review 3.4 -->
-<section data-background-color="#f6f8fb">
-  <h2>Module 3.4 — Review</h2>
-  <div class="qa">
-    <p class="q">1. Define the main variable scopes in shared-memory parallel programming.</p>
-    <div class="fragment"><div class="a"><strong>Shared</strong> — all threads see one copy. <strong>Private</strong> — each thread has its own copy (OpenMP refines into <code class="inline">firstprivate</code>/<code class="inline">lastprivate</code>). <strong>Reduction</strong> — private partials merged by a commutative/associative operator.</div></div>
-  </div>
-  <div class="qa">
-    <p class="q">2. Parallelizing the <code class="inline">for j</code> loop of a nest with arrays A,B,C,Y and scalars x,k — give the scopes.</p>
-    <div class="fragment"><div class="a"><strong>Shared:</strong> <code class="inline">i, n, m, A, B, C, Y</code> &nbsp; <strong>Private:</strong> <code class="inline">j, k, x</code>.</div></div>
-  </div>
-</section>
-
-<!-- ==================================================================
-     MODULE 3.5 — SYNCHRONIZATION & PTHREADS
-     ================================================================== -->
-<section class="divider" data-background-color="#ffffff">
-  <div class="mod-num">Module 3.5</div>
-  <div class="mod-title">Synchronization &amp; pthreads</div>
-  <div class="objectives" style="margin-top:1em;">
-    <h4>By the end you can…</h4>
-    <ul>
-      <li>Name the three synchronization primitives and when to use each</li>
-      <li>Use a <strong>lock</strong> to protect a critical section and explain granularity trade-offs</li>
-      <li>Explain why <strong>load balance</strong> dominates barrier performance, and what gang scheduling fixes</li>
-    </ul>
-  </div>
-</section>
-
-<!-- Synchronization primitives -->
-<section data-background-color="#ffffff">
-  <h2>Three Synchronization Primitives</h2>
-  <div class="cols c3">
-    <div class="callout"><span class="lbl">Point-to-point</span>
-      <span class="small">A <code class="inline">post()</code>/<code class="inline">wait()</code> pair (shared memory) — or <code class="inline">send()</code>/<code class="inline">recv()</code> in message passing. Orders <em>two specific</em> threads.</span></div>
-    <div class="callout"><span class="lbl">Lock (mutex)</span>
-      <span class="small">Mutual exclusion: only <strong>one</strong> thread in the locked region at a time.</span></div>
-    <div class="callout"><span class="lbl">Barrier</span>
-      <span class="small">A point no thread passes until <strong>all</strong> threads have arrived. Global event sync.</span></div>
-  </div>
-  <div class="callout takeaway"><span class="lbl">Match the tool to the need</span>
-    Producer→consumer ordering? Point-to-point. Protecting a shared update? Lock. Phase boundary (like red→black)? Barrier.</div>
-</section>
-
-<!-- Lock -->
-<section data-background-color="#ffffff">
-  <h2>Locks: Protecting a Critical Section</h2>
-  <div class="cols">
-    <div>
-      <div class="code-label">Race — unsynchronized</div>
-      <pre><code class="language-c" data-trim>
-// inside a parallel region
-for (i=start; i&lt;end; i++)
-    sum = sum + a[i];   // lost updates!
-</code></pre>
-      <p class="small" style="color:var(--warn)">✗ Concurrent read-modify-write on the shared <code class="inline">sum</code> → lost updates.</p>
-    </div>
-    <div>
-      <div class="code-label">Correct — with a lock (pthreads)</div>
-      <pre><code class="language-c" data-trim>
-pthread_mutex_t x = PTHREAD_MUTEX_INITIALIZER;
-for (i=start; i&lt;end; i++) {
-    pthread_mutex_lock(&amp;x);
-    sum = sum + a[i];
-    pthread_mutex_unlock(&amp;x);
-}
-</code></pre>
-      <p class="small ok-text" style="color:var(--ok)">✓ Only one thread updates <code class="inline">sum</code> at a time.</p>
-    </div>
-  </div>
-  <div class="cols">
-    <div class="callout warn"><span class="lbl">Granularity</span>Locking every iteration <strong>serializes</strong> the loop — prefer a per-thread partial sum (a reduction!) and one lock at the end.</div>
-    <div class="callout"><span class="lbl">Open questions</span>What granularity to lock? How to build a lock that is both <strong>correct and fast</strong>? (later chapters)</div>
-  </div>
-</section>
-
-<!-- Barrier -->
-<section data-background-color="#ffffff">
-  <h2>Barriers &amp; Load Balance</h2>
-  <div class="cols w-64">
-    <div>
-      <div class="callout"><span class="lbl">Barrier</span>Global event sync — every thread blocks until the last one arrives, then all proceed.</div>
-      <div class="callout warn"><span class="lbl">Cost = slowest thread</span>
-        A barrier's wall-clock time is set by the <strong>slowest</strong> thread, so <strong>load balance is critical</strong>.</div>
-      <p class="small"><strong>Artificial</strong> imbalance also arises from <em>context switching</em> — a thread swapped out mid-region stalls everyone at the barrier. Mitigate with <strong>gang scheduling</strong> (co-schedule all of a job's threads together).</p>
-    </div>
-    <div class="center">
-      <svg viewBox="0 0 220 200" class="chart" style="max-width:280px">
-        <line x1="180" y1="14" x2="180" y2="186" stroke="#CC0000" stroke-width="2" stroke-dasharray="5 4"/>
-        <text x="180" y="12" text-anchor="middle" class="note" style="fill:#CC0000">barrier</text>
-        <!-- 4 thread bars of differing length -->
-        <g>
-          <rect x="20" y="36" width="120" height="18" rx="4" fill="#3b82f6"/><text x="14" y="49" text-anchor="end" class="lbl">T0</text>
-          <rect x="140" y="36" width="40" height="18" rx="4" fill="#cbd5e1"/>
-          <rect x="20" y="70" width="158" height="18" rx="4" fill="#3b82f6"/><text x="14" y="83" text-anchor="end" class="lbl">T1</text>
-          <rect x="20" y="104" width="90" height="18" rx="4" fill="#3b82f6"/><text x="14" y="117" text-anchor="end" class="lbl">T2</text>
-          <rect x="110" y="104" width="70" height="18" rx="4" fill="#cbd5e1"/>
-          <rect x="20" y="138" width="140" height="18" rx="4" fill="#3b82f6"/><text x="14" y="151" text-anchor="end" class="lbl">T3</text>
-          <rect x="160" y="138" width="20" height="18" rx="4" fill="#cbd5e1"/>
-        </g>
-        <text x="100" y="180" text-anchor="middle" class="lbl">grey = idle, waiting on T1</text>
-      </svg>
-      <div class="src">Imbalance → wasted cycles at the barrier.</div>
-    </div>
-  </div>
-</section>
-
-<!-- Review 3.5 -->
-<section data-background-color="#f6f8fb">
-  <h2>Module 3.5 — Review</h2>
-  <div class="qa">
-    <p class="q">1. What synchronization primitives does a shared-memory system support?</p>
-    <div class="fragment"><div class="a"><strong>Lock</strong> (mutual exclusion), <strong>barrier</strong> (global event), and <strong>point-to-point</strong> (e.g. post/wait).</div></div>
-  </div>
-  <div class="qa">
-    <p class="q">2. Why is load balancing important when barriers are used?</p>
-    <div class="fragment"><div class="a">A parallel region's execution time is determined by the <strong>slowest thread</strong> — imbalance leaves everyone else idle at the barrier.</div></div>
-  </div>
-  <div class="qa">
-    <p class="q">3. What does gang scheduling solve — and not solve?</p>
-    <div class="fragment"><div class="a">It prevents the no-forward-progress stall when a thread is switched out, and frees CPUs for other work during a switch-out. It does <strong>not</strong> remove inherent load imbalance.</div></div>
-  </div>
-</section>
 
 <!-- Chapter summary -->
 <section data-background-color="#ffffff">
@@ -1127,12 +881,9 @@ for (i=start; i&lt;end; i++) {
     <div class="callout"><span class="lbl">3.2 Loop parallelism</span>DOALL, DOACROSS, function, DOPIPE — read the LDG to find them.</div>
     <div class="callout"><span class="lbl">3.3 Algorithm</span>Reorder (red-black) or relax (async) to beat code analysis.</div>
   </div>
-  <div class="cols">
-    <div class="callout"><span class="lbl">3.4 Variable scope</span>shared / private / reduction; privatization removes conflicts; express in OpenMP.</div>
-    <div class="callout"><span class="lbl">3.5 Synchronization</span>Point-to-point, locks, barriers — implemented with pthreads; mind load balance.</div>
-  </div>
+  <div class="callout"><span class="lbl">Next</span><span class="small">Variable scope and synchronization move to <strong>Lecture 7 — OpenMP in Practice</strong>.</span></div>
   <div class="callout takeaway"><span class="lbl">One sentence</span>
-    <strong>Find independent tasks, scope each variable correctly, and coordinate with the lightest synchronization that preserves the dependences.</strong> Get those three right and you have a correct shared-memory parallel program.</div>
+    <strong>Read the dependences, then pick the lightest restructuring that preserves them</strong> &#8212; DOALL where a level is free, DOACROSS or DOPIPE where it is not, and a different algorithm when code analysis is simply too pessimistic.</div>
   <p class="center muted small">Next up → mapping tasks to hardware for <em>performance</em>.</p>
 </section>
 
