@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CSC/ECE 506 · Chapter 3 — Shared Memory Parallel Programming</title>
+<title>CSC/ECE 506 · Lecture 5–6 — Shared Memory Parallel Programming</title>
 
 <!-- reveal.js core (CDN) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
@@ -24,10 +24,10 @@
 <!-- ============================ TITLE ============================ -->
 <section class="title-slide" data-background-color="#ffffff">
   <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
-  <h1>Chapter 3</h1>
+  <h1>Lecture 5–6</h1>
   <div class="sub">Shared Memory Parallel Programming — Finding, Expressing &amp; Synchronizing Tasks</div>
   <aside class="notes">
-    Chapter 3 is the "how do I actually parallelize a program" chapter. The goal: given source code,
+    Solihin's Chapter 3 is the "how do I actually parallelize a program" chapter. The goal: given source code,
     without knowing the algorithm, find parallel tasks; decide which variables each thread can touch;
     and coordinate threads with synchronization. We work mostly in the shared-memory model and express
     the result in OpenMP and pthreads.
@@ -572,25 +572,53 @@ for (i=1; i&lt;=N; i++)        // serial
   <div class="cols">
     <div>
       <div class="callout"><span class="lbl">post(x)</span>Increments the counter <code class="inline">m(x)</code> named by <code class="inline">x</code>.</div>
-      <div class="callout"><span class="lbl">wait(x)</span>Blocks while <code class="inline">m(x) ≤ 0</code>; when <code class="inline">m(x) &gt; 0</code> it unblocks and decrements.</div>
+      <div class="callout"><span class="lbl">wait(x)</span>Blocks while <code class="inline">m(x) &#8804; 0</code>; when <code class="inline">m(x) &gt; 0</code> it unblocks and decrements.</div>
       <p class="small">Names can be structured: <code class="inline">post(i+1)</code> / <code class="inline">wait(i)</code> chains successive iterations.</p>
     </div>
     <div>
-      <div class="code-label">DOACROSS in OpenMP 4.5+ (doacross loop)</div>
+      <div class="code-label">DOACROSS with post / wait</div>
+      <pre><code class="language-c" data-trim>
+post(0);                   // iteration 0 already satisfied
+for (i=1; i&lt;=N; i++) {     // DOACROSS loop
+  temp = b[i]*c[i];        // S1: independent &#8594; parallel
+  wait(i-1);               // need a[i-1]
+  a[i] = a[i-1] + temp;    // S2: carried dep
+  post(i);                 // release iteration i+1
+}
+</code></pre>
+      <p class="small">Only <strong>S2</strong> is serialized; every <code class="inline">S1</code> runs concurrently. Time <code class="inline">N&#183;(T<sub>S1</sub>+T<sub>S2</sub>)</code> &#8594; <code class="inline">T<sub>S1</sub> + N&#183;T<sub>S2</sub></code> &#8212; and <code class="inline">temp</code> is a scalar, so the <code class="inline">temp[]</code> array of the previous slide is gone.</p>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Idea</span>
+    Let the iterations overlap, then <em>re-serialize only the dependent statement</em> with point-to-point synchronization.</div>
+</section>
+
+<!-- DOACROSS in OpenMP -->
+<section data-background-color="#ffffff">
+  <h2>The Same DOACROSS in OpenMP</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">OpenMP 4.5+ doacross loop</div>
       <pre><code class="language-c" data-trim>
 #pragma omp parallel for ordered(1)
 for (i=1; i&lt;=N; i++) {
-  temp = b[i]*c[i];        // S1: independent → parallel
-  #pragma omp ordered depend(sink: i-1)   // ≡ wait(i-1)
+  temp = b[i]*c[i];        // S1: independent &#8594; parallel
+  #pragma omp ordered depend(sink: i-1)
   a[i] = a[i-1] + temp;    // S2: carried dep
-  #pragma omp ordered depend(source:)     // ≡ post(i)
+  #pragma omp ordered depend(source:)
 }
 </code></pre>
-      <p class="small"><code class="inline">ordered(1)</code> declares that <strong>1</strong> loop carries a dependence; <code class="inline">depend(sink:)</code>/<code class="inline">depend(source:)</code> are the <strong>wait</strong>/<strong>post</strong>. Time → <code class="inline">T<sub>S1</sub> + N·T<sub>S2</sub></code>; <code class="inline">temp</code> is <strong>per-thread</strong>.</p>
+      <p class="small"><code class="inline">ordered(1)</code> declares that <strong>1</strong> loop carries a dependence; <code class="inline">temp</code> is <strong>private</strong> per thread. <span class="src">[OpenMP 4.5 specification, <em>ordered</em> construct]</span></p>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">wait(i-1)</span>becomes <code class="inline">#pragma omp ordered depend(sink: i-1)</code></div>
+      <div class="callout"><span class="lbl">post(i)</span>becomes <code class="inline">#pragma omp ordered depend(source:)</code></div>
+      <div class="callout"><span class="lbl">post(0)</span>needs no counterpart &#8212; a <code class="inline">sink</code> naming an iteration outside the loop&#8217;s iteration space is ignored, so iteration 1 does not wait. <span class="src">[OpenMP 4.5 specification]</span></div>
     </div>
   </div>
-  <div class="callout"><span class="lbl">Note</span><span class="small"><strong>OpenMP 4.5 (2015) added the doacross loop</strong>, so DOACROSS <em>can</em> be expressed with directives — the textbook (pre-4.5) says it cannot. OpenMP <strong>5.2</strong> renames the clauses to <code class="inline">doacross(sink:)</code> / <code class="inline">doacross(source:)</code>. <span class="src">[OpenMP 4.5 / 5.2 specification]</span></span></div>
+  <div class="callout"><span class="lbl">Note</span><span class="small"><strong>OpenMP 4.5 (2015) added the doacross loop</strong>, so DOACROSS <em>can</em> be expressed with directives &#8212; the textbook (pre-4.5) says it cannot. OpenMP <strong>5.2</strong> renames the clauses to <code class="inline">doacross(sink:)</code> / <code class="inline">doacross(source:)</code>. <span class="src">[OpenMP 4.5 / 5.2 specification]</span></span></div>
 </section>
+
 
 <!-- Function parallelism / loop distribution -->
 <section data-background-color="#ffffff">
@@ -1073,7 +1101,7 @@ for (i=start; i&lt;end; i++) {
 
 <!-- Chapter summary -->
 <section data-background-color="#ffffff">
-  <h2>Chapter 3 — Big Picture</h2>
+  <h2>Lecture 5–6 — Big Picture</h2>
   <div class="cols c3">
     <div class="callout"><span class="lbl">3.1 Dependences</span>True/anti/output, loop-carried vs. -independent, ITG &amp; LDG.</div>
     <div class="callout"><span class="lbl">3.2 Loop parallelism</span>DOALL, DOACROSS, function, DOPIPE — read the LDG to find them.</div>
@@ -1098,7 +1126,7 @@ for (i=start; i&lt;end; i++) {
 </div>
 
 <!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
-<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 3 — Shared Memory Programming</div>
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Lecture 5–6 — Shared Memory Programming</div>
 </div>
 
 <!-- reveal.js core + plugins -->
