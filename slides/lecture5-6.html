@@ -29,7 +29,7 @@
   <aside class="notes">
     Solihin's Chapter 3 is the "how do I actually parallelize a program" chapter. The goal here: given source
     code, without knowing the algorithm, find the parallel tasks. We work in the shared-memory model and
-    express the result in OpenMP. Variable scope and synchronization follow in Lecture 7.
+    express the result in OpenMP. Task mapping is Lecture 7; variable scope and synchronization follow in Lecture 8.
   </aside>
 </section>
 
@@ -44,7 +44,7 @@
     <div class="callout"><span class="lbl">Module 3.3</span><strong>Algorithm-Level Parallelism</strong><br>
       <span class="small">When code analysis is too pessimistic — red/black ordering, asynchronous relaxation.</span></div>
   </div>
-  <div class="callout"><span class="lbl">Next lecture</span><span class="small">Variable scope (shared / private / reduction) and synchronization (locks, barriers, pthreads) are covered in <strong>Lecture 7 — OpenMP in Practice</strong>.</span></div>
+  <div class="callout"><span class="lbl">Next lecture</span><span class="small">Variable scope (shared / private / reduction) and synchronization (locks, barriers, pthreads) are covered in <strong>Lecture 8 — OpenMP in Practice</strong>.</span></div>
   <div class="callout takeaway"><span class="lbl">The takeaway</span>
     Parallelization is two problems: <strong>correctness</strong> (find tasks, scope variables, synchronize) and <strong>performance</strong> (map tasks to hardware). This chapter is the correctness half.</div>
 </section>
@@ -881,10 +881,10 @@ while (!converged) {
     <div class="callout"><span class="lbl">3.2 Loop parallelism</span>DOALL, DOACROSS, function, DOPIPE — read the LDG to find them.</div>
     <div class="callout"><span class="lbl">3.3 Algorithm</span>Reorder (red-black) or relax (async) to beat code analysis.</div>
   </div>
-  <div class="callout"><span class="lbl">Next</span><span class="small">Variable scope and synchronization move to <strong>Lecture 7 — OpenMP in Practice</strong>.</span></div>
+  <div class="callout"><span class="lbl">Next</span><span class="small">Variable scope and synchronization move to <strong>Lecture 8 — OpenMP in Practice</strong>.</span></div>
   <div class="callout takeaway"><span class="lbl">One sentence</span>
     <strong>Read the dependences, then pick the lightest restructuring that preserves them</strong> &#8212; DOALL where a level is free, DOACROSS or DOPIPE where it is not, and a different algorithm when code analysis is simply too pessimistic.</div>
-  <p class="center muted small">Next up → mapping tasks to hardware for <em>performance</em>.</p>
+  <p class="center muted small">Next up → <strong>Lecture 7</strong>: mapping tasks to hardware for <em>performance</em>.</p>
 </section>
 
 
