@@ -432,27 +432,20 @@
         <tr><td><strong>Dynamic</strong>, chunk <code class="inline">k</code></td><td><code class="inline">schedule(dynamic, k)</code></td></tr>
         <tr><td>Dynamic, <em>shrinking</em> chunks</td><td><code class="inline">schedule(guided, k)</code></td></tr>
       </table>
-      <p class="small">With no chunk size, <code class="inline">static</code> gives each thread <strong>at most one</strong> approximately equal chunk &#8212; that is exactly block. Adding a chunk size makes the hand-out <strong>round-robin</strong>, which is block-cyclic. <span class="src">[OpenMP specification, <em>schedule</em> clause]</span></p>
+      <p class="small">No chunk size &#8594; <strong>one</strong> approximately equal chunk per thread, i.e. block; a chunk size makes the hand-out <strong>round-robin</strong>, i.e. block-cyclic.</p>
     </div>
     <div>
       <pre><code class="language-c" data-trim>
-// block: best locality, uniform work
-#pragma omp parallel for schedule(static)
-for (i=0; i&lt;n; i++)  uniform(i);
-
-// cyclic: best balance, worst locality
-#pragma omp parallel for schedule(static,1)
-for (i=0; i&lt;n; i++)  triangular(i);
-
-// dynamic: unpredictable work per iteration
-#pragma omp parallel for schedule(dynamic,4)
-for (i=0; i&lt;n; i++)  irregular(i);
+#pragma omp parallel for schedule(static)      // block
+#pragma omp parallel for schedule(static,1)    // cyclic
+#pragma omp parallel for schedule(dynamic,4)   // dynamic
+for (i=0; i&lt;n; i++)  work(i);
 </code></pre>
-      <div class="callout warn"><span class="lbl">Not covered by <code class="inline">schedule</code></span><span class="small">The <strong>row/column</strong> axis. <code class="inline">schedule</code> only distributes iterations of the loop you parallelized &#8212; <em>which</em> loop carries the <code class="inline">parallel for</code> is what decides row-wise vs. column-wise.</span></div>
+      <div class="callout warn"><span class="lbl">Not covered by <code class="inline">schedule</code></span><span class="small">The <strong>row/column</strong> axis. <code class="inline">schedule</code> only distributes iterations of the loop you parallelized &#8212; <em>which</em> loop carries the <code class="inline">parallel for</code> decides row- vs. column-wise.</span></div>
     </div>
   </div>
   <div class="callout takeaway"><span class="lbl">Same trade-off</span>
-    <code class="inline">static</code> &#8594; <code class="inline">static,k</code> &#8594; <code class="inline">static,1</code> walks the <strong>locality &#8594; balance</strong> dial of the previous slides; <code class="inline">dynamic</code> and <code class="inline">guided</code> buy balance for irregular work at the cost of runtime scheduling. <code class="inline">guided</code> is a heuristic compromise with no textbook counterpart.</div>
+    <code class="inline">static</code> &#8594; <code class="inline">static,k</code> &#8594; <code class="inline">static,1</code> walks the <strong>locality &#8594; balance</strong> dial of the previous slides; <code class="inline">dynamic</code>/<code class="inline">guided</code> buy balance for irregular work at the cost of runtime scheduling.</div>
 </section>
 
 <!-- Review Module 4 -->
