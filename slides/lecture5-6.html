@@ -441,30 +441,23 @@ for (i = 1; i &lt; N; i++)
 
 <!-- Finding tasks across iterations -->
 <section data-background-color="#ffffff">
-  <h2>Finding Tasks Across Iterations</h2>
-  <p class="small">A dependence must be <em>obeyed</em> (especially true dependences) — but gaps in the LDG are opportunities.</p>
+  <h2>DOALL: Loops with No Carried Dependence</h2>
+  <p class="small">A dependence must be <em>obeyed</em> (especially true dependences) &#8212; but gaps in the LDG are opportunities. DOALL is the extreme case: <em>no</em> edges at all.</p>
   <div class="cols">
     <div>
-      <div class="code-label">Stride-2 dependence</div>
+      <div class="code-label">The simplest DOALL</div>
       <pre><code class="language-c" data-trim>
-for (i=2; i&lt;=n; i++)
-  S: a[i] = a[i-2];
+for (i=1; i&lt;=n; i++)
+  S: a[i] = b[i] * c[i];
 </code></pre>
-      <p class="small"><code class="inline">a[i]</code> depends only on <code class="inline">a[i-2]</code> → even and odd indices never touch.</p>
     </div>
     <div>
-      <div class="code-label">Split into two independent tasks</div>
-      <pre><code class="language-c" data-trim>
-for (i=2; i&lt;=n; i+=2)   // even chain
-  S: a[i] = a[i-2];
-for (i=3; i&lt;=n; i+=2)   // odd chain
-  S: a[i] = a[i-2];
-</code></pre>
-      <p class="small ok-text" style="color:var(--ok)">✓ Two independent chains → run them on two threads.</p>
+      <div class="callout"><span class="lbl">Why</span>Iteration <code class="inline">i</code> writes only <code class="inline">a[i]</code> and reads only <code class="inline">b[i]</code>, <code class="inline">c[i]</code> &#8212; no iteration touches another&#8217;s data, so the LDG has <strong>no edges</strong>.</div>
+      <div class="callout"><span class="lbl">What you get</span><code class="inline">n</code> independent tasks, and the degree <strong>grows with the data size</strong> &#8212; the property that makes DOALL the most scalable form of parallelism.</div>
     </div>
   </div>
   <div class="callout takeaway"><span class="lbl">DOALL</span>
-    When a loop level has <strong>no loop-carried dependence</strong>, every iteration is independent — a <strong>DOALL</strong> loop, the gold standard. In <code class="inline">a[i][j]=a[i][j-1]+1</code> the carried dependence is on <code class="inline">j</code>, so the <strong>outer <code class="inline">i</code> loop</strong> is DOALL: <code class="inline">n</code> independent tasks (one per <code class="inline">i</code>), each running its <code class="inline">j</code> chain serially.</div>
+    A loop level with <strong>no loop-carried dependence</strong> &#8212; every iteration of <em>that level</em> runs independently. The level need not be the innermost: in <code class="inline">a[i][j]=a[i][j-1]+1</code> the carried dependence is on <code class="inline">j</code>, so the <strong>outer <code class="inline">i</code> loop</strong> is DOALL &#8212; <code class="inline">n</code> independent tasks, each running its <code class="inline">j</code> chain serially.</div>
 </section>
 
 <!-- Anti-diagonal example -->
@@ -676,7 +669,7 @@ for (i=0; i&lt;n; i++)       // task B
     </div>
     <div>
       <div class="callout"><span class="lbl">sections vs. for</span>
-        <code class="inline">omp for</code> splits <em>one</em> loop's iterations across threads (data parallelism); <code class="inline">omp sections</code> hands <em>each named block</em> to a thread — the natural fit for <strong>function parallelism</strong> like the two distributed loops (task A / task B) on the previous slide.</div>
+        <code class="inline">omp for</code> splits <em>one</em> loop's iterations across threads; <code class="inline">omp sections</code> hands <em>each named block</em> to a thread. Sections is the mechanism for <strong>function parallelism</strong> (task A / task B on the previous slide) — and also for a <strong>DOALL whose iterations have different loop bounds</strong>, like the even/odd chains here: same code, disjoint index sets, but a single <code class="inline">omp for</code> over <code class="inline">i</code> would violate the dependence.</div>
       <div class="callout warn"><span class="lbl">Degree</span>Parallelism is capped by the <strong>number of sections</strong> you write — here just 2 — so it does <em>not</em> grow with <code class="inline">n</code>.</div>
     </div>
   </div>
@@ -749,6 +742,26 @@ for (i=2; i&lt;=N; i++) {    // stage 2
         <li><strong>Function</strong> — parallelism between independent code sections (e.g. distributed loops).</li>
         <li><strong>DOPIPE</strong> — parallelism between <em>dependent statements</em> in a loop, software-pipelined with synchronization.</li>
       </ul></div></div>
+  </div>
+</section>
+
+<section data-background-color="#f6f8fb">
+  <h2>Module 3.2 &#8212; Review</h2>
+  <div class="qa">
+    <p class="q">Is this loop DOALL? If not, can you still extract parallelism &#8212; and how much?</p>
+    <pre><code class="language-c" data-trim>
+for (i=2; i&lt;=n; i++)
+  S: a[i] = a[i-2];
+</code></pre>
+    <div class="fragment"><div class="a">
+      <p class="small" style="margin:0 0 .5em">Not as written &#8212; the <code class="inline">i</code> loop carries a true dependence of distance 2. But <code class="inline">a[i]</code> reads only <code class="inline">a[i-2]</code>, so even and odd indices never touch: split by parity, and the loop <em>over the two chains</em> has no carried dependence.</p>
+      <pre><code class="language-c" data-trim>
+doall (c=0; c&lt;2; c++)        // no carried dependence at this level
+  for (i=2+c; i&lt;=n; i+=2)
+    S: a[i] = a[i-2];        // still serial within a chain
+</code></pre>
+      <p class="small" style="margin:.5em 0 0">The dependence survives <em>inside</em> each chain but <strong>not between</strong> them, so you get <strong>2</strong> independent tasks &#8212; not <code class="inline">n</code>. The degree stays 2 however large <code class="inline">n</code> is.</p>
+    </div></div>
   </div>
 </section>
 
