@@ -418,6 +418,43 @@
     Task mapping = <strong>static/dynamic</strong> &times; <strong>block/cyclic/block-cyclic</strong> &times; <strong>row/column dimension</strong>, all judged by <strong>load balance</strong> and <strong>data locality</strong>.</div>
 </section>
 
+<!-- Task mapping in OpenMP -->
+<section data-background-color="#ffffff">
+  <h2>The Same Choices in OpenMP: <code class="inline">schedule</code></h2>
+  <p class="small">On <code class="inline">#pragma omp parallel for</code>, the <code class="inline">schedule</code> clause <em>is</em> the distribution taxonomy above &#8212; the same decisions, in directive form. <span class="src">[OpenMP specification, <em>schedule</em> clause]</span></p>
+  <div class="cols w-64">
+    <div>
+      <table>
+        <tr><th>Mapping choice</th><th>OpenMP clause</th></tr>
+        <tr><td><strong>Block</strong>, static (block size <code class="inline">n/p</code>)</td><td><code class="inline">schedule(static)</code></td></tr>
+        <tr><td><strong>Cyclic</strong>, static (block size 1)</td><td><code class="inline">schedule(static, 1)</code></td></tr>
+        <tr><td><strong>Block-cyclic</strong>, static (block size <code class="inline">k</code>)</td><td><code class="inline">schedule(static, k)</code></td></tr>
+        <tr><td><strong>Dynamic</strong>, chunk <code class="inline">k</code></td><td><code class="inline">schedule(dynamic, k)</code></td></tr>
+        <tr><td>Dynamic, <em>shrinking</em> chunks</td><td><code class="inline">schedule(guided, k)</code></td></tr>
+      </table>
+      <p class="small">With no chunk size, <code class="inline">static</code> gives each thread <strong>at most one</strong> approximately equal chunk &#8212; that is exactly block. Adding a chunk size makes the hand-out <strong>round-robin</strong>, which is block-cyclic. <span class="src">[OpenMP specification, <em>schedule</em> clause]</span></p>
+    </div>
+    <div>
+      <pre><code class="language-c" data-trim>
+// block: best locality, uniform work
+#pragma omp parallel for schedule(static)
+for (i=0; i&lt;n; i++)  uniform(i);
+
+// cyclic: best balance, worst locality
+#pragma omp parallel for schedule(static,1)
+for (i=0; i&lt;n; i++)  triangular(i);
+
+// dynamic: unpredictable work per iteration
+#pragma omp parallel for schedule(dynamic,4)
+for (i=0; i&lt;n; i++)  irregular(i);
+</code></pre>
+      <div class="callout warn"><span class="lbl">Not covered by <code class="inline">schedule</code></span><span class="small">The <strong>row/column</strong> axis. <code class="inline">schedule</code> only distributes iterations of the loop you parallelized &#8212; <em>which</em> loop carries the <code class="inline">parallel for</code> is what decides row-wise vs. column-wise.</span></div>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Same trade-off</span>
+    <code class="inline">static</code> &#8594; <code class="inline">static,k</code> &#8594; <code class="inline">static,1</code> walks the <strong>locality &#8594; balance</strong> dial of the previous slides; <code class="inline">dynamic</code> and <code class="inline">guided</code> buy balance for irregular work at the cost of runtime scheduling. <code class="inline">guided</code> is a heuristic compromise with no textbook counterpart.</div>
+</section>
+
 <!-- Review Module 4 -->
 <section data-background-color="#f6f8fb">
   <h2>Module 4 — Review</h2>
