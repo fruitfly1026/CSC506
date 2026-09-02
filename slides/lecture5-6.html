@@ -466,6 +466,13 @@ for (i=1; i&lt;=n; i++)
   <div class="cols w-64">
     <div>
       <p class="small">In the 5-point stencil, each edge is a true+anti dependence — but within any <strong>anti-diagonal</strong> the nodes do not depend on one another.</p>
+      <div class="code-label">Sequential 5-point stencil</div>
+      <pre><code class="language-c" data-trim>
+for (i=1; i&lt;=n; i++)
+  for (j=1; j&lt;=n; j++)
+    S1: a[i][j] = a[i][j-1] + a[i][j+1]
+               + a[i-1][j] + a[i+1][j];
+</code></pre>
       <div class="callout"><span class="lbl">Idea</span>Iterate <em>over anti-diagonals</em> (serially), parallelizing the points <em>within</em> each one.</div>
       <div class="code-label">Restructured shape</div>
       <pre><code class="language-c" data-trim>
