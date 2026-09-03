@@ -38,13 +38,15 @@
 <!-- Roadmap -->
 <section data-background-color="#ffffff">
   <h2>Roadmap</h2>
-  <div class="cols c3">
+  <div class="cols">
     <div class="callout"><span class="lbl">Module A</span><strong>Performance Metrics</strong><br>
       <span class="small">Execution time, <strong>speedup</strong>, <strong>efficiency</strong>, and <strong>cost</strong> — the language we use to judge parallel programs.</span></div>
     <div class="callout"><span class="lbl">Module B</span><strong>Scalability</strong><br>
       <span class="small"><strong>Strong vs. weak scaling</strong> — <strong>Amdahl's</strong> and <strong>Gustafson's</strong> laws, parallel overhead, the summing example, and <strong>isoefficiency</strong>.</span></div>
     <div class="callout"><span class="lbl">Module C</span><strong>Reducing Overhead</strong><br>
       <span class="small">Matmul case study — the computation–communication ratio and how <em>blocking</em> fixes it.</span></div>
+    <div class="callout"><span class="lbl">Module D</span><strong>The Roofline Model</strong><br>
+      <span class="small">Arithmetic intensity, the <strong>ridge point</strong>, and telling <strong>memory-bound</strong> from <strong>compute-bound</strong>.</span></div>
   </div>
   <div class="cols">
     <div class="callout takeaway"><span class="lbl">The takeaway</span>
@@ -857,6 +859,87 @@ for (i = 0; i &lt; n; i++)
 </section>
 
 <!-- ==================================================================
+     MODULE D — THE ROOFLINE MODEL
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module D</div>
+  <div class="mod-title">The Roofline Model</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can&#8230;</h4>
+    <ul>
+      <li>Compute a kernel&#8217;s <strong>arithmetic intensity</strong> <code class="inline">I</code> in flop/byte</li>
+      <li>Read a <strong>roofline</strong> and locate the <strong>ridge point</strong></li>
+      <li>Decide whether a kernel is <strong>memory-bound</strong> or <strong>compute-bound</strong>, and say what its ceiling is</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Roofline -->
+<section data-background-color="#ffffff">
+  <h2>The Roofline Model</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">Two machine numbers bound any kernel: <strong>peak compute</strong> <code class="inline">&pi;</code> (flop/s) and <strong>peak bandwidth</strong> <code class="inline">&beta;</code> (byte/s). One kernel number connects them: <strong>arithmetic intensity</strong> <code class="inline">I</code> = flops per byte moved from memory.</p>
+      <div class="eq">\( P \;=\; \min\bigl(\pi,\; \beta \times I\bigr) \)</div>
+      <p class="small"><code class="inline">P</code> is the <strong>attainable</strong> performance. You are limited by whichever roof is lower at your intensity. <span class="src">[Williams, Waterman &amp; Patterson, CACM 2009; Wikipedia, <em>Roofline model</em>]</span></p>
+      <div class="callout"><span class="lbl">Ridge point</span><span class="small">Where the sloped roof meets the flat one: <code class="inline">I = &pi;/&beta;</code>. It is the <strong>minimum intensity needed to reach peak compute</strong>, and a compact summary of the machine&#8217;s balance.</span></div>
+      <div class="callout warn"><span class="lbl">Which side are you on?</span><span class="small"><code class="inline">I &lt; &pi;/&beta;</code> &#8658; <strong>memory-bound</strong>, ceiling <code class="inline">&beta;I</code>. &nbsp;<code class="inline">I &gt; &pi;/&beta;</code> &#8658; <strong>compute-bound</strong>, ceiling <code class="inline">&pi;</code>.</span></div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 300 230" class="chart" style="max-width:330px">
+        <line x1="42" y1="196" x2="286" y2="196" stroke="#0f172a" stroke-width="1.5"/>
+        <line x1="42" y1="196" x2="42" y2="26" stroke="#0f172a" stroke-width="1.5"/>
+        <text x="164" y="220" text-anchor="middle" class="lbl">arithmetic intensity I (flop/byte, log)</text>
+        <text x="16" y="112" text-anchor="middle" class="lbl" transform="rotate(-90 16 112)">attainable P (log)</text>
+        <line x1="42" y1="186" x2="176" y2="58" stroke="#b91c1c" stroke-width="3"/>
+        <line x1="176" y1="58" x2="286" y2="58" stroke="#b91c1c" stroke-width="3"/>
+        <text x="232" y="48" text-anchor="middle" class="lbl" fill="#b91c1c">peak compute &pi;</text>
+        <text x="74" y="112" class="lbl" fill="#b91c1c" transform="rotate(-44 74 112)">slope = &beta;</text>
+        <circle cx="176" cy="58" r="5" fill="#b91c1c"/>
+        <text x="182" y="80" class="lbl">ridge point I = &pi;/&beta;</text>
+        <line x1="96" y1="196" x2="96" y2="134" stroke="#1d4ed8" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <circle cx="96" cy="134" r="5" fill="#1d4ed8"/>
+        <line x1="42" y1="134" x2="96" y2="134" stroke="#1d4ed8" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text x="96" y="212" text-anchor="middle" class="lbl" fill="#1d4ed8">SpMV</text>
+        <text x="100" y="126" class="lbl" fill="#1d4ed8">ceiling = &beta;I</text>
+      </svg>
+      <div class="src">Left of the ridge the bandwidth roof binds; right of it, compute does.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Roofline applied -->
+<section data-background-color="#ffffff">
+  <h2>Applying It: Why SpMV Is Memory-Bound</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">CSR SpMV inner loop</div>
+      <pre><code class="language-c" data-trim>
+for (k = row_ptr[i]; k &lt; row_ptr[i+1]; k++)
+  sum += vals[k] * x[col_idx[k]];
+</code></pre>
+      <p class="small">Per nonzero: <strong>2 flops</strong> (one multiply, one add). Bytes moved, at 4 bytes each: <code class="inline">vals[k]</code>, <code class="inline">col_idx[k]</code>, and the indirect <code class="inline">x[col_idx[k]]</code> &#8212; whose access is irregular, so assume no reuse.</p>
+      <div class="eq small">\( I \;=\; \dfrac{2\ \text{flop}}{12\ \text{byte}} \;\approx\; 0.17 \)</div>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Where that lands</span><span class="small">Real nodes have <code class="inline">&pi;/&beta;</code> of roughly <strong>5&#8211;20</strong> flop/byte, so <code class="inline">0.17</code> sits <strong>far left of the ridge</strong>. The ceiling is <code class="inline">&beta; &times; 0.17</code> &#8212; a small fraction of peak compute, no matter how many cores you add.</span></div>
+      <div class="callout ok"><span class="lbl">What this tells you to do</span><span class="small">Adding <strong>flops</strong> is free; adding <strong>traffic</strong> is not. Optimizations that pay: reuse <code class="inline">x</code> in cache, shrink the index type, avoid padding. Optimizations that do not: vectorizing the multiply.</span></div>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Why it belongs here</span>
+    Amdahl bounds you by the <strong>program</strong>&#8217;s serial fraction; roofline bounds you by the <strong>machine</strong>&#8217;s balance &#8212; a kernel can be perfectly parallel and still stuck. Falling short of even the <em>bandwidth</em> roof means you are not streaming well: poor locality or load imbalance. That measurement is Programming Assignment 1.</div>
+</section>
+
+<!-- Review D -->
+<section data-background-color="#f6f8fb">
+  <h2>Module D &#8212; Review</h2>
+  <div class="qa">
+    <p class="q">A node has <code class="inline">&pi; = 400</code> GFLOP/s and <code class="inline">&beta; = 100</code> GB/s. Where is the ridge point, and what is the ceiling for a kernel with <code class="inline">I = 0.5</code> flop/byte?</p>
+    <div class="fragment"><div class="a"><span class="small">Ridge point <code class="inline">I = &pi;/&beta; = 400/100 = <strong>4</strong></code> flop/byte. Since <code class="inline">0.5 &lt; 4</code>, the kernel is <strong>memory-bound</strong>: <code class="inline">P = &beta;I = 100 &times; 0.5 = <strong>50</strong></code> GFLOP/s &#8212; <strong>12.5%</strong> of peak. Doubling the core count moves nothing; doubling the bandwidth doubles the ceiling.</span></div></div>
+  </div>
+</section>
+
+<!-- ==================================================================
      SUMMARY
      ================================================================== -->
 <section data-background-color="#ffffff">
@@ -866,6 +949,7 @@ for (i = 0; i &lt; n; i++)
     <div class="callout"><span class="lbl">B · Metrics</span>Time, speedup (vs. <em>best</em> sequential), efficiency \(E = S/p\), cost \(C = p\,T_P\).</div>
     <div class="callout"><span class="lbl">C · Scalability</span>Keep efficiency up as p <em>and</em> W grow; isoefficiency \(W = K\,T(W,p)\) quantifies it.</div>
   </div>
+  <div class="callout"><span class="lbl">D · Roofline</span>The machine also bounds you: \(P = \min(\pi,\ \beta I)\). Left of the ridge \(\pi/\beta\) you are <strong>memory-bound</strong> — SpMV, at \(I \approx 0.17\), always is.</div>
   <div class="callout takeaway"><span class="lbl">One sentence</span>
     Reduce overhead by optimizing communication — <strong>fewer, bigger messages</strong> → better computation–communication ratio. The rest of the course (coherence, consistency, interconnect) is all about <strong>managing this overhead</strong>.</div>
 </section>
@@ -877,6 +961,8 @@ for (i = 0; i &lt; n; i++)
     A. Grama, A. Gupta, G. Karypis, V. Kumar, <em>Introduction to Parallel Computing</em>, 2nd ed., Addison-Wesley, 2003 — speedup/efficiency/cost, isoefficiency, the summing example, and the &alpha;/&beta; communication model.</div>
   <div class="callout"><span class="lbl">Course textbook</span>
     Yan Solihin, <em>Fundamentals of Parallel Multicore Architecture</em>, CRC Press — course textbook (Amdahl's law, parallel overhead).</div>
+  <div class="callout"><span class="lbl">Roofline model</span>
+    S. Williams, A. Waterman, D. Patterson, &#8220;Roofline: An Insightful Visual Performance Model for Multicore Architectures,&#8221; <em>Communications of the ACM</em> 52(4), 2009. Summary and formulation also at <code class="inline">en.wikipedia.org/wiki/Roofline_model</code>.</div>
   <div class="callout"><span class="lbl">Allocation / accounting</span>
     Service-unit (SU) charging follows cluster-accounting conventions (e.g. ACCESS / XSEDE allocation policies); the "priority" multiplier is site-specific.</div>
   <p class="src">Diagrams and charts were re-drawn for these slides; see the references for the full derivations and exercises.</p>
