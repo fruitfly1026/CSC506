@@ -660,6 +660,7 @@ for (i=0; i&lt;n; i++)       // task B
   S4: d[i] = d[i-1]*d[i];
 </code></pre>
       <p class="small ok-text" style="color:var(--ok)">✓ Each loop is a parallel <strong>task</strong> — run A and B concurrently.</p>
+      <p class="small"><code class="inline">W = 4n</code>; task A takes <code class="inline">3n</code>, task B takes <code class="inline">n</code> &#8658; <strong>peak = average degree = 2</strong>, speedup <code class="inline">= 4n / 3n =</code> <strong>4/3</strong>. The degree is <strong>fixed at the number of tasks</strong> &#8212; it does <em>not</em> grow with <code class="inline">n</code> &#8212; and the split is <strong>unbalanced</strong> (3 statements vs 1), which is what caps the speedup.</p>
     </div>
   </div>
   <p class="tiny muted"><code class="inline">S1[i] A S2[i+1]</code> only requires all S1's finish before any S2 of a later iteration — preserved within task A's order.</p>
@@ -743,7 +744,7 @@ for (i=2; i&lt;=N; i++) {    // stage 2
   c[i] = c[i] + a[i];
 }
 </code></pre>
-      <p class="small">Stage 2 consumes <code class="inline">a[i]</code> as soon as stage 1 posts it — the two stages overlap like a pipeline.</p>
+      <p class="small">Stage 2 consumes <code class="inline">a[i]</code> as soon as stage 1 posts it — the two stages overlap like a pipeline.<br><code class="inline">W = 2(N&#8722;1)</code>, <code class="inline">D = N</code> &#8658; <strong>peak = average degree = 2</strong> (one per stage), speedup <code class="inline">= (2N&#8722;2)/N &#8594;</code> <strong>2</strong> &#8212; capped by the serial <code class="inline">a[]</code> recurrence in stage 1, not by the processor count. With <code class="inline">k</code> balanced stages the degree would be <code class="inline">k</code>.</p>
     </div>
   </div>
   <div class="callout"><span class="lbl">In OpenMP 4.5+</span><span class="small">Realize the stages with <strong>task dependences</strong> — <code class="inline">#pragma omp task depend(out: a[i])</code> for stage 1, <code class="inline">#pragma omp task depend(in: a[i])</code> for stage 2 — and the runtime overlaps them (no manual post/wait). Like DOACROSS, the textbook predates this. <span class="src">[OpenMP 4.5+ task depend]</span></span></div>
