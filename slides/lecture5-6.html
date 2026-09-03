@@ -750,6 +750,43 @@ for (i=2; i&lt;=N; i++) {    // stage 2
   <div class="callout"><span class="lbl">In OpenMP 4.5+</span><span class="small">Realize the stages with <strong>task dependences</strong> — <code class="inline">#pragma omp task depend(out: a[i])</code> for stage 1, <code class="inline">#pragma omp task depend(in: a[i])</code> for stage 2 — and the runtime overlaps them (no manual post/wait). Like DOACROSS, the textbook predates this. <span class="src">[OpenMP 4.5+ task depend]</span></span></div>
 </section>
 
+<!-- Inflating the peak degree buys nothing -->
+<section data-background-color="#ffffff">
+  <h2>Inflating the Peak Degree Buys Nothing</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">The DOPIPE from the previous slide</div>
+      <pre><code class="language-c" data-trim>
+for (i=2; i&lt;=N; i++) { a[i]=a[i-1]+b[i]; post(i); }
+for (i=2; i&lt;=N; i++) { wait(i); c[i]=c[i]+a[i]; }
+</code></pre>
+      <div class="code-label">Push harder &#8212; hoist each stage&#8217;s independent work</div>
+      <pre><code class="language-c" data-trim>
+for (i=2; i&lt;=N; i++) {        // stage 1 as DOACROSS
+  t = b[i];                   // independent: starts at once
+  wait(i-1); a[i]=a[i-1]+t; post(i);
+}
+forall (i=2; i&lt;=N; i++) {     // stage 2 as DOALL
+  u = c[i];                   // independent: starts at once
+  wait_a(i); c[i] = u + a[i];
+}
+</code></pre>
+    </div>
+    <div>
+      <table>
+        <tr><th>Version</th><th>Peak</th><th>Avg = S<sub>&#8734;</sub></th><th>Threads</th><th>E</th></tr>
+        <tr><td>DOPIPE, two sequential stages</td><td><strong>2</strong></td><td><strong>2</strong></td><td>2</td><td>&#8776; 1</td></tr>
+        <tr><td>+ stage 1 as DOACROSS</td><td><strong>N</strong></td><td><strong>2</strong></td><td>N</td><td>2/N</td></tr>
+        <tr><td>+ stage 2 as DOALL too</td><td><strong>2N</strong></td><td><strong>2</strong></td><td>2N</td><td>1/N</td></tr>
+      </table>
+      <p class="small"><code class="inline">W = 2(N&#8722;1)</code> and <code class="inline">D = N</code> in <strong>every</strong> row &#8212; no work was removed and no chain was shortened, so <code class="inline">S<sub>&#8734;</sub> = W/D</code> cannot move.</p>
+      <div class="callout warn"><span class="lbl">And it runs slower</span><span class="small">2N threads means 2N creations and 2N sync counters. With <code class="inline">T<sub>o</sub> = p&#183;T<sub>P</sub> &#8722; T<sub>S</sub></code>, overhead grows linearly in <code class="inline">p</code> while <code class="inline">T<sub>P</sub></code> stands still. <span class="src">[Lecture 3]</span></span></div>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The moral</span>
+    <strong>Peak degree can be inflated by rewriting; the average cannot.</strong> Every &#8220;more parallel&#8221; version above spawns more threads to reach the same ceiling of 2. Shortening <code class="inline">D</code> needs a different <strong>algorithm</strong> &#8212; Module 3.3.</div>
+</section>
+
 <!-- Review 3.2 -->
 <section data-background-color="#f6f8fb">
   <h2>Module 3.2 — Review</h2>
