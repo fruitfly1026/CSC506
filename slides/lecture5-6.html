@@ -757,8 +757,12 @@ for (i=2; i&lt;=N; i++) {    // stage 2
     <div>
       <div class="code-label">The DOPIPE from the previous slide</div>
       <pre><code class="language-c" data-trim>
-for (i=2; i&lt;=N; i++) { a[i]=a[i-1]+b[i]; post(i); }
-for (i=2; i&lt;=N; i++) { wait(i); c[i]=c[i]+a[i]; }
+for (i=2; i&lt;=N; i++) {        // stage 1
+  a[i] = a[i-1] + b[i];  post(i);
+}
+for (i=2; i&lt;=N; i++) {        // stage 2
+  wait(i);  c[i] = c[i] + a[i];
+}
 </code></pre>
       <div class="code-label">Push harder &#8212; hoist each stage&#8217;s independent work</div>
       <pre><code class="language-c" data-trim>
