@@ -433,10 +433,28 @@ for (i = 1; i &lt; N; i++)
   </div>
 </section>
 
+<!-- Measuring parallelism: peak vs average degree -->
+<section data-background-color="#ffffff">
+  <h2>How Much Parallelism Is There?</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Work &nbsp;W</span><span class="small">Total operations = time on <strong>one</strong> processor, <code class="inline">T<sub>1</sub></code>.</span></div>
+      <div class="callout"><span class="lbl">Critical path &nbsp;D</span><span class="small">Longest chain that must run <strong>in order</strong> = time on <strong>unlimited</strong> processors, <code class="inline">T<sub>&#8734;</sub></code>.</span></div>
+      <div class="callout ok"><span class="lbl">Degree of parallelism</span><span class="small"><strong>Peak</strong> = most tasks runnable at one instant. &nbsp;&#183;&nbsp; <strong>Average</strong> = <code class="inline">W / D</code>.</span></div>
+    </div>
+    <div>
+      <div class="eq">\( S_{\infty} \;=\; \dfrac{T_1}{T_{\infty}} \;=\; \dfrac{W}{D} \;=\; \overline{\text{degree}} \)</div>
+      <div class="callout warn"><span class="lbl">Amdahl is this formula</span><span class="small">Serial fraction <code class="inline">s</code> &#8658; <code class="inline">W = 1</code>, <code class="inline">D = s</code> &#8658; <code class="inline">S<sub>&#8734;</sub> = 1/s</code>. <span class="src">[Lecture 3]</span></span></div>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Which number to use</span>
+    <strong>Peak</strong> tells you how many threads <em>start</em>; <strong>average</strong> tells you how many are <em>worth having</em> &#8212; the gap is parallelism that waits. The ceiling is the <strong>average</strong>, never the peak. <span class="src">[standard work&#8211;depth (work&#8211;span) model; Brent's theorem]</span></div>
+</section>
+
 <!-- Finding tasks across iterations -->
 <section data-background-color="#ffffff">
   <h2>DOALL: Loops with No Carried Dependence</h2>
-  <p class="small">A dependence must be <em>obeyed</em> (especially true dependences) &#8212; but gaps in the LDG are opportunities. DOALL is the extreme case: <em>no</em> edges at all.</p>
+  <p class="small">Gaps in the LDG are opportunities; DOALL is the extreme case &#8212; <em>no</em> edges at all.</p>
   <div class="cols">
     <div>
       <div class="code-label">The simplest DOALL</div>
@@ -446,12 +464,12 @@ for (i=1; i&lt;=n; i++)
 </code></pre>
     </div>
     <div>
-      <div class="callout"><span class="lbl">Why</span>Iteration <code class="inline">i</code> writes only <code class="inline">a[i]</code> and reads only <code class="inline">b[i]</code>, <code class="inline">c[i]</code> &#8212; no iteration touches another&#8217;s data, so the LDG has <strong>no edges</strong>.</div>
-      <div class="callout"><span class="lbl">What you get</span><code class="inline">n</code> independent tasks, and the degree <strong>grows with the data size</strong> &#8212; the property that makes DOALL the most scalable form of parallelism.</div>
+      <div class="callout"><span class="lbl">Why</span>Iteration <code class="inline">i</code> touches no other iteration&#8217;s data, so the LDG has <strong>no edges</strong>.</div>
+      <div class="callout"><span class="lbl">What you get</span><code class="inline">W = n</code>, <code class="inline">D = 1</code> &#8658; <strong>peak = average = n</strong>, so <code class="inline">S<sub>&#8734;</sub> = n</code>. Peak equals average &#8212; nothing waits. The degree <strong>grows with the data size</strong>, which is what makes DOALL the most scalable form.</div>
     </div>
   </div>
   <div class="callout takeaway"><span class="lbl">DOALL</span>
-    A loop level with <strong>no loop-carried dependence</strong> &#8212; every iteration of <em>that level</em> runs independently. The level need not be the innermost: in <code class="inline">a[i][j]=a[i][j-1]+1</code> the carried dependence is on <code class="inline">j</code>, so the <strong>outer <code class="inline">i</code> loop</strong> is DOALL &#8212; <code class="inline">n</code> independent tasks, each running its <code class="inline">j</code> chain serially.</div>
+    A loop level with <strong>no loop-carried dependence</strong> &#8212; every iteration of <em>that level</em> runs independently. Not necessarily the innermost: in <code class="inline">a[i][j]=a[i][j-1]+1</code> the dependence is carried by <code class="inline">j</code>, so the <strong>outer <code class="inline">i</code> loop</strong> is DOALL.</div>
 </section>
 
 <!-- Anti-diagonal example -->
@@ -580,7 +598,7 @@ for (i=1; i&lt;=N; i++) {     // DOACROSS loop
   post(i);                 // release iteration i+1
 }
 </code></pre>
-      <p class="small">Only <strong>S2</strong> is serialized; every <code class="inline">S1</code> runs concurrently. Time <code class="inline">N&#183;(T<sub>S1</sub>+T<sub>S2</sub>)</code> &#8594; <code class="inline">T<sub>S1</sub> + N&#183;T<sub>S2</sub></code> &#8212; and <code class="inline">temp</code> is a scalar, so the <code class="inline">temp[]</code> array of the previous slide is gone.</p>
+      <p class="small">Only <strong>S2</strong> is serialized; every <code class="inline">S1</code> runs concurrently, and <code class="inline">temp</code> is a scalar so the <code class="inline">temp[]</code> array of the previous slide is gone.<br><code class="inline">W = N(T<sub>S1</sub>+T<sub>S2</sub>)</code>, <code class="inline">D = T<sub>S1</sub> + N&#183;T<sub>S2</sub></code> &#8658; <strong>peak degree = N</strong> (all iterations start at once) but <strong>average = S<sub>&#8734;</sub> = 1 + T<sub>S1</sub>/T<sub>S2</sub> = 2</strong> when the two cost the same &#8212; the rest sit in <code class="inline">wait</code>.</p>
     </div>
   </div>
   <div class="callout takeaway"><span class="lbl">Idea</span>
