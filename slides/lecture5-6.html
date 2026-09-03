@@ -602,7 +602,7 @@ for (i=1; i&lt;=N; i++) {     // DOACROSS loop
     </div>
   </div>
   <div class="callout takeaway"><span class="lbl">Idea</span>
-    Let the iterations overlap, then <em>re-serialize only the dependent statement</em> with point-to-point synchronization.</div>
+    Let the iterations overlap, then <em>re-serialize only the dependent statement</em> with point-to-point synchronization. But the <strong>chain itself is untouched</strong>: <code class="inline">D</code> is still the <code class="inline">N</code>-long <code class="inline">a[]</code> recurrence, so the ceiling <code class="inline">1 + T<sub>S1</sub>/T<sub>S2</sub></code> measures exactly <em>how much work can be hoisted off the chain</em> &#8212; a statement with no independent work gains nothing from DOACROSS. Shortening the chain itself needs a different <strong>algorithm</strong> (Module 3.3).</div>
 </section>
 
 <!-- DOACROSS in OpenMP -->
