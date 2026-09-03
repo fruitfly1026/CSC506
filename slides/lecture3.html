@@ -726,6 +726,7 @@
 <!-- Matmul example -->
 <section data-background-color="#ffffff">
   <h2>Case Study: Matrix Multiply</h2>
+  <p class="small"><strong>Setting: message passing.</strong> Each PE has its own memory; anything it does not own must arrive as an explicit <strong>message</strong>. That is why the cost model below counts messages, not loads.</p>
   <div class="cols">
     <div>
       <p class="small">How would we parallelize this? Start with the serial triple-nested loop:</p>
@@ -877,6 +878,7 @@ for (i = 0; i &lt; n; i++)
 <!-- Roofline -->
 <section data-background-color="#ffffff">
   <h2>The Roofline Model</h2>
+  <p class="small"><strong>Setting: shared memory, one node.</strong> No messages now &#8212; every PE reaches the same memory, so the bottleneck moves from the <em>network</em> to the <strong>memory system</strong>.</p>
   <div class="cols w-64">
     <div>
       <p class="small">Two machine numbers bound any kernel: <strong>peak compute</strong> <code class="inline">&pi;</code> (flop/s) and <strong>peak bandwidth</strong> <code class="inline">&beta;</code> (byte/s). One kernel number connects them: <strong>operational intensity</strong> <code class="inline">I</code> = flops per <strong>byte of DRAM traffic</strong> &#8212; traffic left over <em>after</em> the caches have filtered it.</p>
