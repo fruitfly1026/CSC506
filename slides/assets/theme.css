@@ -42,7 +42,9 @@
 .reveal .slides > section {
   min-height: 720px;
   box-sizing: border-box;
-  padding: calc(var(--bar-h) + 24px) 52px 40px;
+  /* padding-top is counter-scaled by 1/--nc-fit so that after the zoom the gap
+     below the header bar is always exactly 24px, however much the slide shrank. */
+  padding: calc((var(--bar-h) + 24px) / var(--nc-fit, 1)) 52px 40px;
   /* Auto-fit: the script sets --nc-fit < 1 on any slide whose content would
      exceed 720px, shrinking ALL content (text, tables, SVG diagrams) to fit so
      nothing is cut off in true 16:9 fullscreen. zoom origin is the top-left. */

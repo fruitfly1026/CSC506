@@ -708,7 +708,9 @@ while(turn==0 &amp;&amp; interested[1]) {};
   function fit(s){ if(!s) return;
     s.style.setProperty('--nc-fit','1');           // reset, then measure natural height
     var h=s.scrollHeight;
-    if(h>724){ var k=Math.max(0.6, Math.min(1, 720/h));
+    /* padding-top (88px) is counter-scaled, so only h-88 shrinks:
+       88 + k*(h-88) <= 720  =>  k = 632/(h-88). */
+    if(h>724){ var k=Math.max(0.6, Math.min(1, 632/(h-88)));
       s.style.setProperty('--nc-fit', k.toFixed(3)); }
   }
   if(window.Reveal){
