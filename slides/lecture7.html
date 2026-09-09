@@ -28,7 +28,7 @@
   <div class="sub">Task Mapping — Work Distribution &amp; Performance</div>
   <div class="sub" style="display:block;font-size:.72em;opacity:.72;margin-top:.4em">(Chapter 3 in Yan Solihin's textbook)</div>
   <aside class="notes">
-    This deck is the performance half of parallelization. Chapter 3 built a <em>correct</em> parallel program:
+    This deck is the performance half of parallelization. Lectures 5&#8211;6 built a <em>correct</em> parallel program:
     it found tasks, scoped variables, and synchronized. Here we ask the next question — once the tasks exist,
     how do we assign and place them on real hardware so the program is fast? The running example is a dense
     matrix computation, and the tools are granularity control, blocking, and block/cyclic/block-cyclic distribution.
@@ -65,7 +65,7 @@
     <div class="callout"><span class="lbl">4 · Mapping</span><span class="small">Place threads onto <strong>physical cores</strong> for locality and speed.</span></div>
   </div>
   <div class="callout takeaway"><span class="lbl">This deck</span>
-    Chapter 3 handled decomposition + orchestration for <em>correctness</em>. Here the emphasis is <strong>assignment and mapping for performance</strong>: granularity, blocking, and how data is distributed across processors.</div>
+    Lectures 5&#8211;6 handled decomposition + orchestration for <em>correctness</em>. Here the emphasis is <strong>assignment and mapping for performance</strong>: granularity, blocking, and how data is distributed across processors.</div>
 </section>
 
 <!-- ==================================================================
@@ -478,7 +478,7 @@ for (i=0; i&lt;n; i++)  work(i);
   </div>
   <div class="callout takeaway"><span class="lbl">One sentence</span>
     <strong>Cut the work into right-sized tasks, block them to fit the cache, and distribute those blocks across processors to balance load while preserving locality.</strong> That is the performance half of parallelization.</div>
-  <p class="center muted small">Chapter 3 made it correct — this deck makes it fast.</p>
+  <p class="center muted small">Lectures 5&#8211;6 made it correct — this deck makes it fast.</p>
 </section>
 
 <!-- References -->
