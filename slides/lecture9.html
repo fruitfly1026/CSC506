@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CSC/ECE 506 · Chapter 6 — Introduction to Memory Hierarchy Organization</title>
+<title>CSC/ECE 506 · Lecture 9 — Introduction to Memory Hierarchy Organization</title>
 
 <!-- reveal.js core (CDN) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
@@ -24,10 +24,11 @@
 <!-- ============================ TITLE ============================ -->
 <section class="title-slide" data-background-color="#ffffff">
   <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
-  <h1>Chapter 6</h1>
+  <h1>Lecture 9</h1>
   <div class="sub">Introduction to Memory Hierarchy Organization</div>
+  <div class="sub" style="display:block;font-size:.72em;opacity:.72;margin-top:.4em">(Chapter 5 in Yan Solihin's textbook)</div>
   <aside class="notes">
-    Chapter 6 reviews the cache concepts from CDA 5106 and then extends them to the multicore setting.
+    Lecture 9 reviews the cache concepts from CDA 5106 and then extends them to the multicore setting.
     Three modules: (5.1) basic cache architecture — the ABCs of caches: placement, mapping, replacement,
     and write policy; (5.2) more basic architecture — inclusion, split caches, addressing, the 3 (really 5) C's
     of misses, performance metrics, prefetching; (5.3) how physically distributed caches are organized in a
@@ -37,7 +38,7 @@
 
 <!-- Roadmap -->
 <section data-background-color="#ffffff">
-  <h2>Chapter Roadmap</h2>
+  <h2>Deck Roadmap</h2>
   <div class="cols c3">
     <div class="callout"><span class="lbl">Module 5.1</span><strong>Basic Cache Architecture 1</strong><br>
       <span class="small">Sets / ways / blocks, associativity trade-offs, the index function, locating a block, replacement, and write policy.</span></div>
@@ -1307,7 +1308,7 @@
 
 <!-- Chapter summary -->
 <section data-background-color="#ffffff">
-  <h2>Chapter 6 — Big Picture</h2>
+  <h2>Lecture 9 — Big Picture</h2>
   <div class="cols c3">
     <div class="callout"><span class="lbl">5.1 ABCs</span>A cache is sets × ways; address = tag/index/offset; pick associativity, replacement (pseudo-LRU), and write policy.</div>
     <div class="callout"><span class="lbl">5.2 More</span>Inclusion vs. NINE vs. exclusion, split/multi-banked, VIPT, the 3 C's, AMAT, and prefetching.</div>
@@ -1334,7 +1335,7 @@
 </div>
 
 <!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
-<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 6 — Memory Hierarchy Organization</div>
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Lecture 9 — Memory Hierarchy Organization</div>
 </div>
 
 <!-- reveal.js core + plugins -->
