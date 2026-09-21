@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CSC/ECE 506 · Chapter 8 — Bus-Based Cache Coherence</title>
+<title>CSC/ECE 506 · Lecture 10 — Bus-Based Cache Coherence</title>
 
 <!-- reveal.js core (CDN) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
@@ -24,10 +24,11 @@
 <!-- ============================ TITLE ============================ -->
 <section class="title-slide" data-background-color="#ffffff">
   <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
-  <h1>Chapter 8</h1>
+  <h1>Lecture 10</h1>
   <div class="sub">Bus-Based Coherent Multiprocessors — Cache Coherence</div>
+  <div class="sub" style="display:block;font-size:.72em;opacity:.72;margin-top:.4em">(Chapter 8 in Yan Solihin's textbook)</div>
   <aside class="notes">
-    Chapter 8 is the heart of shared-memory multiprocessing: how do we keep multiple private caches
+    Lecture 10 is the heart of shared-memory multiprocessing: how do we keep multiple private caches
     consistent when they cache the same memory line? We build up from the bus itself, to snooping,
     to the family of invalidation protocols (write-through, MSI, MESI, MOESI), and finally the
     Dragon update protocol and performance/design issues.
@@ -36,7 +37,7 @@
 
 <!-- Roadmap -->
 <section data-background-color="#ffffff">
-  <h2>Chapter Roadmap</h2>
+  <h2>Deck Roadmap</h2>
   <div class="cols c3">
     <div class="callout"><span class="lbl">Module 7.1</span><strong>Bus-Based Multiprocessor</strong><br>
       <span class="small">The bus interconnect, transactions, arbitration, and how <em>snoopers</em> are added to provide coherence.</span></div>
@@ -1079,7 +1080,7 @@
 
 <!-- Chapter summary -->
 <section data-background-color="#ffffff">
-  <h2>Chapter 8 — Big Picture</h2>
+  <h2>Lecture 10 — Big Picture</h2>
   <table class="small">
     <tr><th>Protocol</th><th>States</th><th>Write policy</th><th>Key idea</th></tr>
     <tr><td>Write-through</td><td>V, I</td><td>invalidate</td><td>simplest; high bus traffic</td></tr>
@@ -1110,7 +1111,7 @@
 </div>
 
 <!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
-<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Chapter 8 — Bus-Based Cache Coherence</div>
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Lecture 10 — Bus-Based Cache Coherence</div>
 </div>
 
 <!-- reveal.js core + plugins -->
