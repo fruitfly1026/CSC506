@@ -58,11 +58,13 @@
     <div class="callout"><span class="lbl">Resources</span>
       <ul><li>SM resource partitioning (occupancy)</li><li>Data prefetching</li></ul></div>
   </div>
-  <div class="cols">
+  <div class="cols c3">
     <div class="callout"><span class="lbl">Instruction-level</span>
       <ul><li>Instruction mix</li><li>Loop unrolling</li></ul></div>
     <div class="callout"><span class="lbl">Work per thread</span>
       <ul><li>Thread granularity</li></ul></div>
+    <div class="callout"><span class="lbl">Redundancy</span>
+      <ul><li>Redundant memory instructions (RedSan)</li></ul></div>
   </div>
 </section>
 <!-- ==================================================================
@@ -808,6 +810,218 @@ Pvalue += Ms[ty][0]*Ns[0][tx] + Ms[ty][1]*Ns[1][tx]
   <div class="callout takeaway"><span class="lbl">Balance</span>Coarser threads cut redundant traffic but spend resources — tune granularity against occupancy.</div>
 </section>
 
+<!-- ==================================================================
+     PART 10 — REDUNDANT MEMORY INSTRUCTIONS (RedSan)
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Part 10</div>
+  <div class="mod-title">Redundant Memory Instructions</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Define a redundant memory instruction and the three rules that detect one</li>
+      <li>Recognize the four source patterns that leave redundancy in optimized binaries</li>
+      <li>Pick a fix and name its cost — the skills the Lecture 21 in-class lab uses</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Redundancy: definition -->
+<section data-background-color="#ffffff">
+  <h2>Redundant Memory Instructions</h2>
+  <div class="callout"><span class="lbl">Definition</span>A memory instruction is <strong>redundant</strong> if it loads or stores an address whose value has already been loaded or stored, with <strong>no intervening update</strong> to that location.</div>
+  <p class="small">RedSan checks each thread&rsquo;s accesses against three rules:</p>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">DeadStore</span><span class="small">A store to an address is followed by another store to it from the same thread — the first value is never used.</span></div>
+    <div class="callout"><span class="lbl">DeadLoad</span><span class="small">A load from an address is followed by another load of it from the same thread — the value was already in hand.</span></div>
+    <div class="callout"><span class="lbl">LoadAfterStore</span><span class="small">A load immediately follows a store to the same address from the same thread — it reads back what was just written.</span></div>
+  </div>
+  <p class="small">Consecutive writes by <em>different</em> threads to one address are not counted: they do not necessarily mean wasted work.</p>
+  <div class="callout takeaway"><span class="lbl">Why it matters</span>These instructions survive in <em>fully optimized</em> binaries. Removing them gave up to 6.27× speedup and 3.00× fewer memory instructions.</div>
+  <p class="src">Y. Zhao, Y. Hao, Z. Li, S. Jiao, X. Liu, J. Li, &ldquo;RedSan: Redundant Memory Instruction Sanitizer for GPU Programs,&rdquo; SC &rsquo;25 — §2 (definition), §4.1 (rules), abstract (results).</p>
+</section>
+
+<!-- Redundancy: four root causes -->
+<section data-background-color="#ffffff">
+  <h2>Why Doesn&rsquo;t the Compiler Remove Them?</h2>
+  <p class="small">Four root causes in the source code, found across PolyBench, Rodinia, DARKNET, LULESH and PASTA:</p>
+  <table>
+    <thead><tr><th>Pattern</th><th>What blocks the optimization</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Duplicated accesses without <code class="inline">__restrict__</code></strong></td><td>The compiler cannot prove that two pointers never alias, so it keeps every load and store.</td><td>DARKNET avg-pool; PolyBench 2mm, gemm</td></tr>
+      <tr><td><strong>Loop invariant within branches</strong></td><td>An invariant access sits under an input-dependent <code class="inline">if</code>. The path is unknown at compile time, so even <code class="inline">__restrict__</code> does not help.</td><td>Sparse matrix multiply (SpGEMM)</td></tr>
+      <tr><td><strong>Outdated algorithm implementation</strong></td><td>Code written for older GPUs, e.g. a <code class="inline">volatile</code> shared-memory reduction where warp shuffles need no memory instructions.</td><td>LULESH</td></tr>
+      <tr><td><strong>Inefficient algorithm design</strong></td><td>Shared memory holds values that only one thread touches: extra loads and stores, and less L1 for everything else.</td><td>Rodinia backprop; PASTA</td></tr>
+    </tbody>
+  </table>
+  <p class="src">Y. Zhao, Y. Hao, Z. Li, S. Jiao, X. Liu, J. Li, &ldquo;RedSan: Redundant Memory Instruction Sanitizer for GPU Programs,&rdquo; SC &rsquo;25 — §2.1–2.4, §3.2, §7.</p>
+</section>
+
+<!-- Redundancy: DARKNET example -->
+<section data-background-color="#ffffff">
+  <h2>Example — A Store That Should Happen Once</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">DARKNET <code class="inline">forward_avgpool_layer_kernel</code></div>
+      <pre><code class="language-cpp" data-trim>
+int out_index = (k + c*b);   // fixed for this thread
+output[out_index] = 0;
+for (i = 0; i &lt; w*h; ++i) {
+  int in_index = i + h*w*(k + b*c);
+  output[out_index] += input[in_index];
+}
+output[out_index] /= w*h;
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label">PTX of the unrolled loop (excerpt)</div>
+      <pre><code class="language-plaintext" data-trim>
+ld.global.f32  %f10, [%rd15];
+add.f32        %f11, %f10, %f23;
+st.global.f32  [%rd2], %f11;    // dead store
+ld.global.f32  %f12, [%rd15+4];
+add.f32        %f13, %f12, %f11;
+st.global.f32  [%rd2], %f13;    // dead store
+...
+</code></pre>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">Diagnosis</span>The running sum already lives in a register. But <code class="inline">input</code> and <code class="inline">output</code> might alias, so every iteration still writes <code class="inline">output[out_index]</code> back — a <strong>DeadStore</strong> each time.</div>
+  <div class="callout ok"><span class="lbl">Fix</span>Accumulate in a local <code class="inline">float sum</code> and store it once, or mark the pointers <code class="inline">__restrict__</code>. Result: 2.55× faster, 1.96× fewer memory instructions.</div>
+  <p class="src">Y. Zhao, Y. Hao, Z. Li, S. Jiao, X. Liu, J. Li, &ldquo;RedSan: Redundant Memory Instruction Sanitizer for GPU Programs,&rdquo; SC &rsquo;25 — Listings 1 and 3, §2.1, Table 1.</p>
+</section>
+
+<!-- Redundancy: fixes and costs -->
+<section data-background-color="#ffffff">
+  <h2>Fixes — and What Each Costs</h2>
+  <table>
+    <thead><tr><th>Fix</th><th>Cost</th></tr></thead>
+    <tbody>
+      <tr><td>Declare non-overlapping pointers <code class="inline">__restrict__</code></td><td>May raise register pressure and cause spills; unsafe when other threads read and write the same data (next slide)</td></tr>
+      <tr><td>Hold intermediate results in local variables (registers)</td><td>You must check that the rewrite preserves the program&rsquo;s meaning</td></tr>
+      <tr><td>Reimplement with modern hardware features, e.g. warp shuffles for reductions</td><td>More complex code, tied to newer GPUs</td></tr>
+      <tr><td>Redesign the data-to-thread mapping</td><td>Needs an algorithmic redesign and a deep understanding of the architecture</td></tr>
+    </tbody>
+  </table>
+  <div class="callout takeaway"><span class="lbl">Division of labor</span>The tool points at the redundant instruction. The programmer weighs the trade-off and chooses the fix.</div>
+  <p class="src">Y. Zhao, Y. Hao, Z. Li, S. Jiao, X. Liu, J. Li, &ldquo;RedSan: Redundant Memory Instruction Sanitizer for GPU Programs,&rdquo; SC &rsquo;25 — §2.5.</p>
+</section>
+
+<!-- Redundancy: restrict pitfall -->
+<section data-background-color="#ffffff">
+  <h2>Pitfall — <code class="inline">__restrict__</code> Is a Per-Thread Promise</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">One block of 32 threads, optimized build</div>
+      <pre><code class="language-cpp" data-trim>
+__global__ void foo(float * __restrict__ data, int n) {
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i &gt; 0 &amp;&amp; i &lt; n - 1) {
+    for (int j = 0; j &lt; n; j++) {
+      float temp = data[i-1];
+      __threadfence();
+      data[i] += temp;
+      __threadfence();
+} } }
+</code></pre>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">What goes wrong</span><span class="small">Within one thread, <code class="inline">data[i-1]</code> and <code class="inline">data[i]</code> never overlap, so the compiler loads <code class="inline">data[i-1]</code> once and reuses the register. But thread <em>i</em>−1 keeps updating <code class="inline">data[i-1]</code>. This thread keeps adding a stale value — even with <code class="inline">__threadfence()</code>.</span></div>
+      <div class="callout takeaway"><span class="lbl">Rule</span><span class="small">Do not put <code class="inline">__restrict__</code> on a pointer that other threads load and store concurrently. The CUDA documentation does not warn about this case.</span></div>
+    </div>
+  </div>
+  <p class="src">Y. Zhao, Y. Hao, Z. Li, S. Jiao, X. Liu, J. Li, &ldquo;RedSan: Redundant Memory Instruction Sanitizer for GPU Programs,&rdquo; SC &rsquo;25 — §3.1, Listing 4 (observed with both NVCC and Clang).</p>
+</section>
+
+<!-- Redundancy: back to matmul -->
+<section data-background-color="#ffffff">
+  <h2>Back to Matmul — Why <code class="inline">pValue</code> Matters</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Our naive kernel (Part 1)</div>
+      <pre><code class="language-cpp" data-trim>
+float pValue = 0;
+for (int k = 0; k &lt; width; k++)
+    pValue += devM[row*width + k]
+            * devN[k*width + col];
+devP[row*width + col] = pValue;
+</code></pre>
+      <p class="small">Per iteration: 2 loads. One store at the end.</p>
+    </div>
+    <div>
+      <div class="code-label">PolyBench 2mm, <code class="inline">mm2_kernel1</code></div>
+      <pre><code class="language-cpp" data-trim>
+tmp[i * NJ + j] = 0;
+for (k = 0; k &lt; _PB_NK; k++)
+    tmp[i * NJ + j] += alpha
+        * A[i * NK + k] * B[k * NJ + j];
+</code></pre>
+      <p class="small">Per iteration: 2 loads <strong>+ 1 dead store</strong> to <code class="inline">tmp</code>.</p>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">Measured</span>Moving the sum into a register takes the loop from 3 memory instructions per iteration to 2: 100.70M → 67.17M memory instructions (1.50×), and 4.32× fewer cycles.</div>
+  <div class="callout takeaway"><span class="lbl">Connection</span>The register accumulator in our naive and tiled kernels is exactly fix #2. The lab looks for kernels where it is missing.</div>
+  <p class="src">Y. Zhao, Y. Hao, Z. Li, S. Jiao, X. Liu, J. Li, &ldquo;RedSan: Redundant Memory Instruction Sanitizer for GPU Programs,&rdquo; SC &rsquo;25 — Table 1 (2mm kernel1), §7.1.</p>
+</section>
+
+<!-- Redundancy: how RedSan finds them -->
+<section data-background-color="#ffffff">
+  <h2>How RedSan Finds Them</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">1 · Preprocess</span><span class="small">Extract the kernels from the fully optimized binary; optionally sample only chosen kernels. No source changes, no recompilation.</span></div>
+    <div class="callout"><span class="lbl">2 · Collect online</span><span class="small">Binary instrumentation (NVBit) records every memory instruction per warp: PC, the 32 addresses, size, active mask, load/store and global/shared scope, block and thread ID.</span></div>
+    <div class="callout"><span class="lbl">3 · Analyze offline</span><span class="small">A per-thread last-access table applies the three rules. Each PC gets a redundancy rate = redundant accesses / all accesses.</span></div>
+  </div>
+  <table>
+    <thead><tr><th>Redundancy rate of a PC</th><th>= 1</th><th>[0.5, 1)</th><th>(0, 0.5)</th><th>0</th></tr></thead>
+    <tbody><tr><td>Category</td><td>Fully</td><td>Partially</td><td>Slightly</td><td>Non-redundant</td></tr></tbody>
+  </table>
+  <div class="callout takeaway"><span class="lbl">Workflow</span>Fix <strong>Fully Redundant</strong> PCs first. Map a PC back to a source line by recompiling with <code class="inline">-lineinfo</code> and profiling with Nsight Compute; unlike <code class="inline">-G</code>, it keeps the optimized code.</div>
+  <p class="src">Y. Zhao, Y. Hao, Z. Li, S. Jiao, X. Liu, J. Li, &ldquo;RedSan: Redundant Memory Instruction Sanitizer for GPU Programs,&rdquo; SC &rsquo;25 — §4.2, §5, Figure 2. Profiling overhead: 3.21×–111.93× of the original runtime (§6.2).</p>
+</section>
+
+<!-- Redundancy: in-class which pattern -->
+<section data-background-color="#ffffff">
+  <h2>In-Class: Which Pattern?</h2>
+  <div class="cols c3">
+    <div>
+      <div class="code-label">A · SpGEMM</div>
+      <pre><code class="language-cpp" data-trim>
+for (i = therowa; i &lt; nextrowa; i++) {
+  ...
+  if (nextrowb - therowb != 0)
+    d_valuec[therowc] -=
+      vala * d_valueb[therowb];
+}
+</code></pre>
+      <div class="callout fragment"><span class="lbl">Loop invariant within branches</span><span class="small"><code class="inline">therowc</code> is fixed, but the update sits under an input-dependent <code class="inline">if</code>.</span></div>
+    </div>
+    <div>
+      <div class="code-label">B · LULESH</div>
+      <pre><code class="language-cpp" data-trim>
+volatile __shared__ Real_t s_data[bs];
+if (tid &lt; 64)
+  s_data[tid] = min(s_data[tid],
+                    s_data[tid + 64]);
+__syncthreads();
+</code></pre>
+      <div class="callout fragment"><span class="lbl">Outdated implementation</span><span class="small">A <code class="inline">volatile</code> shared-memory reduction; warp shuffles do it without memory instructions.</span></div>
+    </div>
+    <div>
+      <div class="code-label">C · PASTA</div>
+      <pre><code class="language-cpp" data-trim>
+int y_id = tidy * Y_stride + tidx;
+Y_shr[y_id] = 0;
+...
+for (i = inz_begin; ...)
+  Y_shr[y_id] += X_val[i] * U_val[...];
+</code></pre>
+      <div class="callout fragment"><span class="lbl">Inefficient design</span><span class="small"><code class="inline">Y_shr[y_id]</code> belongs to one thread only; a register would do, and L1 is freed.</span></div>
+    </div>
+  </div>
+  <p class="src">Y. Zhao, Y. Hao, Z. Li, S. Jiao, X. Liu, J. Li, &ldquo;RedSan: Redundant Memory Instruction Sanitizer for GPU Programs,&rdquo; SC &rsquo;25 — Listings 2, 5 and 7.</p>
+</section>
+
 <!-- Wrap-up -->
 <section data-background-color="#ffffff">
   <h2>Wrap-Up — The Optimization Toolkit</h2>
@@ -815,7 +1029,7 @@ Pvalue += Ms[ty][0]*Ns[0][tx] + Ms[ty][1]*Ns[1][tx]
     <div class="callout"><span class="lbl">Algorithm</span>
       <ul class="small"><li>Contiguous reduction → fewer divergent warps, early retirement</li><li>Warp-aware branch conditions</li></ul></div>
     <div class="callout"><span class="lbl">Memory</span>
-      <ul class="small"><li>Coalesce global loads (one warp = one transaction)</li><li>Avoid bank conflicts (odd strides)</li></ul></div>
+      <ul class="small"><li>Coalesce global loads (one warp = one transaction)</li><li>Avoid bank conflicts (odd strides)</li><li>Remove redundant loads and stores (keep per-thread values in registers)</li></ul></div>
   </div>
   <div class="cols">
     <div class="callout"><span class="lbl">Resources</span>
@@ -834,6 +1048,7 @@ Pvalue += Ms[ty][0]*Ns[0][tx] + Ms[ty][1]*Ns[1][tx]
     <li>UIUC ECE498/AL &amp; NVIDIA, GPU performance optimization lecture materials (tiled matrix multiply, reduction, coalescing, bank conflicts, occupancy).</li>
     <li>NVIDIA, <em>CUDA C++ Programming Guide</em>. https://docs.nvidia.com/cuda/cuda-c-programming-guide/</li>
     <li>NVIDIA architecture white papers: G80, GT200, Fermi, Kepler.</li>
+    <li>Y. Zhao, Y. Hao, Z. Li, S. Jiao, X. Liu, J. Li, &ldquo;RedSan: Redundant Memory Instruction Sanitizer for GPU Programs,&rdquo; SC &rsquo;25. https://doi.org/10.1145/3712285.3759830</li>
   </ol>
   <p class="src">Adapted from CIS 565 (UPenn, S. Mohammed); figures from UIUC ECE498/AL &amp; NVIDIA CUDA C Programming Guide.</p>
 </section>

@@ -343,21 +343,29 @@
       <p class="small">Because writes go through to memory <em>and</em> the bus, a write <strong>invalidates all other caches</strong>.</p>
     </div>
     <div class="center">
-      <svg viewBox="0 0 240 220" class="chart" style="max-width:280px">
-        <!-- V state -->
-        <circle cx="120" cy="50" r="34" fill="#dcfce7" stroke="#22c55e" stroke-width="2.5"/><text x="120" y="56" text-anchor="middle" style="font-weight:800;font-size:18px;fill:#15803d">V</text>
-        <!-- I state -->
-        <circle cx="120" cy="170" r="34" fill="#fee2e2" stroke="#ef4444" stroke-width="2.5"/><text x="120" y="176" text-anchor="middle" style="font-weight:800;font-size:18px;fill:#b91c1c">I</text>
-        <!-- I->V on PrRd/BusRd -->
-        <path d="M95,148 C55,118 55,82 95,62" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#a7)"/>
-        <text x="36" y="110" text-anchor="middle" class="tiny" style="fill:#2563eb">PrRd /</text><text x="36" y="121" text-anchor="middle" class="tiny" style="fill:#2563eb">BusRd</text>
-        <!-- V->I on BusWr -->
-        <path d="M145,62 C185,82 185,118 145,148" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#a7)"/>
-        <text x="205" y="110" text-anchor="middle" class="tiny" style="fill:#CC0000">BusWr /</text><text x="205" y="121" text-anchor="middle" class="tiny" style="fill:#CC0000">(snoop)</text>
-        <!-- V self loop PrRd, PrWr/BusWr -->
-        <path d="M150,32 C190,8 200,55 150,46" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a7)"/>
-        <text x="120" y="12" text-anchor="middle" class="tiny">PrRd/- · PrWr/BusWr</text>
-        <defs><marker id="a7" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#475569"/></marker></defs>
+      <svg viewBox="0 0 380 300" class="chart" style="max-width:448px">
+        <defs><marker id="wt2563eb" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#2563eb"/></marker><marker id="wt475569" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker><marker id="wtCC0000" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#CC0000"/></marker></defs>
+        <text x="95" y="14" text-anchor="middle" class="small" style="font-weight:700">Processor-initiated</text>
+        <text x="285" y="14" text-anchor="middle" class="small" style="font-weight:700">Snooped (bus)</text>
+        <circle cx="95" cy="105" r="28" fill="#dcfce7" stroke="#22c55e" stroke-width="2.5"/><text x="95" y="111" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#15803d">V</text>
+        <circle cx="95" cy="225" r="28" fill="#f1f5f9" stroke="#64748b" stroke-width="2.5"/><text x="95" y="231" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#475569">I</text>
+        <path d="M85,79 C57,47 133,47 105,79" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#wt475569)"/>
+        <text x="95" y="30" text-anchor="middle" class="tiny">PrRd/&#8211;</text>
+        <text x="95" y="41" text-anchor="middle" class="tiny">PrWr/BusWr</text>
+        <path d="M72,209 C45,185 45,145 72,121" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#wt2563eb)"/>
+        <text x="48" y="160" text-anchor="end" class="tiny" style="fill:#2563eb">PrRd/</text>
+        <text x="48" y="171" text-anchor="end" class="tiny" style="fill:#2563eb">BusRd</text>
+        <path d="M85,251 C57,283 133,283 105,251" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#wt475569)"/>
+        <text x="128" y="268" text-anchor="start" class="tiny">PrWr/BusWr</text>
+        <circle cx="285" cy="105" r="28" fill="#dcfce7" stroke="#22c55e" stroke-width="2.5"/><text x="285" y="111" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#15803d">V</text>
+        <circle cx="285" cy="225" r="28" fill="#f1f5f9" stroke="#64748b" stroke-width="2.5"/><text x="285" y="231" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#475569">I</text>
+        <path d="M275,79 C247,47 323,47 295,79" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#wt475569)"/>
+        <text x="285" y="41" text-anchor="middle" class="tiny">BusRd/&#8211;</text>
+        <path d="M308,121 C335,145 335,185 308,209" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#wtCC0000)"/>
+        <text x="338" y="168" text-anchor="start" class="tiny" style="fill:#CC0000">BusWr/&#8211;</text>
+        <path d="M275,251 C247,283 323,283 295,251" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#wt475569)"/>
+        <text x="318" y="268" text-anchor="start" class="tiny">BusRd/&#8211;</text>
+        <text x="318" y="279" text-anchor="start" class="tiny">BusWr/&#8211;</text>
       </svg>
       <div class="src">Write-through, write-invalidate: only Valid / Invalid.</div>
     </div>
@@ -411,27 +419,22 @@
   <h2>MSI — Processor-Initiated Transitions</h2>
   <div class="cols w-64">
     <div class="center">
-      <svg viewBox="0 0 320 260" class="chart" style="max-width:380px">
-        <defs><marker id="am" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker></defs>
-        <!-- States: M top, S left, I bottom -->
-        <circle cx="160" cy="40" r="32" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="160" y="47" text-anchor="middle" style="font-weight:800;font-size:18px;fill:#b91c1c">M</text>
-        <circle cx="55" cy="200" r="32" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="55" y="207" text-anchor="middle" style="font-weight:800;font-size:18px;fill:#1d4ed8">S</text>
-        <circle cx="265" cy="200" r="32" fill="#f1f5f9" stroke="#64748b" stroke-width="2.5"/><text x="265" y="207" text-anchor="middle" style="font-weight:800;font-size:18px;fill:#475569">I</text>
-        <!-- I -> S : PrRd/BusRd -->
-        <path d="M235,184 C170,150 120,150 78,178" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#am)"/>
-        <text x="160" y="150" text-anchor="middle" class="tiny" style="fill:#2563eb">PrRd / BusRd</text>
-        <!-- I -> M : PrWr/BusRdX -->
-        <path d="M252,172 C230,110 210,75 182,58" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#am)"/>
-        <text x="252" y="118" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr /</text><text x="252" y="129" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX</text>
-        <!-- S -> M : PrWr/BusRdX(BusUpgr) -->
-        <path d="M78,178 C110,120 130,82 142,62" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#am)"/>
-        <text x="78" y="112" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr /</text><text x="78" y="123" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX</text>
-        <!-- S self loop PrRd -->
-        <path d="M28,182 C-6,158 4,222 32,218" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#am)"/>
-        <text x="20" y="245" text-anchor="middle" class="tiny">PrRd/-</text>
-        <!-- M self loop PrRd,PrWr -->
-        <path d="M188,30 C228,4 240,52 190,48" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#am)"/>
-        <text x="160" y="10" text-anchor="middle" class="tiny">PrRd/- · PrWr/-</text>
+      <svg viewBox="0 0 400 300" class="chart" style="max-width:472px">
+        <defs><marker id="am2563eb" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#2563eb"/></marker><marker id="am475569" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker><marker id="amCC0000" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#CC0000"/></marker></defs>
+        <circle cx="100" cy="110" r="28" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="100" y="116" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#b91c1c">M</text>
+        <circle cx="300" cy="110" r="28" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="300" y="116" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#1d4ed8">S</text>
+        <circle cx="200" cy="250" r="28" fill="#f1f5f9" stroke="#64748b" stroke-width="2.5"/><text x="200" y="256" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#475569">I</text>
+        <path d="M90,84 C62,52 138,52 110,84" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#am475569)"/>
+        <text x="100" y="35" text-anchor="middle" class="tiny">PrRd/&#8211;</text>
+        <text x="100" y="46" text-anchor="middle" class="tiny">PrWr/&#8211;</text>
+        <path d="M290,84 C262,52 338,52 310,84" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#am475569)"/>
+        <text x="300" y="46" text-anchor="middle" class="tiny">PrRd/&#8211;</text>
+        <path d="M272.0,110.0 L130.0,110.0" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#amCC0000)"/>
+        <text x="200" y="101" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr/BusRdX</text>
+        <path d="M183.7,227.2 L117.4,134.4" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#amCC0000)"/>
+        <text x="147" y="190" text-anchor="end" class="tiny" style="fill:#CC0000">PrWr/BusRdX</text>
+        <path d="M216.3,227.2 L282.6,134.4" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#am2563eb)"/>
+        <text x="253" y="190" text-anchor="start" class="tiny" style="fill:#2563eb">PrRd/BusRd</text>
       </svg>
       <div class="src">Solid = state; label = <em>event / bus action</em>.</div>
     </div>
@@ -453,23 +456,24 @@
   <h2>MSI — Bus-Initiated (Snooped) Transitions</h2>
   <div class="cols w-64">
     <div class="center">
-      <svg viewBox="0 0 320 260" class="chart" style="max-width:380px">
-        <defs><marker id="amb" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker></defs>
-        <circle cx="160" cy="40" r="32" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="160" y="47" text-anchor="middle" style="font-weight:800;font-size:18px;fill:#b91c1c">M</text>
-        <circle cx="55" cy="200" r="32" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="55" y="207" text-anchor="middle" style="font-weight:800;font-size:18px;fill:#1d4ed8">S</text>
-        <circle cx="265" cy="200" r="32" fill="#f1f5f9" stroke="#64748b" stroke-width="2.5"/><text x="265" y="207" text-anchor="middle" style="font-weight:800;font-size:18px;fill:#475569">I</text>
-        <!-- M -> S : BusRd / Flush (intervention) -->
-        <path d="M138,62 C108,100 85,140 68,172" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#amb)"/>
-        <text x="70" y="110" text-anchor="middle" class="tiny" style="fill:#16a34a">BusRd /</text><text x="70" y="121" text-anchor="middle" class="tiny" style="fill:#16a34a">Flush</text>
-        <!-- M -> I : BusRdX / Flush -->
-        <path d="M182,58 C212,95 235,140 252,172" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#amb)"/>
-        <text x="248" y="110" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX /</text><text x="248" y="121" text-anchor="middle" class="tiny" style="fill:#CC0000">Flush</text>
-        <!-- S -> I : BusRdX -->
-        <path d="M85,210 C150,232 210,232 240,214" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#amb)"/>
-        <text x="160" y="246" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX / -</text>
-        <!-- S self loop BusRd -->
-        <path d="M28,182 C-6,158 4,222 32,218" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#amb)"/>
-        <text x="14" y="248" text-anchor="middle" class="tiny">BusRd/-</text>
+      <svg viewBox="0 0 350 268" class="chart" style="max-width:413px">
+        <defs><marker id="amb16a34a" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#16a34a"/></marker><marker id="amb475569" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker><marker id="ambCC0000" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#CC0000"/></marker></defs>
+        <circle cx="160" cy="40" r="28" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="160" y="46" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#b91c1c">M</text>
+        <circle cx="55" cy="200" r="28" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="55" y="206" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#1d4ed8">S</text>
+        <circle cx="265" cy="200" r="28" fill="#f1f5f9" stroke="#64748b" stroke-width="2.5"/><text x="265" y="206" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#475569">I</text>
+        <path d="M140,64 C110,100 88,138 70,172" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#amb16a34a)"/>
+        <text x="70" y="110" text-anchor="middle" class="tiny" style="fill:#16a34a">BusRd /</text>
+        <text x="70" y="121" text-anchor="middle" class="tiny" style="fill:#16a34a">Flush</text>
+        <path d="M180,64 C210,100 232,138 250,172" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#ambCC0000)"/>
+        <text x="250" y="110" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX /</text>
+        <text x="250" y="121" text-anchor="middle" class="tiny" style="fill:#CC0000">Flush</text>
+        <path d="M83,210 C140,236 200,236 237,210" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#ambCC0000)"/>
+        <text x="160" y="248" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX / &#8211;</text>
+        <path d="M29,190 C-3,162 -3,238 29,210" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#amb475569)"/>
+        <text x="22" y="246" text-anchor="middle" class="tiny">BusRd/&#8211;</text>
+        <path d="M291,190 C323,162 323,238 291,210" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#amb475569)"/>
+        <text x="300" y="250" text-anchor="middle" class="tiny">BusRd/&#8211;</text>
+        <text x="300" y="261" text-anchor="middle" class="tiny">BusRdX/&#8211;</text>
       </svg>
       <div class="src">Snooped transactions; M supplies data via Flush.</div>
     </div>
@@ -479,6 +483,7 @@
         <li><strong>M → I</strong> on snooped <code class="inline">BusRdX</code> → <strong>Flush</strong> (peer wants to write; give up the line)</li>
         <li><strong>S → I</strong> on snooped <code class="inline">BusRdX</code> (invalidate)</li>
         <li><strong>S → S</strong> on snooped <code class="inline">BusRd</code>: stay shared</li>
+        <li><strong>I</strong> ignores snooped <code class="inline">BusRd</code> and <code class="inline">BusRdX</code></li>
       </ul>
       <div class="callout small"><span class="lbl">Memory's role</span>If a Flush happens, the MC can <strong>cancel its read</strong> — the dirty owner supplies the data (and memory is updated too).</div>
     </div>
@@ -606,37 +611,31 @@
   <h2>MESI — Processor-Initiated Transitions</h2>
   <div class="cols w-64">
     <div class="center">
-      <svg viewBox="0 0 340 270" class="chart" style="max-width:400px">
-        <defs><marker id="ap" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker></defs>
-        <!-- M top-left, E top-right, S bottom-left, I bottom-right -->
-        <circle cx="80" cy="48" r="30" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="80" y="55" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#b91c1c">M</text>
-        <circle cx="260" cy="48" r="30" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.5"/><text x="260" y="55" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#a16207">E</text>
-        <circle cx="80" cy="215" r="30" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="80" y="222" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#1d4ed8">S</text>
-        <circle cx="260" cy="215" r="30" fill="#f1f5f9" stroke="#64748b" stroke-width="2.5"/><text x="260" y="222" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#475569">I</text>
-        <!-- I -> E : PrRd / BusRd(!C) -->
-        <path d="M236,200 C200,160 200,95 234,68" fill="none" stroke="#ca8a04" stroke-width="2" marker-end="url(#ap)"/>
-        <text x="190" y="135" text-anchor="middle" class="tiny" style="fill:#a16207">PrRd / BusRd(!C)</text>
-        <!-- I -> S : PrRd / BusRd(C) -->
-        <path d="M232,210 C170,196 130,205 110,212" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#ap)"/>
-        <text x="170" y="240" text-anchor="middle" class="tiny" style="fill:#2563eb">PrRd / BusRd(C)</text>
-        <!-- I -> M : PrWr / BusRdX -->
-        <path d="M240,192 C160,120 120,90 96,72" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#ap)"/>
-        <text x="200" y="100" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr / BusRdX</text>
-        <!-- E -> M : PrWr / - -->
-        <path d="M232,42 C180,30 140,32 108,42" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#ap)"/>
-        <text x="170" y="20" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr / -</text>
-        <!-- S -> M : PrWr / BusUpgr -->
-        <path d="M80,185 C80,140 80,110 80,80" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#ap)"/>
-        <text x="80" y="135" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr /</text><text x="80" y="147" text-anchor="middle" class="tiny" style="fill:#CC0000">BusUpgr</text>
-        <!-- self loops: M PrRd/PrWr -->
-        <path d="M58,32 C24,8 30,58 56,52" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#ap)"/>
-        <text x="36" y="18" text-anchor="middle" class="tiny">PrRd/PrWr</text>
-        <!-- E PrRd -->
-        <path d="M282,32 C316,8 322,58 286,52" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#ap)"/>
-        <text x="300" y="18" text-anchor="middle" class="tiny">PrRd/-</text>
-        <!-- S PrRd -->
-        <path d="M58,231 C24,255 30,205 56,210" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#ap)"/>
-        <text x="34" y="258" text-anchor="middle" class="tiny">PrRd/-</text>
+      <svg viewBox="0 0 380 318" class="chart" style="max-width:448px">
+        <defs><marker id="ap2563eb" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#2563eb"/></marker><marker id="ap475569" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker><marker id="apCC0000" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#CC0000"/></marker><marker id="apca8a04" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#ca8a04"/></marker></defs>
+        <circle cx="100" cy="95" r="28" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="100" y="101" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#b91c1c">M</text>
+        <circle cx="280" cy="95" r="28" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.5"/><text x="280" y="101" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#a16207">E</text>
+        <circle cx="100" cy="245" r="28" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="100" y="251" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#1d4ed8">S</text>
+        <circle cx="280" cy="245" r="28" fill="#f1f5f9" stroke="#64748b" stroke-width="2.5"/><text x="280" y="251" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#475569">I</text>
+        <path d="M90,69 C62,37 138,37 110,69" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#ap475569)"/>
+        <text x="100" y="20" text-anchor="middle" class="tiny">PrRd/&#8211;</text>
+        <text x="100" y="31" text-anchor="middle" class="tiny">PrWr/&#8211;</text>
+        <path d="M270,69 C242,37 318,37 290,69" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#ap475569)"/>
+        <text x="280" y="31" text-anchor="middle" class="tiny">PrRd/&#8211;</text>
+        <path d="M252.0,95.0 L130.0,95.0" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#apCC0000)"/>
+        <text x="190" y="87" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr/&#8211;</text>
+        <path d="M258.5,227.1 L123.0,114.2" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#apCC0000)"/>
+        <text x="205" y="160" text-anchor="start" class="tiny" style="fill:#CC0000">PrWr/BusRdX</text>
+        <path d="M280.0,217.0 L280.0,125.0" fill="none" stroke="#ca8a04" stroke-width="2" marker-end="url(#apca8a04)"/>
+        <text x="288" y="168" text-anchor="start" class="tiny" style="fill:#ca8a04">PrRd/</text>
+        <text x="288" y="179" text-anchor="start" class="tiny" style="fill:#ca8a04">BusRd(!C)</text>
+        <path d="M100.0,217.0 L100.0,125.0" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#apCC0000)"/>
+        <text x="108" y="168" text-anchor="start" class="tiny" style="fill:#CC0000">PrWr/</text>
+        <text x="108" y="179" text-anchor="start" class="tiny" style="fill:#CC0000">BusUpgr</text>
+        <path d="M252.0,245.0 L130.0,245.0" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#ap2563eb)"/>
+        <text x="190" y="262" text-anchor="middle" class="tiny" style="fill:#2563eb">PrRd/BusRd(C)</text>
+        <path d="M90,271 C62,303 138,303 110,271" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#ap475569)"/>
+        <text x="66" y="300" text-anchor="end" class="tiny">PrRd/&#8211;</text>
       </svg>
     </div>
     <div>
@@ -657,30 +656,31 @@
   <h2>MESI — Bus-Initiated (Snooped) Transitions</h2>
   <div class="cols w-64">
     <div class="center">
-      <svg viewBox="0 0 340 270" class="chart" style="max-width:400px">
-        <defs><marker id="apb" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker></defs>
-        <circle cx="80" cy="48" r="30" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="80" y="55" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#b91c1c">M</text>
-        <circle cx="260" cy="48" r="30" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.5"/><text x="260" y="55" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#a16207">E</text>
-        <circle cx="80" cy="215" r="30" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="80" y="222" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#1d4ed8">S</text>
-        <circle cx="260" cy="215" r="30" fill="#f1f5f9" stroke="#64748b" stroke-width="2.5"/><text x="260" y="222" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#475569">I</text>
-        <!-- M -> S : BusRd / Flush(Opt) -->
-        <path d="M80,78 C80,120 80,150 80,185" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#apb)"/>
-        <text x="80" y="130" text-anchor="middle" class="tiny" style="fill:#16a34a">BusRd /</text><text x="80" y="142" text-anchor="middle" class="tiny" style="fill:#16a34a">Flush</text>
-        <!-- M -> I : BusRdX / Flush -->
-        <path d="M102,62 C170,108 210,160 242,196" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#apb)"/>
-        <text x="205" y="120" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX / Flush</text>
-        <!-- E -> S : BusRd / FlushOpt -->
-        <path d="M238,68 C170,120 130,165 100,196" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#apb)"/>
-        <text x="150" y="115" text-anchor="middle" class="tiny" style="fill:#16a34a">BusRd / FlushOpt</text>
-        <!-- E -> I : BusRdX / FlushOpt -->
-        <path d="M260,78 C260,120 260,150 260,185" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#apb)"/>
-        <text x="260" y="130" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX /</text><text x="260" y="142" text-anchor="middle" class="tiny" style="fill:#CC0000">FlushOpt</text>
-        <!-- S -> I : BusRdX/BusUpgr -->
-        <path d="M104,228 C150,248 200,248 236,230" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#apb)"/>
-        <text x="170" y="262" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX / BusUpgr</text>
-        <!-- S self loop BusRd -->
-        <path d="M58,231 C24,255 30,205 56,210" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#apb)"/>
-        <text x="38" y="258" text-anchor="middle" class="tiny">BusRd/FlushOpt</text>
+      <svg viewBox="0 0 400 318" class="chart" style="max-width:472px">
+        <defs><marker id="apb16a34a" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#16a34a"/></marker><marker id="apb475569" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker><marker id="apbCC0000" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#CC0000"/></marker></defs>
+        <circle cx="100" cy="95" r="28" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="100" y="101" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#b91c1c">M</text>
+        <circle cx="280" cy="95" r="28" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.5"/><text x="280" y="101" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#a16207">E</text>
+        <circle cx="100" cy="245" r="28" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="100" y="251" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#1d4ed8">S</text>
+        <circle cx="280" cy="245" r="28" fill="#f1f5f9" stroke="#64748b" stroke-width="2.5"/><text x="280" y="251" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#475569">I</text>
+        <path d="M100.0,123.0 L100.0,215.0" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#apb16a34a)"/>
+        <text x="92" y="168" text-anchor="end" class="tiny" style="fill:#16a34a">BusRd/</text>
+        <text x="92" y="179" text-anchor="end" class="tiny" style="fill:#16a34a">Flush</text>
+        <path d="M126,82 C190,40 250,120 258,222" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#apbCC0000)"/>
+        <text x="178" y="58" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX/Flush</text>
+        <path d="M258.5,112.9 L123.0,225.8" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#apb16a34a)"/>
+        <text x="205" y="147" text-anchor="end" class="tiny" style="fill:#16a34a">BusRd/FlushOpt</text>
+        <path d="M280.0,123.0 L280.0,215.0" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#apbCC0000)"/>
+        <text x="288" y="168" text-anchor="start" class="tiny" style="fill:#CC0000">BusRdX/</text>
+        <text x="288" y="179" text-anchor="start" class="tiny" style="fill:#CC0000">FlushOpt</text>
+        <path d="M128.0,245.0 L250.0,245.0" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#apbCC0000)"/>
+        <text x="190" y="262" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX/FlushOpt</text>
+        <text x="190" y="273" text-anchor="middle" class="tiny" style="fill:#CC0000">BusUpgr/&#8211;</text>
+        <path d="M90,271 C62,303 138,303 110,271" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#apb475569)"/>
+        <text x="134" y="304" text-anchor="start" class="tiny">BusRd/FlushOpt</text>
+        <path d="M306,235 C338,207 338,283 306,255" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#apb475569)"/>
+        <text x="344" y="238" text-anchor="start" class="tiny">BusRd/&#8211;</text>
+        <text x="344" y="249" text-anchor="start" class="tiny">BusRdX/&#8211;</text>
+        <text x="344" y="260" text-anchor="start" class="tiny">BusUpgr/&#8211;</text>
       </svg>
     </div>
     <div>
@@ -745,49 +745,100 @@
 
 <!-- MOESI state diagram -->
 <section data-background-color="#ffffff">
-  <h2>MOESI — Five States</h2>
+  <h2>MOESI — Processor-Initiated Transitions</h2>
   <div class="cols w-64">
     <div class="center">
-      <svg viewBox="0 0 340 280" class="chart" style="max-width:400px">
-        <defs><marker id="ao" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker></defs>
-        <!-- M top, O center, E top-right, S bottom-left, I bottom-right -->
-        <circle cx="80" cy="46" r="28" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="80" y="53" text-anchor="middle" style="font-weight:800;font-size:15px;fill:#b91c1c">M</text>
-        <circle cx="270" cy="46" r="28" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.5"/><text x="270" y="53" text-anchor="middle" style="font-weight:800;font-size:15px;fill:#a16207">E</text>
-        <circle cx="175" cy="140" r="28" fill="#ffedd5" stroke="#ea580c" stroke-width="2.5"/><text x="175" y="147" text-anchor="middle" style="font-weight:800;font-size:15px;fill:#c2410c">O</text>
-        <circle cx="80" cy="234" r="28" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="80" y="241" text-anchor="middle" style="font-weight:800;font-size:15px;fill:#1d4ed8">S</text>
-        <circle cx="270" cy="234" r="28" fill="#f1f5f9" stroke="#64748b" stroke-width="2.5"/><text x="270" y="241" text-anchor="middle" style="font-weight:800;font-size:15px;fill:#475569">I</text>
-        <!-- I -> E (PrRd !C) -->
-        <path d="M270,206 C270,160 270,110 270,76" fill="none" stroke="#ca8a04" stroke-width="1.8" marker-end="url(#ao)"/>
-        <text x="298" y="150" text-anchor="middle" class="tiny" style="fill:#a16207">PrRd(!C)</text>
-        <!-- I -> S (PrRd C) -->
-        <path d="M244,238 C190,246 140,244 108,238" fill="none" stroke="#2563eb" stroke-width="1.8" marker-end="url(#ao)"/>
-        <text x="175" y="268" text-anchor="middle" class="tiny" style="fill:#2563eb">PrRd(C)</text>
-        <!-- I -> M (PrWr BusRdX) -->
-        <path d="M250,216 C170,150 120,90 96,68" fill="none" stroke="#CC0000" stroke-width="1.8" marker-end="url(#ao)"/>
-        <text x="208" y="135" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr/BusRdX</text>
-        <!-- E -> M (PrWr) -->
-        <path d="M244,42 C190,32 140,34 108,42" fill="none" stroke="#CC0000" stroke-width="1.8" marker-end="url(#ao)"/>
-        <text x="175" y="22" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr/-</text>
-        <!-- M -> O (BusRd / Flush, becomes owner of dirty shared) -->
-        <path d="M96,68 C120,95 140,112 158,122" fill="none" stroke="#16a34a" stroke-width="1.8" marker-end="url(#ao)"/>
-        <text x="100" y="108" text-anchor="middle" class="tiny" style="fill:#16a34a">BusRd/Flush</text>
-        <!-- S -> M (PrWr / BusUpgr) -->
-        <path d="M80,206 C80,160 80,110 80,76" fill="none" stroke="#CC0000" stroke-width="1.8" marker-end="url(#ao)"/>
-        <text x="50" y="150" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr/</text><text x="50" y="162" text-anchor="middle" class="tiny" style="fill:#CC0000">BusUpgr</text>
-        <!-- O self-loop: on snooped BusRd the owner Flushes (supplies data) and stays O -->
-        <path d="M158,162 C128,200 150,214 176,168" fill="none" stroke="#16a34a" stroke-width="1.8" marker-end="url(#ao)"/>
-        <text x="140" y="210" text-anchor="middle" class="tiny" style="fill:#16a34a">BusRd/Flush</text>
+      <svg viewBox="0 0 420 318" class="chart" style="max-width:496px">
+        <defs><marker id="aop2563eb" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#2563eb"/></marker><marker id="aop475569" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker><marker id="aopCC0000" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#CC0000"/></marker><marker id="aopca8a04" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#ca8a04"/></marker><marker id="aopea580c" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#ea580c"/></marker></defs>
+        <circle cx="150" cy="95" r="28" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="150" y="101" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#b91c1c">M</text>
+        <circle cx="330" cy="95" r="28" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.5"/><text x="330" y="101" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#a16207">E</text>
+        <circle cx="150" cy="245" r="28" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="150" y="251" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#1d4ed8">S</text>
+        <circle cx="330" cy="245" r="28" fill="#f1f5f9" stroke="#64748b" stroke-width="2.5"/><text x="330" y="251" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#475569">I</text>
+        <circle cx="60" cy="195" r="28" fill="#ffedd5" stroke="#ea580c" stroke-width="2.5"/><text x="60" y="201" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#c2410c">O</text>
+        <path d="M140,69 C112,37 188,37 160,69" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#aop475569)"/>
+        <text x="150" y="20" text-anchor="middle" class="tiny">PrRd/&#8211;</text>
+        <text x="150" y="31" text-anchor="middle" class="tiny">PrWr/&#8211;</text>
+        <path d="M320,69 C292,37 368,37 340,69" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#aop475569)"/>
+        <text x="330" y="31" text-anchor="middle" class="tiny">PrRd/&#8211;</text>
+        <path d="M302.0,95.0 L180.0,95.0" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#aopCC0000)"/>
+        <text x="240" y="87" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr/&#8211;</text>
+        <path d="M308.5,227.1 L173.0,114.2" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#aopCC0000)"/>
+        <text x="255" y="160" text-anchor="start" class="tiny" style="fill:#CC0000">PrWr/BusRdX</text>
+        <path d="M330.0,217.0 L330.0,125.0" fill="none" stroke="#ca8a04" stroke-width="2" marker-end="url(#aopca8a04)"/>
+        <text x="338" y="168" text-anchor="start" class="tiny" style="fill:#ca8a04">PrRd/</text>
+        <text x="338" y="179" text-anchor="start" class="tiny" style="fill:#ca8a04">BusRd(!C)</text>
+        <path d="M150.0,217.0 L150.0,125.0" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#aopCC0000)"/>
+        <text x="158" y="168" text-anchor="start" class="tiny" style="fill:#CC0000">PrWr/</text>
+        <text x="158" y="179" text-anchor="start" class="tiny" style="fill:#CC0000">BusUpgr</text>
+        <path d="M302.0,245.0 L180.0,245.0" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#aop2563eb)"/>
+        <text x="240" y="262" text-anchor="middle" class="tiny" style="fill:#2563eb">PrRd/BusRd(C)</text>
+        <path d="M140,271 C112,303 188,303 160,271" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#aop475569)"/>
+        <text x="116" y="300" text-anchor="end" class="tiny">PrRd/&#8211;</text>
+        <path d="M78.7,174.2 L129.9,117.3" fill="none" stroke="#ea580c" stroke-width="2" marker-end="url(#aopea580c)"/>
+        <text x="100" y="132" text-anchor="end" class="tiny" style="fill:#ea580c">PrWr/</text>
+        <text x="100" y="143" text-anchor="end" class="tiny" style="fill:#ea580c">BusUpgr</text>
+        <path d="M34,185 C2,157 2,233 34,205" fill="none" stroke="#ea580c" stroke-width="1.6" marker-end="url(#aopea580c)"/>
+        <text x="34" y="240" text-anchor="middle" class="tiny" style="fill:#ea580c">PrRd/&#8211;</text>
       </svg>
-      <div class="src">O = dirty + shared; the owner supplies data and owes the write-back.</div>
+      <div class="src">Lecture 14 slides, MOESI state diagrams (Solihin, Fig. 8.7). O = dirty + shared: the owner supplies data and owes the write-back.</div>
     </div>
     <div>
       <ul class="small">
-        <li><strong>E / I → M</strong> like MESI</li>
-        <li><strong>M → O</strong> on snooped <code class="inline">BusRd</code>: stay dirty but become the <strong>shared owner</strong> (memory <em>not</em> updated)</li>
-        <li>Peer enters <strong>S</strong> holding a dirty value — legal in MOESI</li>
-        <li><strong>O</strong> supplies data on snooped reads and remains responsible for write-back</li>
+        <li><strong>I, E, S, M</strong> behave exactly as in MESI</li>
+        <li><strong>O → O</strong> on <code class="inline">PrRd</code>: read hit, no bus</li>
+        <li><strong>O → M</strong> on <code class="inline">PrWr</code> → <code class="inline">BusUpgr</code>: invalidate the other sharers, then write</li>
       </ul>
-      <div class="callout small"><span class="lbl">Eviction rule</span>An <strong>S</strong> copy of a dirty block can be dropped silently. The <strong>O</strong> copy must be <em>written back</em> on eviction — unlike MSI/MESI where write-back happens only from M.</div>
+      <div class="callout small"><span class="lbl">The key</span>When a dirty block is shared, <strong>one</strong> cache acts as the <strong>owner</strong> of the block. The O state marks that cache.</div>
+    </div>
+  </div>
+</section>
+
+<!-- MOESI bus-initiated diagram -->
+<section data-background-color="#ffffff">
+  <h2>MOESI — Bus-Initiated (Snooped) Transitions</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 450 345" class="chart" style="max-width:531px">
+        <defs><marker id="aob16a34a" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#16a34a"/></marker><marker id="aob475569" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker><marker id="aobCC0000" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#CC0000"/></marker><marker id="aobea580c" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#ea580c"/></marker></defs>
+        <circle cx="150" cy="95" r="28" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="150" y="101" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#b91c1c">M</text>
+        <circle cx="330" cy="95" r="28" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.5"/><text x="330" y="101" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#a16207">E</text>
+        <circle cx="150" cy="245" r="28" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="150" y="251" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#1d4ed8">S</text>
+        <circle cx="330" cy="245" r="28" fill="#f1f5f9" stroke="#64748b" stroke-width="2.5"/><text x="330" y="251" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#475569">I</text>
+        <circle cx="60" cy="195" r="28" fill="#ffedd5" stroke="#ea580c" stroke-width="2.5"/><text x="60" y="201" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#c2410c">O</text>
+        <path d="M131.3,115.8 L80.1,172.7" fill="none" stroke="#ea580c" stroke-width="2" marker-end="url(#aobea580c)"/>
+        <text x="100" y="132" text-anchor="end" class="tiny" style="fill:#ea580c">BusRd/</text>
+        <text x="100" y="143" text-anchor="end" class="tiny" style="fill:#ea580c">Flush</text>
+        <path d="M34,185 C2,157 2,233 34,205" fill="none" stroke="#ea580c" stroke-width="1.6" marker-end="url(#aobea580c)"/>
+        <text x="34" y="240" text-anchor="middle" class="tiny" style="fill:#ea580c">BusRd/Flush</text>
+        <path d="M66,222 C90,345 330,345 322,275" fill="none" stroke="#ea580c" stroke-width="2" marker-end="url(#aobea580c)"/>
+        <text x="205" y="340" text-anchor="middle" class="tiny" style="fill:#ea580c">BusRdX/Flush &#183; BusUpgr/&#8211;</text>
+        <path d="M176,82 C240,40 300,120 308,222" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#aobCC0000)"/>
+        <text x="226" y="58" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX/Flush</text>
+        <path d="M308.5,112.9 L173.0,225.8" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#aob16a34a)"/>
+        <text x="255" y="147" text-anchor="end" class="tiny" style="fill:#16a34a">BusRd/FlushOpt</text>
+        <path d="M330.0,123.0 L330.0,215.0" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#aobCC0000)"/>
+        <text x="338" y="168" text-anchor="start" class="tiny" style="fill:#CC0000">BusRdX/</text>
+        <text x="338" y="179" text-anchor="start" class="tiny" style="fill:#CC0000">FlushOpt</text>
+        <path d="M178.0,245.0 L300.0,245.0" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#aobCC0000)"/>
+        <text x="240" y="262" text-anchor="middle" class="tiny" style="fill:#CC0000">BusRdX/&#8211;</text>
+        <text x="240" y="273" text-anchor="middle" class="tiny" style="fill:#CC0000">BusUpgr/&#8211;</text>
+        <path d="M140,219 C112,187 188,187 160,219" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#aob475569)"/>
+        <text x="150" y="170" text-anchor="middle" class="tiny">BusRd/&#8211;</text>
+        <path d="M356,235 C388,207 388,283 356,255" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#aob475569)"/>
+        <text x="394" y="238" text-anchor="start" class="tiny">BusRd/&#8211;</text>
+        <text x="394" y="249" text-anchor="start" class="tiny">BusRdX/&#8211;</text>
+        <text x="394" y="260" text-anchor="start" class="tiny">BusUpgr/&#8211;</text>
+      </svg>
+      <div class="src">Lecture 14 slides, MOESI state diagrams (Solihin, Fig. 8.7). O = dirty + shared: the owner supplies data and owes the write-back.</div>
+    </div>
+    <div>
+      <ul class="small">
+        <li><strong>M → O</strong> on snooped <code class="inline">BusRd</code> → <strong>Flush</strong>: stay dirty and become the owner; memory is <em>not</em> updated</li>
+        <li><strong>O → O</strong> on snooped <code class="inline">BusRd</code> → <strong>Flush</strong>: the owner supplies the block</li>
+        <li><strong>O → I</strong> on <code class="inline">BusRdX</code> → <strong>Flush</strong>, or on <code class="inline">BusUpgr</code></li>
+        <li><strong>S</strong> no longer answers: <code class="inline">BusRd/–</code>, <code class="inline">BusRdX/–</code> (MESI's S used <code class="inline">FlushOpt</code>)</li>
+      </ul>
+      <div class="callout small"><span class="lbl">Eviction rule</span>Other caches can evict the block <strong>silently</strong>. The owner must <strong>write it back</strong> to memory.</div>
     </div>
   </div>
 </section>
@@ -882,40 +933,46 @@
   <h2>Dragon — Processor-Initiated Transitions</h2>
   <div class="cols w-64">
     <div class="center">
-      <svg viewBox="0 0 340 280" class="chart" style="max-width:400px">
-        <defs><marker id="ad" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker></defs>
-        <!-- E top-left, M top-right, Sc bottom-left, Sm bottom-right -->
-        <circle cx="80" cy="50" r="30" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.5"/><text x="80" y="57" text-anchor="middle" style="font-weight:800;font-size:15px;fill:#a16207">E</text>
-        <circle cx="260" cy="50" r="30" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="260" y="57" text-anchor="middle" style="font-weight:800;font-size:15px;fill:#b91c1c">M</text>
-        <circle cx="80" cy="228" r="30" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="80" y="235" text-anchor="middle" style="font-weight:800;font-size:13px;fill:#1d4ed8">Sc</text>
-        <circle cx="260" cy="228" r="30" fill="#ffedd5" stroke="#ea580c" stroke-width="2.5"/><text x="260" y="235" text-anchor="middle" style="font-weight:800;font-size:13px;fill:#c2410c">Sm</text>
-        <!-- E -> M : PrWr/- -->
-        <path d="M110,50 C150,42 200,42 230,50" fill="none" stroke="#CC0000" stroke-width="1.8" marker-end="url(#ad)"/>
-        <text x="170" y="30" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr/-</text>
-        <!-- E -> Sc : PrRdMiss? Actually read by other -> handled bus side; here E->Sc on read with C? keep PrRd/- self -->
-        <!-- Sc -> Sm : PrWr/BusUpd(!C) -->
-        <path d="M110,228 C150,236 200,236 230,228" fill="none" stroke="#ea580c" stroke-width="1.8" marker-end="url(#ad)"/>
-        <text x="170" y="258" text-anchor="middle" class="tiny" style="fill:#ea580c">PrWr/BusUpd</text>
-        <!-- Sm -> M : PrWr/BusUpd(!C) (becomes sole) -->
-        <path d="M260,198 C260,160 260,110 260,82" fill="none" stroke="#CC0000" stroke-width="1.8" marker-end="url(#ad)"/>
-        <text x="296" y="145" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr/</text><text x="296" y="157" text-anchor="middle" class="tiny" style="fill:#CC0000">BusUpd(!C)</text>
-        <!-- Sc -> E : PrWr...; show I->E read miss entering: use PrRdMiss/BusRd(!C) from outside into E -->
-        <path d="M44,70 C18,100 18,180 50,212" fill="none" stroke="#ca8a04" stroke-width="1.8" marker-end="url(#ad)"/>
-        <text x="8" y="145" text-anchor="middle" class="tiny" style="fill:#a16207">PrRd/-</text>
-        <!-- self loops -->
-        <path d="M58,32 C26,8 30,58 56,52" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#ad)"/>
-        <text x="34" y="16" text-anchor="middle" class="tiny">PrRd/-</text>
-        <path d="M282,34 C314,10 318,60 286,54" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#ad)"/>
-        <text x="300" y="18" text-anchor="middle" class="tiny">PrRd/PrWr</text>
-        <path d="M52,238 C20,260 26,210 54,212" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#ad)"/>
-        <text x="30" y="262" text-anchor="middle" class="tiny">PrRd/-</text>
+      <svg viewBox="0 0 420 325" class="chart" style="max-width:496px">
+        <defs><marker id="adp2563eb" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#2563eb"/></marker><marker id="adp475569" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker><marker id="adpCC0000" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#CC0000"/></marker><marker id="adpca8a04" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#ca8a04"/></marker><marker id="adpea580c" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#ea580c"/></marker></defs>
+        <circle cx="110" cy="110" r="28" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.5"/><text x="110" y="116" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#a16207">E</text>
+        <circle cx="300" cy="110" r="28" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="300" y="115" text-anchor="middle" style="font-weight:800;font-size:13px;fill:#1d4ed8">Sc</text>
+        <circle cx="110" cy="260" r="28" fill="#ffedd5" stroke="#ea580c" stroke-width="2.5"/><text x="110" y="265" text-anchor="middle" style="font-weight:800;font-size:13px;fill:#c2410c">Sm</text>
+        <circle cx="300" cy="260" r="28" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="300" y="266" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#b91c1c">M</text>
+        <path d="M100,84 C72,52 148,52 120,84" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#adp475569)"/>
+        <text x="110" y="45" text-anchor="middle" class="tiny">PrRd/&#8211;</text>
+        <path d="M290,84 C262,52 338,52 310,84" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#adp475569)"/>
+        <text x="300" y="45" text-anchor="middle" class="tiny">PrRd/&#8211;</text>
+        <path d="M14,110 L80.0,110.0" fill="none" stroke="#ca8a04" stroke-width="2" marker-end="url(#adpca8a04)"/>
+        <text x="8" y="150" text-anchor="start" class="tiny" style="fill:#ca8a04">PrRdMiss/BusRd(!C)</text>
+        <path d="M406,110 L330.0,110.0" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#adp2563eb)"/>
+        <text x="412" y="150" text-anchor="end" class="tiny" style="fill:#2563eb">PrRdMiss/BusRd(C)</text>
+        <path d="M278.0,127.4 L133.5,241.4" fill="none" stroke="#ea580c" stroke-width="2" marker-end="url(#adpea580c)"/>
+        <text x="240" y="132" text-anchor="end" class="tiny" style="fill:#ea580c">PrWr/BusUpd(C)</text>
+        <path d="M132.0,127.4 L276.5,241.4" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#adpCC0000)"/>
+        <text x="245" y="198" text-anchor="start" class="tiny" style="fill:#CC0000">PrWr/&#8211;</text>
+        <path d="M300.0,138.0 L300.0,230.0" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#adpCC0000)"/>
+        <text x="308" y="185" text-anchor="start" class="tiny" style="fill:#CC0000">PrWr/BusUpd(!C)</text>
+        <path d="M138.0,260.0 L270.0,260.0" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#adpCC0000)"/>
+        <text x="205" y="278" text-anchor="middle" class="tiny" style="fill:#CC0000">PrWr/BusUpd(!C)</text>
+        <path d="M14,260 L80.0,260.0" fill="none" stroke="#ea580c" stroke-width="2" marker-end="url(#adpea580c)"/>
+        <text x="6" y="212" text-anchor="start" class="tiny" style="fill:#ea580c">PrWrMiss/</text>
+        <text x="6" y="223" text-anchor="start" class="tiny" style="fill:#ea580c">(BusRd(C);BusUpd)</text>
+        <path d="M406,260 L330.0,260.0" fill="none" stroke="#CC0000" stroke-width="2" marker-end="url(#adpCC0000)"/>
+        <text x="412" y="222" text-anchor="end" class="tiny" style="fill:#CC0000">PrWrMiss/BusRd(!C)</text>
+        <path d="M100,286 C72,318 148,318 120,286" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#adp475569)"/>
+        <text x="76" y="300" text-anchor="end" class="tiny">PrRd/&#8211;</text>
+        <text x="76" y="311" text-anchor="end" class="tiny">PrWr/BusUpd(C)</text>
+        <path d="M290,286 C262,318 338,318 310,286" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#adp475569)"/>
+        <text x="336" y="300" text-anchor="start" class="tiny">PrRd/&#8211;</text>
+        <text x="336" y="311" text-anchor="start" class="tiny">PrWr/&#8211;</text>
       </svg>
       <div class="src">No Invalid state. Writes broadcast a word via BusUpd.</div>
     </div>
     <div>
       <ul class="small">
         <li><strong>PrRdMiss</strong> → <code class="inline">BusRd</code>: enter <strong>E</strong> if no copy (<code class="inline">!C</code>), else <strong>Sc</strong></li>
-        <li><strong>PrWrMiss</strong> → <code class="inline">BusRd; BusUpd</code> → <strong>Sm</strong> if shared, else <strong>M</strong></li>
+        <li><strong>PrWrMiss</strong> → <code class="inline">BusRd(C); BusUpd</code> → <strong>Sm</strong> if shared; <code class="inline">BusRd(!C)</code> → <strong>M</strong> if not</li>
         <li><strong>E → M</strong> on <code class="inline">PrWr</code>: silent</li>
         <li><strong>Sc → Sm</strong> / <strong>Sm → Sm</strong> on <code class="inline">PrWr</code> → <code class="inline">BusUpd(C)</code> when others share</li>
         <li>When <code class="inline">BusUpd(!C)</code> (no one shares) → go to <strong>M</strong></li>
@@ -930,30 +987,23 @@
   <h2>Dragon — Bus-Initiated (Snooped) Transitions</h2>
   <div class="cols w-64">
     <div class="center">
-      <svg viewBox="0 0 340 280" class="chart" style="max-width:400px">
-        <defs><marker id="adb" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#475569"/></marker></defs>
-        <circle cx="80" cy="50" r="30" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.5"/><text x="80" y="57" text-anchor="middle" style="font-weight:800;font-size:15px;fill:#a16207">E</text>
-        <circle cx="260" cy="50" r="30" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="260" y="57" text-anchor="middle" style="font-weight:800;font-size:15px;fill:#b91c1c">M</text>
-        <circle cx="80" cy="228" r="30" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="80" y="235" text-anchor="middle" style="font-weight:800;font-size:13px;fill:#1d4ed8">Sc</text>
-        <circle cx="260" cy="228" r="30" fill="#ffedd5" stroke="#ea580c" stroke-width="2.5"/><text x="260" y="235" text-anchor="middle" style="font-weight:800;font-size:13px;fill:#c2410c">Sm</text>
-        <!-- E -> Sc : BusRd/- -->
-        <path d="M70,78 C58,120 58,170 70,200" fill="none" stroke="#2563eb" stroke-width="1.8" marker-end="url(#adb)"/>
-        <text x="40" y="145" text-anchor="middle" class="tiny" style="fill:#2563eb">BusRd/-</text>
-        <!-- M -> Sm : BusRd/Flush -->
-        <path d="M260,80 C260,120 260,170 260,198" fill="none" stroke="#16a34a" stroke-width="1.8" marker-end="url(#adb)"/>
-        <text x="298" y="145" text-anchor="middle" class="tiny" style="fill:#16a34a">BusRd/Flush</text>
-        <!-- Sm -> Sm : BusUpd/Update (self) -->
-        <path d="M282,212 C314,188 318,238 286,232" fill="none" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#adb)"/>
-        <text x="300" y="200" text-anchor="middle" class="tiny" style="fill:#7c3aed">BusUpd/Upd</text>
-        <!-- Sm -> Sc : BusUpd/Update (loses owner when peer writes) -->
-        <path d="M230,236 C190,246 130,246 108,236" fill="none" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#adb)"/>
-        <text x="170" y="266" text-anchor="middle" class="tiny" style="fill:#7c3aed">BusUpd/Update</text>
-        <!-- Sm -> Sm BusRd/Flush self handled; Sm supplies data -->
-        <path d="M232,222 C195,210 150,180 120,150" fill="none" stroke="#16a34a" stroke-width="1.8" marker-end="url(#adb)"/>
-        <text x="195" y="170" text-anchor="middle" class="tiny" style="fill:#16a34a">BusRd/Flush</text>
-        <!-- Sc -> Sc BusRd/-, BusUpd/Update self loop -->
-        <path d="M52,238 C20,260 26,210 54,212" fill="none" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#adb)"/>
-        <text x="30" y="262" text-anchor="middle" class="tiny" style="fill:#7c3aed">BusUpd/Upd</text>
+      <svg viewBox="0 0 420 320" class="chart" style="max-width:496px">
+        <defs><marker id="adb16a34a" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#16a34a"/></marker><marker id="adb2563eb" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#2563eb"/></marker><marker id="adb7c3aed" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#7c3aed"/></marker></defs>
+        <circle cx="110" cy="110" r="28" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.5"/><text x="110" y="116" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#a16207">E</text>
+        <circle cx="300" cy="110" r="28" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/><text x="300" y="115" text-anchor="middle" style="font-weight:800;font-size:13px;fill:#1d4ed8">Sc</text>
+        <circle cx="110" cy="260" r="28" fill="#ffedd5" stroke="#ea580c" stroke-width="2.5"/><text x="110" y="265" text-anchor="middle" style="font-weight:800;font-size:13px;fill:#c2410c">Sm</text>
+        <circle cx="300" cy="260" r="28" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/><text x="300" y="266" text-anchor="middle" style="font-weight:800;font-size:16px;fill:#b91c1c">M</text>
+        <path d="M138.0,110.0 L270.0,110.0" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#adb2563eb)"/>
+        <text x="205" y="101" text-anchor="middle" class="tiny" style="fill:#2563eb">BusRd/&#8211;</text>
+        <path d="M290,84 C262,52 338,52 310,84" fill="none" stroke="#7c3aed" stroke-width="1.6" marker-end="url(#adb7c3aed)"/>
+        <text x="336" y="56" text-anchor="start" class="tiny" style="fill:#7c3aed">BusRd/&#8211;</text>
+        <text x="336" y="67" text-anchor="start" class="tiny" style="fill:#7c3aed">BusUpd/Update</text>
+        <path d="M132.0,242.6 L276.5,128.6" fill="none" stroke="#7c3aed" stroke-width="2" marker-end="url(#adb7c3aed)"/>
+        <text x="200" y="180" text-anchor="end" class="tiny" style="fill:#7c3aed">BusUpd/Update</text>
+        <path d="M272.0,260.0 L140.0,260.0" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#adb16a34a)"/>
+        <text x="205" y="251" text-anchor="middle" class="tiny" style="fill:#16a34a">BusRd/Flush</text>
+        <path d="M100,286 C72,318 148,318 120,286" fill="none" stroke="#16a34a" stroke-width="1.6" marker-end="url(#adb16a34a)"/>
+        <text x="76" y="305" text-anchor="end" class="tiny" style="fill:#16a34a">BusRd/Flush</text>
       </svg>
       <div class="src">BusUpd updates copies in place; owner (Sm/M) supplies via Flush.</div>
     </div>
