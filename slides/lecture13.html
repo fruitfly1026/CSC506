@@ -123,7 +123,6 @@
   </div>
   <div class="callout takeaway"><span class="lbl">Direction of this chapter</span>
     We take Approach 2. Memory is <strong>physically distributed</strong> across nodes, but still presents a <strong>single shared address space</strong> — a directory keeps it coherent.</div>
-  <div class="src">System examples: IBM Cell Broadband Engine (EIB ring); Intel Larrabee (ring); SGI Altix (directory/NUMAlink).</div>
 </section>
 
 <!-- Memory mapping on DSM -->
@@ -134,8 +133,7 @@
     <div class="callout"><span class="lbl">Block interleaving</span>
       Spread consecutive blocks across nodes.
       <ul class="small" style="margin-top:.3em">
-        <li>Naturally balances load…</li>
-        <li>…but <strong>scatters data</strong> — hard to exploit locality</li>
+        <li><strong>Distributes data around</strong> — hard to exploit locality</li>
       </ul></div>
     <div class="callout"><span class="lbl">No interleaving (page granularity)</span>
       The <strong>OS</strong> decides where each page lives — with big performance impact.
