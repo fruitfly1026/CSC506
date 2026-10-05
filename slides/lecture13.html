@@ -251,7 +251,7 @@
   <p class="small">The directory can live at different points in the hierarchy — the principle (track sharers at the home) is the same.</p>
   <div class="cols c3">
     <div class="callout"><span class="lbl">Classic DSM</span>
-      Directory sits beside <strong>main memory</strong> at each node; nodes joined by an interconnect. Each node = P + L1/L2 + a slice of memory + its directory.</div>
+      Directory sits beside <strong>main memory</strong> at each node; nodes joined by an interconnect. Each node = P + L1/L2 + its local memory + its directory.</div>
     <div class="callout"><span class="lbl">Directory-coherent LLCs</span>
       On one multicore chip, the directory sits at each memory controller and tracks the cores' private <strong>last-level caches</strong> (L2).</div>
     <div class="callout"><span class="lbl">Directory-coherent non-LLCs (L2)</span>
@@ -429,7 +429,7 @@
         <rect x="320" y="74" width="50" height="26"/><rect x="370" y="74" width="30" height="26"/>
         <rect x="560" y="74" width="50" height="26"/><rect x="610" y="74" width="30" height="26"/></g>
       <!-- dir ctrl -->
-      <g class="tiny" fill="#b45309"><text x="120" y="128" text-anchor="middle">Dir Ctrl + memory slice</text>
+      <g class="tiny" fill="#b45309"><text x="120" y="128" text-anchor="middle">Dir Ctrl + local memory</text>
         <text x="360" y="128" text-anchor="middle">home of X</text><text x="600" y="128" text-anchor="middle">Dir Ctrl</text></g>
       <g fill="#fff7ed" stroke="#f59e0b">
         <rect x="80" y="134" width="80" height="26"/>
@@ -443,7 +443,7 @@
     </svg>
   </div>
   <div class="callout"><span class="lbl">Scenario</span>
-    Block <strong>X</strong> is homed at the middle node (P2's slice). We trace a sequence of accesses by P1 and P3 and watch the cache states, the directory state, and the presence bits evolve. Directory starts at <strong>U, 000</strong>.</div>
+    Block <strong>X</strong> is homed at the middle node (P2's local memory). We trace a sequence of accesses by P1 and P3 and watch the cache states, the directory state, and the presence bits evolve. Directory starts at <strong>U, 000</strong>.</div>
 </section>
 
 <!-- Walkthrough table -->
