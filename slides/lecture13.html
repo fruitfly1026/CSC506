@@ -662,9 +662,9 @@
 <!-- Directory state transition diagram -->
 <section data-background-color="#ffffff">
   <h2>State Transition at the Directory</h2>
-  <div class="cols w-64">
+  <div style="display:grid;grid-template-columns:36% 64%;gap:1em;align-items:start">
     <div class="center">
-      <svg viewBox="0 0 470 350" class="chart" style="max-width:560px">
+      <svg viewBox="0 0 470 350" class="chart" style="max-width:420px">
         <defs><marker id="dsA0" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#334155"/></marker></defs>
         <ellipse cx="170" cy="92" rx="36" ry="26" fill="#fee2e2" stroke="#CC0000" stroke-width="2"/>
         <text x="170" y="97" text-anchor="middle" class="lbl" style="font-weight:700">EM</text>
@@ -689,12 +689,15 @@
     <div>
       <div class="callout"><span class="lbl">Legend</span>
         Each arc is labeled <code class="inline">&lt;request&gt;/&lt;reply1&gt;,&lt;reply2&gt;</code>.</div>
-      <ul class="small">
-        <li><strong>U→EM</strong>: first Read/ReadX, home replies with data.</li>
-        <li><strong>EM→S</strong>: a Read from a third party → home intervenes the owner.</li>
-        <li><strong>S→EM</strong>: an Upgr/ReadX → home invalidates other sharers.</li>
-        <li>Self-loops keep the same state (e.g. another Read while Shared).</li>
-      </ul>
+      <table style="font-size:.5em;margin-top:.3em">
+        <tr><th>Arc</th><th>Trigger</th><th>What home does</th><th>Data comes from</th></tr>
+        <tr><td><strong>U → EM</strong><br>Read/ReplyD<br>ReadX/ReplyD</td><td>First read or write while no cache holds the block</td><td>Replies with data; the requestor becomes the sole owner</td><td>Home memory</td></tr>
+        <tr><td><strong>EM → S</strong><br>Read/Int</td><td>Another node reads a block that has an owner</td><td>Sends an intervention to the owner (with the requestor ID)</td><td>Owner flushes to requestor and home, then drops to S</td></tr>
+        <tr><td><strong>EM self-loop</strong><br>ReadX/Reply,Inv</td><td>Another node writes a block that has an owner</td><td>Invalidates the old owner; Reply (no data) to the requestor. Still EM, new owner</td><td>Old owner flushes to the requestor</td></tr>
+        <tr><td><strong>S → EM</strong><br>Upgr/Reply,Inv</td><td>A sharer wants to write</td><td>Reply without data; invalidates the other sharers</td><td>Not needed (requestor has it)</td></tr>
+        <tr><td><strong>S → EM</strong><br>ReadX/ReplyD,Inv</td><td>A non-sharer wants to write</td><td>Replies with data (with the number of InvAcks to expect); invalidates all sharers</td><td>Home memory (clean in S)</td></tr>
+        <tr><td><strong>S self-loop</strong><br>Read/ReplyD</td><td>Another reader</td><td>Replies with data; adds it to the sharer bits</td><td>Home memory</td></tr>
+      </table>
     </div>
   </div>
 </section>
