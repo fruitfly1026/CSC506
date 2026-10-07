@@ -662,9 +662,9 @@
 <!-- Directory state transition diagram -->
 <section data-background-color="#ffffff">
   <h2>State Transition at the Directory</h2>
-  <div style="display:grid;grid-template-columns:36% 64%;gap:1em;align-items:start">
+  <div class="cols w-64">
     <div class="center">
-      <svg viewBox="0 0 470 350" class="chart" style="max-width:420px">
+      <svg viewBox="0 0 470 350" class="chart" style="max-width:560px">
         <defs><marker id="dsA0" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#334155"/></marker></defs>
         <ellipse cx="170" cy="92" rx="36" ry="26" fill="#fee2e2" stroke="#CC0000" stroke-width="2"/>
         <text x="170" y="97" text-anchor="middle" class="lbl" style="font-weight:700">EM</text>
@@ -683,6 +683,46 @@
         <text x="89.2" y="174.9" text-anchor="middle" class="small" style="fill:#334155">Upgr/Reply,Inv</text>
         <text x="89.2" y="187.9" text-anchor="middle" class="small" style="fill:#334155">ReadX/ReplyD,Inv</text>
         <path d="M181.9,284.3 C192.9,319.5 147.1,319.5 158.1,284.3" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#dsA0)"/>
+        <text x="170.0" y="330.5" text-anchor="middle" class="small" style="fill:#334155">Read/ReplyD</text>
+      </svg>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Legend</span>
+        Each arc is labeled <code class="inline">&lt;request&gt;/&lt;reply1&gt;,&lt;reply2&gt;</code>.</div>
+      <ul class="small">
+        <li><strong>U→EM</strong>: first Read/ReadX, home replies with data.</li>
+        <li><strong>EM→S</strong>: a Read from a third party → home intervenes the owner.</li>
+        <li><strong>S→EM</strong>: an Upgr/ReadX → home invalidates other sharers.</li>
+        <li>Self-loops keep the same state (e.g. another Read while Shared).</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- State transitions: each arc explained -->
+<section data-background-color="#ffffff">
+  <h2>State Transition at the Directory — Each Arc Explained</h2>
+  <div style="display:grid;grid-template-columns:36% 64%;gap:1em;align-items:start">
+    <div class="center">
+      <svg viewBox="0 0 470 350" class="chart" style="max-width:360px">
+        <defs><marker id="dsB0" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#334155"/></marker></defs>
+        <ellipse cx="170" cy="92" rx="36" ry="26" fill="#fee2e2" stroke="#CC0000" stroke-width="2"/>
+        <text x="170" y="97" text-anchor="middle" class="lbl" style="font-weight:700">EM</text>
+        <ellipse cx="400" cy="92" rx="30" ry="24" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
+        <text x="400" y="97" text-anchor="middle" class="lbl" style="font-weight:700">U</text>
+        <ellipse cx="170" cy="262" rx="32" ry="24" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+        <text x="170" y="267" text-anchor="middle" class="lbl" style="font-weight:700">S</text>
+        <path d="M370.0,92.0 Q285.0,92.0 206.0,92.0" fill="none" stroke="#334155" stroke-width="1.8" marker-end="url(#dsB0)"/>
+        <text x="286.5" y="108.0" text-anchor="middle" class="small" style="fill:#334155">Read/ReplyD</text>
+        <text x="286.5" y="121.0" text-anchor="middle" class="small" style="fill:#334155">ReadX/ReplyD</text>
+        <path d="M157.1,67.7 C146.1,32.5 193.9,32.5 182.9,67.7" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#dsB0)"/>
+        <text x="170.0" y="28.5" text-anchor="middle" class="small" style="fill:#334155">ReadX/Reply,Inv</text>
+        <path d="M180.9,116.8 Q207.4,177.0 180.0,239.2" fill="none" stroke="#334155" stroke-width="1.8" marker-end="url(#dsB0)"/>
+        <text x="226.4" y="181.2" text-anchor="middle" class="small" style="fill:#334155">Read/Int</text>
+        <path d="M160.0,239.2 Q132.6,177.0 159.1,116.8" fill="none" stroke="#334155" stroke-width="1.8" marker-end="url(#dsB0)"/>
+        <text x="89.2" y="174.9" text-anchor="middle" class="small" style="fill:#334155">Upgr/Reply,Inv</text>
+        <text x="89.2" y="187.9" text-anchor="middle" class="small" style="fill:#334155">ReadX/ReplyD,Inv</text>
+        <path d="M181.9,284.3 C192.9,319.5 147.1,319.5 158.1,284.3" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#dsB0)"/>
         <text x="170.0" y="330.5" text-anchor="middle" class="small" style="fill:#334155">Read/ReplyD</text>
       </svg>
     </div>
