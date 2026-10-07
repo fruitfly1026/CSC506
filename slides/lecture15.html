@@ -119,19 +119,19 @@
   <p class="small">Each level constructs synchronization on the level above it — hardware at the bottom, libraries at the top.</p>
   <div class="cols w-64">
     <div class="center">
-      <svg viewBox="0 0 280 200" class="chart" style="max-width:340px">
-        <rect x="20" y="10" width="240" height="38" rx="8" fill="#fee2e2" stroke="#CC0000" stroke-width="2"/>
-        <text x="140" y="28" text-anchor="middle" class="lbl" style="font-weight:700">Level 4 · SW</text>
-        <text x="140" y="42" text-anchor="middle" class="tiny">Barriers · semaphores · monitors</text>
-        <rect x="20" y="56" width="240" height="38" rx="8" fill="#fde68a" stroke="#f59e0b" stroke-width="2"/>
-        <text x="140" y="74" text-anchor="middle" class="lbl" style="font-weight:700">Level 3 · SW</text>
-        <text x="140" y="88" text-anchor="middle" class="tiny">Lock primitives (libraries)</text>
-        <rect x="20" y="102" width="240" height="38" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
-        <text x="140" y="120" text-anchor="middle" class="lbl" style="font-weight:700">Level 2 · HW</text>
-        <text x="140" y="134" text-anchor="middle" class="tiny">Atomic exchange · fetch&amp;inc · t&amp;s · CAS</text>
-        <rect x="20" y="148" width="240" height="38" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
-        <text x="140" y="166" text-anchor="middle" class="lbl" style="font-weight:700">Level 1 · HW</text>
-        <text x="140" y="180" text-anchor="middle" class="tiny">LL/SC (not always needed)</text>
+      <svg viewBox="0 0 340 284" class="chart" style="max-width:580px;width:100%">
+        <rect x="8" y="6" width="324" height="62" rx="10" fill="#fee2e2" stroke="#CC0000" stroke-width="2.5"/>
+        <text x="170" y="33" text-anchor="middle" style="font-size:19px;font-weight:700">Level 4 (SW)</text>
+        <text x="170" y="56" text-anchor="middle" style="font-size:15px">Barriers, semaphores, monitors</text>
+        <rect x="8" y="76" width="324" height="62" rx="10" fill="#fde68a" stroke="#f59e0b" stroke-width="2.5"/>
+        <text x="170" y="103" text-anchor="middle" style="font-size:19px;font-weight:700">Level 3 (SW)</text>
+        <text x="170" y="126" text-anchor="middle" style="font-size:15px">Lock primitives (libraries)</text>
+        <rect x="8" y="146" width="324" height="62" rx="10" fill="#dbeafe" stroke="#3b82f6" stroke-width="2.5"/>
+        <text x="170" y="173" text-anchor="middle" style="font-size:19px;font-weight:700">Level 2 (HW)</text>
+        <text x="170" y="196" text-anchor="middle" style="font-size:15px">Atomic exchange, fetch&amp;inc, t&amp;s, CAS</text>
+        <rect x="8" y="216" width="324" height="62" rx="10" fill="#dcfce7" stroke="#22c55e" stroke-width="2.5"/>
+        <text x="170" y="243" text-anchor="middle" style="font-size:19px;font-weight:700">Level 1 (HW)</text>
+        <text x="170" y="266" text-anchor="middle" style="font-size:15px">LL/SC (not always needed)</text>
       </svg>
     </div>
     <div>
