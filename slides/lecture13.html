@@ -743,21 +743,103 @@
 <!-- Visualization: initial -->
 <section data-background-color="#ffffff">
   <h2>Full Bit-Vector Walkthrough — Layout</h2>
-  <div class="center">
-    <div class="r-stack">
-    <img src="assets/lecture13/fbv1.svg" alt="Full-bit vector protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:430px;height:auto">
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv2.svg" alt="Full-bit vector protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:430px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv3.svg" alt="Full-bit vector protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:430px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv4.svg" alt="Full-bit vector protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:430px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv5.svg" alt="Full-bit vector protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:430px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv6.svg" alt="Full-bit vector protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:430px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv7.svg" alt="Full-bit vector protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:430px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv8.svg" alt="Full-bit vector protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:430px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv9.svg" alt="Full-bit vector protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:430px;height:auto"></div>
-  </div>
+  <div class="r-stack">
+    <img data-src="assets/lecture13/fbv_p18_0.svg" alt="fbv slide 18 step 0" style="display:block;margin:0 auto;max-width:100%;max-height:420px;height:auto">
   </div>
   <div class="callout"><span class="lbl">Scenario</span>
     Block <strong>X</strong> is homed at the middle node (P2's local memory). We trace a sequence of accesses by P1 and P3 and watch the cache states, the directory state, and the presence bits evolve. Directory starts at <strong>U, 000</strong>.</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Full Bit-Vector Walkthrough — Initial State</h2>
+  <div class="r-stack">
+    <img data-src="assets/lecture13/fbv_p19_0.svg" alt="fbv slide 19 step 0" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto">
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Full Bit-Vector Walkthrough — R1: P1 reads X</h2>
+  <div class="r-stack">
+    <img data-src="assets/lecture13/fbv_p20_0.svg" alt="fbv slide 20 step 0" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto">
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p20_1.svg" alt="fbv slide 20 step 1" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p20_2.svg" alt="fbv slide 20 step 2" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p20_3.svg" alt="fbv slide 20 step 3" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p20_4.svg" alt="fbv slide 20 step 4" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p20_5.svg" alt="fbv slide 20 step 5" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Full Bit-Vector Walkthrough — W1: P1 writes X</h2>
+  <div class="r-stack">
+    <img data-src="assets/lecture13/fbv_p21_0.svg" alt="fbv slide 21 step 0" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto">
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p21_1.svg" alt="fbv slide 21 step 1" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p21_2.svg" alt="fbv slide 21 step 2" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Full Bit-Vector Walkthrough — R3: P3 reads X</h2>
+  <div class="r-stack">
+    <img data-src="assets/lecture13/fbv_p22_0.svg" alt="fbv slide 22 step 0" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto">
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p22_1.svg" alt="fbv slide 22 step 1" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p22_2.svg" alt="fbv slide 22 step 2" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p22_3.svg" alt="fbv slide 22 step 3" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p22_4.svg" alt="fbv slide 22 step 4" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p22_5.svg" alt="fbv slide 22 step 5" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p22_6.svg" alt="fbv slide 22 step 6" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p22_7.svg" alt="fbv slide 22 step 7" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p22_8.svg" alt="fbv slide 22 step 8" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Full Bit-Vector Walkthrough — W3: P3 writes X</h2>
+  <div class="r-stack">
+    <img data-src="assets/lecture13/fbv_p23_0.svg" alt="fbv slide 23 step 0" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto">
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p23_1.svg" alt="fbv slide 23 step 1" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p23_2.svg" alt="fbv slide 23 step 2" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p23_3.svg" alt="fbv slide 23 step 3" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p23_4.svg" alt="fbv slide 23 step 4" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p23_5.svg" alt="fbv slide 23 step 5" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p23_6.svg" alt="fbv slide 23 step 6" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p23_7.svg" alt="fbv slide 23 step 7" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Full Bit-Vector Walkthrough — R1: P1 reads X</h2>
+  <div class="r-stack">
+    <img data-src="assets/lecture13/fbv_p24_0.svg" alt="fbv slide 24 step 0" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto">
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p24_1.svg" alt="fbv slide 24 step 1" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p24_2.svg" alt="fbv slide 24 step 2" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p24_3.svg" alt="fbv slide 24 step 3" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p24_4.svg" alt="fbv slide 24 step 4" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p24_5.svg" alt="fbv slide 24 step 5" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p24_6.svg" alt="fbv slide 24 step 6" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p24_7.svg" alt="fbv slide 24 step 7" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Full Bit-Vector Walkthrough — R3: P3 reads X</h2>
+  <div class="r-stack">
+    <img data-src="assets/lecture13/fbv_p25_0.svg" alt="fbv slide 25 step 0" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto">
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p25_1.svg" alt="fbv slide 25 step 1" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p25_2.svg" alt="fbv slide 25 step 2" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Full Bit-Vector Walkthrough — R2: P2 reads X</h2>
+  <div class="r-stack">
+    <img data-src="assets/lecture13/fbv_p26_0.svg" alt="fbv slide 26 step 0" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto">
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p26_1.svg" alt="fbv slide 26 step 1" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p26_2.svg" alt="fbv slide 26 step 2" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p26_3.svg" alt="fbv slide 26 step 3" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p26_4.svg" alt="fbv slide 26 step 4" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/fbv_p26_5.svg" alt="fbv slide 26 step 5" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+  </div>
 </section>
 
 <!-- Walkthrough table -->
@@ -1359,17 +1441,113 @@
 </section>
 
 <section data-background-color="#ffffff">
-  <h2>SSCI Protocol Visualization</h2>
+  <h2>SSCI Walkthrough — Layout</h2>
   <div class="r-stack">
-    <img src="assets/lecture13/ssci1.svg" alt="SSCI protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:540px;height:auto">
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci2.svg" alt="SSCI protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:540px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci3.svg" alt="SSCI protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:540px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci4.svg" alt="SSCI protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:540px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci5.svg" alt="SSCI protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:540px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci6.svg" alt="SSCI protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:540px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci7.svg" alt="SSCI protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:540px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci8.svg" alt="SSCI protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:540px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci9.svg" alt="SSCI protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:540px;height:auto"></div>
+    <img data-src="assets/lecture13/ssci_p60_0.svg" alt="ssci slide 60 step 0" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto">
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p60_1.svg" alt="ssci slide 60 step 1" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p60_2.svg" alt="ssci slide 60 step 2" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p60_3.svg" alt="ssci slide 60 step 3" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p60_4.svg" alt="ssci slide 60 step 4" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p60_5.svg" alt="ssci slide 60 step 5" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>SSCI Walkthrough — R1: P1 reads X</h2>
+  <div class="r-stack">
+    <img data-src="assets/lecture13/ssci_p61_0.svg" alt="ssci slide 61 step 0" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto">
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p61_1.svg" alt="ssci slide 61 step 1" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p61_2.svg" alt="ssci slide 61 step 2" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p61_3.svg" alt="ssci slide 61 step 3" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p61_4.svg" alt="ssci slide 61 step 4" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p61_5.svg" alt="ssci slide 61 step 5" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>SSCI Walkthrough — W1: P1 writes X</h2>
+  <div class="r-stack">
+    <img data-src="assets/lecture13/ssci_p62_0.svg" alt="ssci slide 62 step 0" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto">
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p62_1.svg" alt="ssci slide 62 step 1" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p62_2.svg" alt="ssci slide 62 step 2" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>SSCI Walkthrough — R3: P3 reads X</h2>
+  <div class="r-stack">
+    <img data-src="assets/lecture13/ssci_p63_0.svg" alt="ssci slide 63 step 0" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto">
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p63_1.svg" alt="ssci slide 63 step 1" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p63_2.svg" alt="ssci slide 63 step 2" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p63_3.svg" alt="ssci slide 63 step 3" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p63_4.svg" alt="ssci slide 63 step 4" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p63_5.svg" alt="ssci slide 63 step 5" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p63_6.svg" alt="ssci slide 63 step 6" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p63_7.svg" alt="ssci slide 63 step 7" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p63_8.svg" alt="ssci slide 63 step 8" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p63_9.svg" alt="ssci slide 63 step 9" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p63_10.svg" alt="ssci slide 63 step 10" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>SSCI Walkthrough — W3: P3 writes X</h2>
+  <div class="r-stack">
+    <img data-src="assets/lecture13/ssci_p64_0.svg" alt="ssci slide 64 step 0" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto">
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p64_1.svg" alt="ssci slide 64 step 1" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p64_2.svg" alt="ssci slide 64 step 2" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p64_3.svg" alt="ssci slide 64 step 3" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p64_4.svg" alt="ssci slide 64 step 4" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p64_5.svg" alt="ssci slide 64 step 5" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p64_6.svg" alt="ssci slide 64 step 6" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p64_7.svg" alt="ssci slide 64 step 7" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>SSCI Walkthrough — R1: P1 reads X</h2>
+  <div class="r-stack">
+    <img data-src="assets/lecture13/ssci_p65_0.svg" alt="ssci slide 65 step 0" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto">
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p65_1.svg" alt="ssci slide 65 step 1" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p65_2.svg" alt="ssci slide 65 step 2" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p65_3.svg" alt="ssci slide 65 step 3" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p65_4.svg" alt="ssci slide 65 step 4" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p65_5.svg" alt="ssci slide 65 step 5" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p65_6.svg" alt="ssci slide 65 step 6" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p65_7.svg" alt="ssci slide 65 step 7" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p65_8.svg" alt="ssci slide 65 step 8" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p65_9.svg" alt="ssci slide 65 step 9" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p65_10.svg" alt="ssci slide 65 step 10" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>SSCI Walkthrough — R3: P3 reads X</h2>
+  <div class="r-stack">
+    <img data-src="assets/lecture13/ssci_p66_0.svg" alt="ssci slide 66 step 0" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto">
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p66_1.svg" alt="ssci slide 66 step 1" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p66_2.svg" alt="ssci slide 66 step 2" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>SSCI Walkthrough — R2: P2 reads X</h2>
+  <div class="r-stack">
+    <img data-src="assets/lecture13/ssci_p67_0.svg" alt="ssci slide 67 step 0" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto">
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p67_1.svg" alt="ssci slide 67 step 1" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p67_2.svg" alt="ssci slide 67 step 2" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p67_3.svg" alt="ssci slide 67 step 3" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p67_4.svg" alt="ssci slide 67 step 4" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p67_5.svg" alt="ssci slide 67 step 5" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p67_6.svg" alt="ssci slide 67 step 6" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img data-src="assets/lecture13/ssci_p67_7.svg" alt="ssci slide 67 step 7" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto"></div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>SSCI Walkthrough — Final State</h2>
+  <div class="r-stack">
+    <img data-src="assets/lecture13/ssci_p68_0.svg" alt="ssci slide 68 step 0" style="display:block;margin:0 auto;max-width:100%;max-height:500px;height:auto">
   </div>
 </section>
 
