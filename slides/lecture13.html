@@ -600,7 +600,7 @@
       <div class="callout"><span class="lbl">Cache states</span>Full <strong>MESI</strong> in each cache.</div>
       <div class="callout"><span class="lbl">Directory format</span><strong>Full bit-vector</strong> — one presence bit per node, plus a state field.</div>
       <div class="callout"><span class="lbl">Directory states</span>
-        <strong>EM</strong> (Exclusive or Modified) · <strong>S</strong> (Shared) · <strong>U</strong> (Unowned).</div>
+        <ul class="small" style="margin-top:.3em"><li><strong>EM</strong> (Exclusive or Modified): exactly one cache holds the block, in E or M.</li><li><strong>S</strong> (Shared): one or more caches hold the block cleanly; the home copy is up to date.</li><li><strong>U</strong> (Unowned): no cache holds the block (uncached, or only in Invalid).</li></ul></div>
     </div>
     <div class="center">
       <svg viewBox="0 0 240 150" class="chart" style="max-width:300px">
@@ -795,6 +795,33 @@
     </div>
   </div>
   <aside class="notes">"Reply forwarding" is the trick that gets writes down to 3 hops: instead of the home collecting all the invalidation acks and then telling the requestor, the home replies to the requestor and the sharers send their InvAcks straight to the requestor, who counts them.</aside>
+</section>
+
+<!-- Why MESI, not MOESI -->
+<section data-background-color="#ffffff">
+  <h2>Why MESI, Not MOESI?</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">What O buys in a bus protocol</span>
+        <span class="small"><strong>Dirty sharing</strong>: the owner keeps the block dirty and supplies it to readers, so memory is not updated (Lecture 10, MOESI).</span></div>
+      <div class="callout ok"><span class="lbl">In this directory protocol</span>
+        <ul class="small" style="margin-top:.3em">
+          <li>The owner's Flush already goes to <strong>home and requestor</strong>: Read → Int → Flush (P1→H, P3). Memory is updated by the same message.</li>
+          <li>So in <strong>S</strong> the home holds a <strong>clean</strong> copy, and later reads are served by home: Read → ReplyD, <strong>2 hops</strong> (R2 in the trace).</li>
+        </ul></div>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">With an O state instead</span>
+        <ul class="small" style="margin-top:.3em">
+          <li>Home's copy would be stale while the block is shared.</li>
+          <li>Every read would be forwarded to the owner: Read → Int → Flush, <strong>3 hops</strong>.</li>
+          <li>The directory would track one more state. The race handling in Module 10.2 assumes home is clean in S (a requestor-assisted read to an EM block closes only after the owner's Flush arrives).</li>
+        </ul></div>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Bottom line</span>
+    Home already sits on the data path, so keeping it clean costs no extra message and saves a hop on later reads. The benefit of O (skipping a memory write) mostly disappears, while the protocol gets more complex.</div>
+  <div class="src">Reasoning based on the Solihin Ch. 11 protocol (EM/S/U directory states; Flush to home and requestor; requestor-assisted processing) and this lecture's walkthrough. Not a statement quoted from the textbook.</div>
 </section>
 
 <!-- Overheads of full bit-vector -->
