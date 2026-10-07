@@ -54,7 +54,7 @@
       <div class="callout warn"><span class="lbl">Not on the midterm</span>
         Cache coherence: snoopy protocols (MSI, MESI, MOESI, Dragon) and directory protocols.</div>
       <div class="callout"><span class="lbl">Format</span>
-        Wed, Oct 14 · in class · 75 minutes.<br>
+        Wed, Oct 14, in class, 75 minutes.<br>
         Open-note: your own notes for this course. No textbook, no electronic devices.</div>
     </div>
   </div>
@@ -83,7 +83,7 @@
     <tr><td>Function</td><td>Independent code segments</td><td>Large granularity, low overhead</td><td>Low degree, hard to balance</td></tr>
     <tr><td>Program</td><td>Independent programs</td><td>No communication</td><td>Hard to balance, few chances</td></tr>
   </table>
-  <div class="src">Lecture 1 · Module 1.1</div>
+  <div class="src">Lecture 1, Module 1.1</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -96,7 +96,7 @@
         <li>Lower \(V_{thd}\) raises leakage <strong>exponentially</strong>: \( I_{leak} > e^{-qV_{thd}/kT} \).</li>
         <li>So V could not keep dropping, and frequency stalled around 2005.</li>
       </ul>
-      <p class="small">Energy metrics: EPI = W/IPS = J/inst · EDP = E × D · ED²P = E × D².</p>
+      <p class="small">Energy metrics: EPI = W/IPS = J/inst; EDP = E × D; ED²P = E × D².</p>
     </div>
     <div>
       <table>
@@ -111,8 +111,8 @@
     </div>
   </div>
   <div class="callout takeaway"><span class="lbl">Three signatures, ~2001–2005</span>
-    Frequency stops climbing · pipelining reverses · power management (clock gating, DVFS, power gating) becomes essential.</div>
-  <div class="src">Lecture 2 · Module 1.2</div>
+    Frequency stops climbing, pipelining reverses, and power management (clock gating, DVFS, power gating) becomes essential.</div>
+  <div class="src">Lecture 2, Module 1.2</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -121,15 +121,15 @@
     <div>
       <table>
         <tr><th></th><th>Single Data</th><th>Multiple Data</th></tr>
-        <tr><td><strong>Single Instruction</strong></td><td>SISD · classic uniprocessor</td><td>SIMD · vector, GPU</td></tr>
-        <tr><td><strong>Multiple Instruction</strong></td><td>MISD · systolic (rare)</td><td>MIMD · multicore, clusters</td></tr>
+        <tr><td><strong>Single Instruction</strong></td><td>SISD (classic uniprocessor)</td><td>SIMD (vector, GPU)</td></tr>
+        <tr><td><strong>Multiple Instruction</strong></td><td>MISD (systolic, rare)</td><td>MIMD (multicore, clusters)</td></tr>
       </table>
       <p class="small">MIMD variants differ in what they share: main memory (SMP / multicore), a cache (cores on one die), or nothing (clusters).</p>
     </div>
     <div class="callout"><span class="lbl">Parallel computer</span>
       "A collection of processing elements that can <strong>communicate</strong> and <strong>cooperate</strong> to solve a large problem fast." — Almasi &amp; Gottlieb</div>
   </div>
-  <div class="src">Lecture 2 · Module 1.3</div>
+  <div class="src">Lecture 2, Module 1.3</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -143,10 +143,10 @@
     <div class="fragment"><div class="a">Lowering \(V_{thd}\) lets you lower V, so dynamic power drops (≈ linearly). Static (leakage) power rises exponentially.</div></div>
   </div>
   <div class="qa">
-    <p class="q">3. Classify: a single core · a GPU · a multicore chip · a server farm of PCs.</p>
-    <div class="fragment"><div class="a">SISD · SIMD (or SIMD/MIMD) · MIMD · distributed MIMD with no shared memory.</div></div>
+    <p class="q">3. Classify: a single core, a GPU, a multicore chip, and a server farm of PCs.</p>
+    <div class="fragment"><div class="a">Single core: SISD. GPU: SIMD (or SIMD/MIMD). Multicore chip: MIMD. Server farm: distributed MIMD with no shared memory.</div></div>
   </div>
-  <div class="src">Lecture 2 · In-class exercise Q1, Module 1.2 and 1.3 reviews</div>
+  <div class="src">Lecture 2, In-class exercise Q1, Module 1.2 and 1.3 reviews</div>
 </section>
 
 <!-- ==================================================================
@@ -180,25 +180,25 @@
         Idle time is still charged. A PE waiting on a straggler costs as much as a working one.</div>
     </div>
   </div>
-  <div class="src">Lecture 3 · Module A</div>
+  <div class="src">Lecture 3, Module A</div>
 </section>
 
 <section data-background-color="#ffffff">
   <h2>Amdahl vs. Gustafson</h2>
   <div class="cols">
-    <div class="callout"><span class="lbl">Amdahl · strong scaling</span>
+    <div class="callout"><span class="lbl">Amdahl: strong scaling</span>
       Fixed problem size; serial fraction s.
       <p class="eq small">\( S(p) = \dfrac{1}{\,s + \dfrac{1-s}{p}\,} \qquad S_{max} = \dfrac{1}{s} \)</p>
       <p class="small">Equivalently \( T_p = T_1\left(s + \dfrac{1-s}{p}\right) \) and \(T_\infty = s\,T_1\).</p>
       <p class="small">s = 0.2 caps speedup at 5× no matter how many PEs.</p></div>
-    <div class="callout"><span class="lbl">Gustafson · weak scaling</span>
+    <div class="callout"><span class="lbl">Gustafson: weak scaling</span>
       Work grows with p; parallel time fixed at 1.
       <p class="eq small">\( S(p) = s + p\,(1-s) \)</p>
       <p class="small">s = 0.05, p = 32: S ≈ 30.5, versus Amdahl's ceiling of 20.</p></div>
   </div>
   <div class="callout takeaway"><span class="lbl">What you hold fixed</span>
     Strong scaling fixes the total problem, so efficiency falls. Weak scaling fixes the work per PE, so efficiency can stay ≈ constant.</div>
-  <div class="src">Lecture 3 · Module B</div>
+  <div class="src">Lecture 3, Module B</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -206,7 +206,7 @@
   <div class="cols">
     <div>
       <div class="callout"><span class="lbl">Three sources of overhead</span>
-        <strong>Interaction</strong> (synchronization, communication) · <strong>idling</strong> (imbalance, serialization, contention) · <strong>excess computation</strong> (work repeated across PEs).</div>
+        <strong>Interaction</strong> (synchronization, communication); <strong>idling</strong> (imbalance, serialization, contention); <strong>excess computation</strong> (work repeated across PEs).</div>
       <p class="small">Real speedup peaks and then declines, because overhead grows with p.</p>
     </div>
     <div>
@@ -217,7 +217,7 @@
         <p class="small">W = work of the best sequential algorithm (not data size). W(p) ≤ O(p) → scalable.</p></div>
     </div>
   </div>
-  <div class="src">Lecture 3 · Module B</div>
+  <div class="src">Lecture 3, Module B</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -235,7 +235,7 @@
   </div>
   <div class="callout takeaway"><span class="lbl">One idea, two bottlenecks</span>
     Blocking raises reuse. It improves the computation–communication ratio and moves a kernel right, across the ridge.</div>
-  <div class="src">Lecture 3 · Modules C–D</div>
+  <div class="src">Lecture 3, Modules C–D</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -252,7 +252,7 @@
     <p class="q">3. π = 400 GFLOP/s, β = 100 GB/s. Where is the ridge? What is the ceiling at I = 0.5 flop/byte?</p>
     <div class="fragment"><div class="a">Ridge = 400/100 = 4 flop/byte. 0.5 &lt; 4, so memory-bound: P = 100 × 0.5 = 50 GFLOP/s.</div></div>
   </div>
-  <div class="src">Lecture 3 · Module A, B and D reviews</div>
+  <div class="src">Lecture 3, Module A, B and D reviews</div>
 </section>
 
 <!-- ==================================================================
@@ -278,9 +278,9 @@
     <div class="callout warn"><span class="lbl">Spin-loop handshake</span>
       A plain <code class="inline">while(!ready){}</code> can spin forever (compiler) or see stale data (weak memory). It is correct only under sequential consistency.</div>
     <div class="callout"><span class="lbl">Other models</span>
-      PGAS (shared space with locality) · data-parallel (SIMD) · MapReduce (by key) · transactional memory (atomicity + isolation, no locks).</div>
+      PGAS (shared space with locality); data-parallel (SIMD); MapReduce (by key); transactional memory (atomicity + isolation, no locks).</div>
   </div>
-  <div class="src">Lecture 4 · Modules 2.1–2.3</div>
+  <div class="src">Lecture 4, Modules 2.1–2.3</div>
 </section>
 
 <!-- ==================================================================
@@ -314,7 +314,7 @@ for (i = 1; i &lt; n; i++) {
       <p class="small">Only <strong>loop-carried</strong> dependences block parallelism across iterations. A loop level with none is fully parallel (DOALL).</p>
     </div>
   </div>
-  <div class="src">Lecture 5–6 · Module 3.1</div>
+  <div class="src">Lecture 5–6, Module 3.1</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -345,7 +345,7 @@ for (i = 1; i &lt; n; i++)
         Every grid edge is a true <em>and</em> an anti dependence. Points on one anti-diagonal are independent → wavefront.</div>
     </div>
   </div>
-  <div class="src">Lecture 5–6 · Module 3.1, wavefront from Module 3.2</div>
+  <div class="src">Lecture 5–6, Module 3.1, wavefront from Module 3.2</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -363,7 +363,7 @@ for (i = 1; i &lt; n; i++)
     <div class="callout"><span class="lbl">How much parallelism?</span>
       \( S_\infty = T_1/T_\infty = W/D \) = average degree. Rewriting can inflate the peak degree, never the average.</div>
   </div>
-  <div class="src">Lecture 5–6 · Module 3.2</div>
+  <div class="src">Lecture 5–6, Module 3.2</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -399,7 +399,7 @@ for (i=2; i&lt;=N; i++) {   // stage 2
   </div>
   <div class="callout takeaway"><span class="lbl">Rule of thumb</span>
     Reach for DOALL first. Try DOACROSS if the level carries a dependence. Layer function or DOPIPE parallelism on top. When code analysis is too pessimistic, change the algorithm (red-black, asynchronous).</div>
-  <div class="src">Lecture 5–6 · Modules 3.2–3.3</div>
+  <div class="src">Lecture 5–6, Modules 3.2–3.3</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -416,7 +416,7 @@ for (i=2; i&lt;=N; i++) {   // stage 2
     <p class="q">3. Is <code class="inline">for (i=2; i&lt;=n; i++) a[i] = a[i-2];</code> DOALL? How much parallelism can you extract?</p>
     <div class="fragment"><div class="a">No: a true dependence of distance 2 is carried by i. Even and odd indices never touch, so split by parity: 2 independent chains. The degree stays 2 however large n is.</div></div>
   </div>
-  <div class="src">Lecture 5–6 · Module 3.1 and 3.2 reviews</div>
+  <div class="src">Lecture 5–6, Module 3.1 and 3.2 reviews</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -440,7 +440,7 @@ for (i=2; i&lt;=N; i++) {   // stage 2
         Private partial results merged at the end. The operator must be commutative and associative: +, *, AND/OR, min/max.</div>
     </div>
   </div>
-  <div class="src">Lecture 8 · Module 4</div>
+  <div class="src">Lecture 8, Module 4</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -467,7 +467,7 @@ for (i=2; i&lt;=N; i++) {   // stage 2
       <p class="small">Uniform work → static. Lumpy work → dynamic or guided.</p>
     </div>
   </div>
-  <div class="src">Lecture 8 · Modules 1–2 · Lecture 7 · Module 4</div>
+  <div class="src">Lecture 8, Modules 1–2; Lecture 7, Module 4</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -487,7 +487,7 @@ for (i=1; i&lt;=n; i++)
     <p class="q">2. Loop iterations have wildly different costs. Which schedule?</p>
     <div class="fragment"><div class="a">schedule(dynamic, chunk) or schedule(guided). With static, some threads would stall at the barrier.</div></div>
   </div>
-  <div class="src">Lecture 8 · Module 4 example, Module 2 review</div>
+  <div class="src">Lecture 8, Module 4 example, Module 2 review</div>
 </section>
 
 <!-- ==================================================================
@@ -521,7 +521,7 @@ for (i=1; i&lt;=n; i++)
       <p class="small">A parallel phase is only as fast as its slowest processor.</p>
     </div>
   </div>
-  <div class="src">Lecture 7 · Modules 1–4</div>
+  <div class="src">Lecture 7, Modules 1–4</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -538,7 +538,7 @@ for (i=1; i&lt;=n; i++)
     <p class="q">3. Give three reasons block partitioning helps, and one cost it adds.</p>
     <div class="fragment"><div class="a">Cache efficiency, efficient load distribution, scalability. Cost: communication between processors holding neighbouring blocks.</div></div>
   </div>
-  <div class="src">Lecture 7 · Module 2, 3 and 4 reviews</div>
+  <div class="src">Lecture 7, Module 2, 3 and 4 reviews</div>
 </section>
 
 <!-- ==================================================================
@@ -575,7 +575,7 @@ for (i=1; i&lt;=n; i++)
       </table>
     </div>
   </div>
-  <div class="src">Lecture 9 · Module 5.1</div>
+  <div class="src">Lecture 9, Module 5.1</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -592,7 +592,7 @@ for (i=1; i&lt;=n; i++)
     <div class="callout"><span class="lbl">Real chips</span>
       AMD Shanghai chose a NINE L3: inclusive would waste ~1/3 of the capacity; exclusive would need too much L2→L3 bandwidth.</div>
   </div>
-  <div class="src">Lecture 9 · Module 5.2</div>
+  <div class="src">Lecture 9, Module 5.2</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -600,7 +600,7 @@ for (i=1; i&lt;=n; i++)
   <div class="cols">
     <div>
       <div class="callout"><span class="lbl">The C's</span>
-        <strong>Compulsory</strong> (first reference) · <strong>conflict</strong> (too many blocks in one set) · <strong>capacity</strong> (working set &gt; cache) · coherence · system-related.</div>
+        <strong>Compulsory</strong> (first reference); <strong>conflict</strong> (too many blocks in one set); <strong>capacity</strong> (working set &gt; cache); coherence; system-related.</div>
       <table>
         <tr><th>Change</th><th>Compulsory</th><th>Conflict</th><th>Capacity</th></tr>
         <tr><td>Larger cache</td><td>–</td><td>–</td><td>reduced</td></tr>
@@ -617,7 +617,7 @@ for (i=1; i&lt;=n; i++)
         Physical: united vs. distributed. Logical: private vs. shared. Shared → far data (fix: victim replication). Private → fragmentation (fix: capacity sharing).</div>
     </div>
   </div>
-  <div class="src">Lecture 9 · Modules 5.2–5.3</div>
+  <div class="src">Lecture 9, Modules 5.2–5.3</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -638,7 +638,7 @@ for (i=1; i&lt;=n; i++)
     <p class="q">4. Why is pseudo-LRU preferred to true LRU in big caches?</p>
     <div class="fragment"><div class="a">True LRU costs \(O(\text{ways}^2)\) state; pseudo-LRU costs \(O(\text{ways})\) and tracks recency well enough.</div></div>
   </div>
-  <div class="src">Lecture 9 · Module 5.1 and 5.2 reviews</div>
+  <div class="src">Lecture 9, Module 5.1 and 5.2 reviews</div>
 </section>
 
 <!-- ==================================================================
@@ -660,7 +660,7 @@ for (i=1; i&lt;=n; i++)
         <tr><td>Barrier</td><td>No thread passes until all arrive</td></tr>
       </table>
       <div class="callout"><span class="lbl">Lock performance criteria</span>
-        Uncontended latency · traffic · storage · fairness.</div>
+        Uncontended latency, traffic, storage, and fairness.</div>
       <p class="small">A barrier costs as much as its slowest thread, so load balance is critical.</p>
     </div>
     <div>
@@ -673,10 +673,10 @@ void lock(int *lockvar) {
 </code></pre>
       <p class="small">The read and the write are not atomic: two threads can both read 0, both write 1, and both enter.</p>
       <div class="callout"><span class="lbl">Atomic read-modify-write</span>
-        test-and-set · fetch-and-op · exchange · compare-and-swap. Atomic = all-or-nothing <em>and</em> serialized.</div>
+        test-and-set, fetch-and-op, exchange, and compare-and-swap. Atomic = all-or-nothing <em>and</em> serialized.</div>
     </div>
   </div>
-  <div class="src">Lecture 8 · Module 5 · Chapter 9 · Module 8.1</div>
+  <div class="src">Lecture 8, Module 5; Chapter 9, Module 8.1</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -717,7 +717,7 @@ lock: LL   R1, &amp;lockvar
   </div>
   <div class="callout takeaway"><span class="lbl">Still not scalable</span>
     With p contending threads, each critical section costs \(O(p^2)\) traffic, and none of these locks is fair.</div>
-  <div class="src">Chapter 9 · Module 8.1</div>
+  <div class="src">Chapter 9, Module 8.1</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -741,7 +741,7 @@ lock: LL   R1, &amp;lockvar
       <p class="small">No lock wins everywhere: the choice depends on contention, thread count and scheduling.</p>
     </div>
   </div>
-  <div class="src">Chapter 9 · Module 8.2</div>
+  <div class="src">Chapter 9, Module 8.2</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -772,10 +772,10 @@ void barrier() {
       <div class="callout"><span class="lbl">Conflict rule</span>
         T1's write set must not overlap T2's read or write set. On conflict: abort, cancel, retry.</div>
       <div class="callout"><span class="lbl">HTM support</span>
-        Speculative buffering · conflict detection · commit · rollback.</div>
+        Speculative buffering, conflict detection, commit, and rollback.</div>
     </div>
   </div>
-  <div class="src">Chapter 9 · Module 8.2</div>
+  <div class="src">Chapter 9, Module 8.2</div>
 </section>
 
 <section data-background-color="#ffffff">
@@ -792,7 +792,7 @@ void barrier() {
     <p class="q">3. Why is load balancing important when barriers are used?</p>
     <div class="fragment"><div class="a">A parallel region takes as long as its slowest thread; imbalance leaves the others idle at the barrier.</div></div>
   </div>
-  <div class="src">Chapter 9 · Module 8.1 and 8.2 reviews · Lecture 8 · Module 5 review</div>
+  <div class="src">Chapter 9, Module 8.1 and 8.2 reviews; Lecture 8, Module 5 review</div>
 </section>
 
 <!-- Wrap-up -->
