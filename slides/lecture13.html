@@ -599,11 +599,11 @@
     <div>
       <div class="callout"><span class="lbl">Cache states</span>Full <strong>MESI</strong> in each cache.</div>
       <div class="callout"><span class="lbl">Directory format</span><strong>Full bit-vector</strong> — one presence bit per node, plus a state field.</div>
+    </div>
+    <div>
       <div class="callout"><span class="lbl">Directory states</span>
         <ul class="small" style="margin-top:.3em"><li><strong>EM</strong> (Exclusive or Modified): exactly one cache holds the block, in E or M.</li><li><strong>S</strong> (Shared): one or more caches hold the block cleanly; the home copy is up to date.</li><li><strong>U</strong> (Unowned): no cache holds the block (uncached, or only in Invalid).</li></ul></div>
-    </div>
-    <div class="center">
-      <svg viewBox="0 0 240 150" class="chart" style="max-width:300px">
+      <div class="center" style="margin-top:-.3em"><svg viewBox="0 0 240 150" class="chart" style="max-width:250px">
         <text x="120" y="20" text-anchor="middle" class="tiny muted">directory entry for one block (3 nodes)</text>
         <rect x="30" y="34" width="50" height="34" rx="4" fill="#fde68a" stroke="#b45309"/>
         <text x="55" y="55" text-anchor="middle" class="lbl">state</text>
@@ -615,9 +615,17 @@
         <text x="190" y="55" text-anchor="middle" class="lbl">P3</text>
         <text x="150" y="90" text-anchor="middle" class="tiny">presence bits (1 = node caches the block)</text>
         <text x="120" y="120" text-anchor="middle" class="tiny muted">e.g.  S · 101  →  Shared by P1 and P3</text>
-      </svg>
+      </svg></div>
     </div>
   </div>
+  <table style="font-size:.6em;margin-top:.5em">
+    <tr><th>Dir state</th><th>Presence bits</th><th>Caches with bit = 1</th><th>Caches with bit = 0</th><th>Home data</th></tr>
+    <tr><td><strong>U</strong></td><td>all 0</td><td>none</td><td>I (or not cached)</td><td>up to date (the only valid copy)</td></tr>
+    <tr><td><strong>EM</strong></td><td>exactly one</td><td>owner: E or M (the directory cannot tell which)</td><td>I</td><td>up to date if E; stale if M</td></tr>
+    <tr><td><strong>S</strong></td><td>one or more</td><td>S</td><td>I</td><td>up to date (clean)</td></tr>
+  </table>
+  <div class="callout small" style="margin-top:.4em"><span class="lbl">The directory record is an upper bound</span>
+    A cache whose bit is 1 <em>may</em> hold a copy (it may have evicted the block silently). A cache whose bit is 0 has <strong>no</strong> valid copy.</div>
 </section>
 
 <!-- Coherence messages -->
