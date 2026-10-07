@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CSC/ECE 506 · GPU Session 2 — Performance Optimization</title>
+<title>CSC/ECE 506 · GPU Session 2 — GPU Performance Optimization</title>
 
 <!-- reveal.js core (CDN) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
@@ -15,7 +15,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <!-- course theme -->
-<link rel="stylesheet" href="assets/theme.css?v=11">
+<link rel="stylesheet" href="assets/theme.css?v=13">
+<style>.reveal section img{max-width:100%;height:auto;margin:0 auto;display:block;}</style>
 </head>
 <body>
 <div class="reveal">
@@ -23,485 +24,72 @@
 
 <!-- ============================ TITLE ============================ -->
 <section class="title-slide" data-background-color="#ffffff">
-  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture · Session 2 of 2</div>
   <h1>GPU Session 2</h1>
-  <div class="sub">Performance Optimization — tiled matmul, reduction, coalescing, bank conflicts, occupancy</div>
+  <div class="sub">GPU Performance Optimization</div>
   <aside class="notes">
-    Third GPU session. We move from "how to write a correct CUDA kernel" to "how to make it fast."
-    Every optimization here flows from one idea: match your data-parallel algorithm to the GPU's
-    hardware — warps, memory banks, SM resource limits.
+    Session 2 of 2 in the GPU unit. Session 3 is an in-class lab. Session 1 covered the CUDA model and the tiled matrix multiply.
+    This session is about memory: how a warp's loads become sector transactions, how to see wasted transactions
+    by counting distinct warps per word and sector, and the memory inefficiency patterns one by one. We then cover shared-memory
+    bank conflicts and occupancy, and finish with redundant memory instructions (RedSan), which the Session 3 lab uses.
   </aside>
 </section>
 
-<!-- Theme equation -->
+<!-- Roadmap -->
 <section data-background-color="#ffffff">
-  <h2>The Performance Equation</h2>
-  <div class="callout takeaway" style="font-size:1.15em; text-align:center; margin-top:1.2em;">
-    <strong>Efficient data-parallel algorithms</strong><br>
-    <span style="font-size:1.6em;">+</span><br>
-    <strong>Optimizations based on GPU architecture</strong><br>
-    <span style="font-size:1.6em;">=</span><br>
-    <strong style="color:#cc0000;">Maximum performance</strong>
-  </div>
-  <p class="src">A correct kernel is only the starting point. Throughput comes from understanding warps, memory, and SM resources.</p>
+  <h2>Session Roadmap</h2>
+  <p class="small">The performance-optimization module, centered on memory inefficiencies. <span class="muted">Session 3 is an in-class lab.</span></p>
+  <table class="small">
+    <tr><th>Part</th><th>Topic</th><th>Covers</th></tr>
+    <tr><td>A</td><td>Memory Coalescing</td><td>How a warp's loads become 32 B sector transactions</td></tr>
+    <tr><td>B</td><td>Seeing Memory Inefficiencies</td><td>Counting distinct warps; the patterns at a glance</td></tr>
+    <tr><td>C</td><td>Hot Spots</td><td>Hot and random hot sectors</td></tr>
+    <tr><td>D</td><td>False Sharing</td><td>Warp-private words in one sector</td></tr>
+    <tr><td>E</td><td>Misalignment</td><td>Requests that straddle a sector boundary</td></tr>
+    <tr><td>F</td><td>Strided Access</td><td>One useful word per sector</td></tr>
+    <tr><td>G</td><td>Abuse of Shared Memory</td><td>Thread-local and warp-local data in shared memory</td></tr>
+    <tr><td>H</td><td>Bank Conflicts</td><td>Shared-memory banks and conflict-free strides</td></tr>
+    <tr><td>I</td><td>Occupancy</td><td>How registers and shared memory limit resident warps</td></tr>
+    <tr><td>J</td><td>Redundant Memory Instructions</td><td>Dead stores, dead loads, load-after-store (RedSan)</td></tr>
+  </table>
 </section>
 
-<!-- Agenda -->
-<section data-background-color="#ffffff">
-  <h2>Agenda</h2>
-  <div class="callout"><span class="lbl">1 · Tiled Matmul</span><span class="small">Shared-memory tiling, the global-memory <strong>bandwidth bottleneck</strong>, and choosing <code class="inline">TILE_WIDTH</code> from hardware limits.</span></div>
-  <div class="cols c3">
-    <div class="callout"><span class="lbl">Algorithm</span>
-      <ul><li>Parallel reduction</li><li>Warp partitioning</li></ul></div>
-    <div class="callout"><span class="lbl">Memory</span>
-      <ul><li>Memory coalescing</li><li>Bank conflicts</li></ul></div>
-    <div class="callout"><span class="lbl">Resources</span>
-      <ul><li>SM resource partitioning (occupancy)</li><li>Data prefetching</li></ul></div>
-  </div>
-  <div class="cols c3">
-    <div class="callout"><span class="lbl">Instruction-level</span>
-      <ul><li>Instruction mix</li><li>Loop unrolling</li></ul></div>
-    <div class="callout"><span class="lbl">Work per thread</span>
-      <ul><li>Thread granularity</li></ul></div>
-    <div class="callout"><span class="lbl">Redundancy</span>
-      <ul><li>Redundant memory instructions (RedSan)</li></ul></div>
-  </div>
-</section>
 <!-- ==================================================================
-     PART E — TILED (SHARED-MEMORY) MATRIX MULTIPLY
+     PART A — MEMORY COALESCING
      ================================================================== -->
 <section class="divider" data-background-color="#ffffff">
-  <div class="mod-num">Part 1</div>
-  <div class="mod-title">Tiled Matrix Multiply</div>
-  <div class="objectives" style="margin-top:1em;">
-    <h4>By the end you can…</h4>
-    <ul>
-      <li>Write a <strong>naive</strong> multi-block matmul kernel</li>
-      <li>Explain the <strong>global-memory bandwidth bottleneck</strong></li>
-      <li>Rewrite it with <strong>shared-memory tiling</strong></li>
-      <li>Choose <strong>TILE_WIDTH</strong> from hardware limits</li>
-    </ul>
-  </div>
-</section>
-
-<!-- Naive kernel -->
-<section data-background-color="#ffffff">
-  <h2>Naive Multi-block Matmul</h2>
-  <p class="small">Each thread computes one element of P by streaming an entire row of M and column of N from <strong>global memory</strong>.</p>
-  <div class="cols">
-    <div>
-      <div class="code-label">CUDA C — naive kernel</div>
-      <pre><code class="language-cpp" data-trim>
-int col = blockIdx.x*blockDim.x + threadIdx.x;
-int row = blockIdx.y*blockDim.y + threadIdx.y;
-float pValue = 0;
-for (int k = 0; k &lt; width; k++)
-    pValue += devM[row*width + k]
-            * devN[k*width + col];
-devP[row*width + col] = pValue;
-</code></pre>
-    </div>
-    <div>
-      <div class="code-label">CUDA C — launch</div>
-      <pre><code class="language-cpp" data-trim>
-dim3 dimBlocks(TILE_WIDTH, TILE_WIDTH);
-dim3 dimGrid(WIDTH/TILE_WIDTH,
-             WIDTH/TILE_WIDTH);
-MatrixMultiplyKernel
-    &lt;&lt;&lt;dimGrid, dimBlocks&gt;&gt;&gt;(...);
-</code></pre>
-    </div>
-  </div>
-</section>
-
-<!-- Bandwidth bottleneck -->
-<section data-background-color="#ffffff">
-  <h2>The Bandwidth Bottleneck</h2>
-  <p class="small">Every <code class="inline">pValue +=</code> does <strong>2 global loads</strong> (4 B each) for <strong>2 FLOPs</strong> — far too much memory traffic.</p>
-  <div class="cols">
-    <div class="callout warn"><span class="lbl">G80 numbers</span>
-      <ul class="small" style="margin:.2em 0 .2em .9em">
-        <li>Peak compute: <strong>346.5 GFLOPS</strong></li>
-        <li>That would need <strong>1386 GB/s</strong> of bandwidth</li>
-        <li>But memory bandwidth is only <strong>86.4 GB/s</strong></li>
-      </ul></div>
-    <div class="callout"><span class="lbl">Result</span>Memory caps you at \( \approx \) <strong>21.6 GFLOPS</strong> (and ~15 in practice) — about <strong>4%</strong> of peak.</div>
-  </div>
-  <div class="callout"><span class="lbl">Still true on H100</span><span class="small">Both numbers grew, but compute grew faster: H100 ≈ <strong>67 TFLOPS</strong> FP32 would need ~268 TB/s at 4 B/FLOP, yet HBM3 delivers only ~<strong>3.35 TB/s</strong> → still ~1–2% of peak without reuse. The arithmetic-intensity wall persists. <span class="src">[NVIDIA H100 whitepaper]</span></span></div>
-  <div class="callout takeaway"><span class="lbl">Fix</span>We must <strong>cut global-memory access</strong> — reuse data on-chip via <strong>shared memory</strong>.</div>
-</section>
-
-<!-- Tiling idea -->
-<section data-background-color="#ffffff">
-  <h2>The Tiling Idea</h2>
-  <div class="cols">
-    <div>
-      <p class="small">Break P into <strong>TILE_WIDTH × TILE_WIDTH</strong> tiles — one tile per block. Each <strong>phase</strong>:</p>
-      <ul class="small">
-        <li>Load a tile of M and a tile of N into <strong>shared memory</strong></li>
-        <li><code class="inline">__syncthreads()</code> — wait for the loads</li>
-        <li>Accumulate the <strong>partial dot product</strong> from the tiles</li>
-        <li><code class="inline">__syncthreads()</code> — before overwriting the tiles next phase</li>
-      </ul>
-    </div>
-    <div class="center">
-      <svg viewBox="0 0 280 200" class="chart" style="max-width:320px">
-        <rect x="150" y="20" width="110" height="110" fill="#fff" stroke="var(--line)"/>
-        <text x="205" y="14" text-anchor="middle" class="tiny">N</text>
-        <rect x="186" y="20" width="36" height="110" fill="#dbeafe" stroke="#3b82f6"/>
-        <rect x="20" y="150" width="110" height="40" fill="#fff" stroke="var(--line)"/>
-        <text x="14" y="175" text-anchor="end" class="tiny">M</text>
-        <rect x="20" y="150" width="36" height="40" fill="#fef9c3" stroke="#d97706"/>
-        <rect x="150" y="150" width="110" height="40" fill="#fff" stroke="var(--line)"/>
-        <text x="205" y="145" text-anchor="middle" class="tiny">P</text>
-        <rect x="186" y="150" width="36" height="40" fill="#dcfce7" stroke="#22c55e"/>
-        <text x="204" y="174" text-anchor="middle" class="tiny">tile</text>
-      </svg>
-    </div>
-  </div>
-  <div class="src">UIUC ECE498/AL.</div>
-</section>
-
-<!-- Tiled kernel -->
-<section data-background-color="#ffffff">
-  <h2>Tiled Kernel</h2>
-  <div class="code-label">CUDA C — shared-memory tiled matmul</div>
-  <pre><code class="language-cpp" data-trim>
-__shared__ float sM[TILE_WIDTH][TILE_WIDTH];
-__shared__ float sN[TILE_WIDTH][TILE_WIDTH];
-int bx = blockIdx.x;  int by = blockIdx.y;
-int tx = threadIdx.x; int ty = threadIdx.y;
-int col = bx*TILE_WIDTH + tx;
-int row = by*TILE_WIDTH + ty;
-float pValue = 0;
-for (int m = 0; m &lt; width/TILE_WIDTH; m++) {        // m = phase index
-    sM[ty][tx] = devM[row*width + (m*TILE_WIDTH + tx)];
-    sN[ty][tx] = devN[col + (m*TILE_WIDTH + ty)*width];
-    __syncthreads();                                 // 1: tiles fully loaded
-    for (int k = 0; k &lt; TILE_WIDTH; ++k)
-        pValue += sM[ty][k] * sN[k][tx];
-    __syncthreads();                                 // 2: done before overwrite
-}
-devP[row*width + col] = pValue;
-</code></pre>
-  <div class="callout"><span class="lbl">Two barriers</span><strong>#1</strong> after the loads so every thread sees the full tiles; <strong>#2</strong> so no thread overwrites the tile before others finish reading it. <code class="inline">width/TILE_WIDTH</code> = number of phases.</div>
-</section>
-
-<!-- Choosing TILE_WIDTH -->
-<section data-background-color="#ffffff">
-  <h2>Choosing TILE_WIDTH</h2>
-  <p class="small">Bounded by <strong>max threads/block</strong> (G80/GT200 = 512, Fermi+ = 1024) and <strong>shared memory</strong> per block.</p>
-  <div class="cols">
-    <div class="callout"><span class="lbl">G80 shared-memory limit</span>
-      <ul class="small" style="margin:.2em 0 .2em .9em">
-        <li>16 KB/SM, ≤ 8 blocks → 2 KB/block</li>
-        <li>\( 16 \times 16 \times 4\,\text{B} = 1 \) KB each for <code class="inline">sM</code>, <code class="inline">sN</code> → 2 KB</li>
-        <li>So <strong>TILE_WIDTH = 16</strong></li>
-        <li>Larger tile → fewer resident blocks</li>
-      </ul></div>
-    <div class="callout ok"><span class="lbl">Payoff</span>
-      <ul class="small" style="margin:.2em 0 .2em .9em">
-        <li>Each value reused TILE_WIDTH times → global access cut by <strong>16×</strong></li>
-        <li>G80 now supports <strong>345.6 GFLOPS</strong> — near the 346.5 peak</li>
-      </ul></div>
-  </div>
-</section>
-
-<!-- First-order sizing -->
-<section data-background-color="#ffffff">
-  <h2>First-order Sizing</h2>
-  <div class="callout"><span class="lbl">TILE_WIDTH = 16</span>
-    <ul class="small" style="margin:.2em 0 .2em .9em">
-      <li>\( 16 \times 16 = 256 \) threads/block</li>
-      <li>A \( 1024 \times 1024 \) output P → \( 64 \times 64 = 4096 \) blocks</li>
-      <li>Each block does <strong>512 global loads</strong> (per phase, both tiles) for <strong>8192 mul/add</strong></li>
-    </ul></div>
-  <div class="callout takeaway"><span class="lbl">Bottom line</span>Compute now dominates memory — the <strong>global-memory bandwidth is no longer the limiter</strong>. Tiling turned a 4%-of-peak kernel into a near-peak one.</div>
-</section>
-
-<!-- ============================ PART 1 ============================ -->
-<section class="divider" data-background-color="#ffffff">
-  <div class="mod-num">Part 2</div>
-  <div class="mod-title">Parallel Reduction Revisited</div>
-  <div class="objectives" style="margin-top:1em;">
-    <h4>By the end you can…</h4>
-    <ul>
-      <li>Trace a tree-based reduction over 8 elements</li>
-      <li>Compare the <strong>interleaved</strong> and <strong>contiguous</strong> reduction kernels</li>
-      <li>Explain why the difference is just one branch condition — but matters a lot</li>
-    </ul>
-  </div>
-</section>
-
-<!-- Reduction tree -->
-<section data-background-color="#ffffff">
-  <h2>Parallel Reduction — Sum 8 Elements</h2>
-  <p class="small">Reduce array <code class="inline">[0,1,2,3,4,5,6,7]</code> to its sum (<strong>28</strong>) by a binary tree: each pass halves the live data.</p>
-  <svg viewBox="0 0 760 230" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-height:240px;">
-    <style>
-      .v{font:600 15px Inter,sans-serif;fill:#1a1a1a;text-anchor:middle}
-      .lbl{font:600 12px Inter,sans-serif;fill:#888;text-anchor:start}
-      .bx{fill:#fff;stroke:#cc0000;stroke-width:1.5}
-      .ln{stroke:#bbb;stroke-width:1.5}
-    </style>
-    <!-- row 0 -->
-    <text class="lbl" x="6" y="34">in</text>
-    <g><rect class="bx" x="40"  y="20" width="70" height="28"/><text class="v" x="75"  y="39">0</text></g>
-    <g><rect class="bx" x="130" y="20" width="70" height="28"/><text class="v" x="165" y="39">1</text></g>
-    <g><rect class="bx" x="220" y="20" width="70" height="28"/><text class="v" x="255" y="39">2</text></g>
-    <g><rect class="bx" x="310" y="20" width="70" height="28"/><text class="v" x="345" y="39">3</text></g>
-    <g><rect class="bx" x="400" y="20" width="70" height="28"/><text class="v" x="435" y="39">4</text></g>
-    <g><rect class="bx" x="490" y="20" width="70" height="28"/><text class="v" x="525" y="39">5</text></g>
-    <g><rect class="bx" x="580" y="20" width="70" height="28"/><text class="v" x="615" y="39">6</text></g>
-    <g><rect class="bx" x="670" y="20" width="70" height="28"/><text class="v" x="705" y="39">7</text></g>
-    <!-- row 1: stride 1 pairs -->
-    <line class="ln" x1="165" y1="48" x2="75"  y2="78"/><line class="ln" x1="345" y1="48" x2="255" y2="78"/>
-    <line class="ln" x1="525" y1="48" x2="435" y2="78"/><line class="ln" x1="705" y1="48" x2="615" y2="78"/>
-    <text class="lbl" x="6" y="92">+1</text>
-    <g><rect class="bx" x="40"  y="78" width="70" height="28"/><text class="v" x="75"  y="97">1</text></g>
-    <g><rect class="bx" x="220" y="78" width="70" height="28"/><text class="v" x="255" y="97">5</text></g>
-    <g><rect class="bx" x="400" y="78" width="70" height="28"/><text class="v" x="435" y="97">9</text></g>
-    <g><rect class="bx" x="580" y="78" width="70" height="28"/><text class="v" x="615" y="97">13</text></g>
-    <!-- row 2: stride 2 -->
-    <line class="ln" x1="255" y1="106" x2="75"  y2="136"/><line class="ln" x1="615" y1="106" x2="435" y2="136"/>
-    <text class="lbl" x="6" y="150">+2</text>
-    <g><rect class="bx" x="40"  y="136" width="70" height="28"/><text class="v" x="75"  y="155">6</text></g>
-    <g><rect class="bx" x="400" y="136" width="70" height="28"/><text class="v" x="435" y="155">22</text></g>
-    <!-- row 3: stride 4 -->
-    <line class="ln" x1="435" y1="164" x2="75" y2="194"/>
-    <text class="lbl" x="6" y="208">+4</text>
-    <g><rect class="bx" x="40"  y="194" width="70" height="28" style="fill:#fff;stroke:#cc0000;stroke-width:2.5"/><text class="v" x="75"  y="213" style="fill:#cc0000">28</text></g>
-  </svg>
-  <div class="src">3 passes for 8 elements; in general \( \log_2 n \) passes. UIUC ECE498/AL.</div>
-</section>
-
-<!-- Interleaved kernel -->
-<section data-background-color="#ffffff">
-  <h2>Reduction — Interleaved Version (stride 1, 2, 4)</h2>
-  <div class="code-label">CUDA C — interleaved reduction</div>
-  <pre><code class="language-cpp" data-trim>
-unsigned int t = threadIdx.x;
-for (int stride = 1; stride &lt; blockDim.x; stride *= 2) {
-    __syncthreads();
-    if (t % (2*stride) == 0)
-        partialSum[t] += partialSum[t + stride];
-}
-</code></pre>
-  <div class="cols">
-    <div class="callout"><span class="lbl">Thread view</span>
-      <ul class="small">
-        <li>Pass 1 (stride 1): threads 1,3,5,7 <strong>idle</strong> — only n/2 threads do work</li>
-        <li>Pass 2 (stride 2): only threads 0,4 active</li>
-        <li>Pass 3 (stride 4): only thread 0 active</li>
-      </ul></div>
-    <div class="callout warn"><span class="lbl">Problem</span>
-      The <strong>active</strong> threads are spread out (0,2,4,6 …). Number active halves each pass, but they sit in <em>every</em> warp.</div>
-  </div>
-</section>
-
-<!-- Contiguous kernel -->
-<section data-background-color="#ffffff">
-  <h2>Reduction — Contiguous (Tweaked) Version (stride …4, 2, 1)</h2>
-  <div class="code-label">CUDA C — contiguous reduction</div>
-  <pre><code class="language-cpp" data-trim>
-unsigned int t = threadIdx.x;
-for (int stride = blockDim.x/2; stride &gt; 0; stride /= 2) {
-    __syncthreads();
-    if (t &lt; stride)
-        partialSum[t] += partialSum[t + stride];
-}
-</code></pre>
-  <div class="cols">
-    <div class="callout ok"><span class="lbl">Thread view</span>
-      <ul class="small">
-        <li>Active threads are the <strong>low-index, contiguous</strong> ones: 0…stride−1</li>
-        <li>Pass 1: threads 0–3; Pass 2: 0–1; Pass 3: 0</li>
-        <li>Can launch <strong>half</strong> the threads/blocks and load two elements each</li>
-      </ul></div>
-    <div class="callout takeaway"><span class="lbl">Why it matters</span>
-      Idle threads cluster together → whole warps go idle → warps retire early (next section).</div>
-  </div>
-</section>
-
-<!-- What's the difference -->
-<section data-background-color="#ffffff">
-  <h2>What's the Difference?</h2>
-  <p class="small">Same arithmetic, same result. Only the branch condition and the stride order change.</p>
-  <div class="cols">
-    <div>
-      <div class="code-label">Interleaved — stride 1, 2, 4</div>
-      <pre><code class="language-cpp" data-trim>
-for (stride = 1; stride &lt; blockDim.x; stride *= 2){
-  __syncthreads();
-  if (t % (2*stride) == 0)
-      partialSum[t] += partialSum[t+stride];
-}
-</code></pre>
-    </div>
-    <div>
-      <div class="code-label">Contiguous — stride 4, 2, 1</div>
-      <pre><code class="language-cpp" data-trim>
-for (stride = blockDim.x/2; stride &gt; 0; stride /= 2){
-  __syncthreads();
-  if (t &lt; stride)
-      partialSum[t] += partialSum[t+stride];
-}
-</code></pre>
-    </div>
-  </div>
-  <div class="callout takeaway"><span class="lbl">The one line</span>
-    <code class="inline">if (t % (2*stride) == 0)</code> vs. <code class="inline">if (t &lt; stride)</code> — the contiguous condition keeps active threads packed, which we'll see is hugely better for the warp scheduler.</div>
-</section>
-
-<!-- ============================ PART 2 ============================ -->
-<section class="divider" data-background-color="#ffffff">
-  <div class="mod-num">Part 3</div>
-  <div class="mod-title">Warp Partitioning</div>
-  <div class="objectives" style="margin-top:1em;">
-    <h4>By the end you can…</h4>
-    <ul>
-      <li>Map 1D / 2D / 3D thread blocks onto warps</li>
-      <li>Decide whether a branch diverges <em>within</em> a warp</li>
-      <li>Use warps to explain why contiguous reduction beats interleaved</li>
-    </ul>
-  </div>
-</section>
-
-<!-- Warp partitioning def -->
-<section data-background-color="#ffffff">
-  <h2>Warp Partitioning</h2>
-  <div class="symkey">
-    <span><strong>warp</strong> 32 threads executed in lockstep (SIMT)</span>
-    <span><strong>warpSize</strong> threads per warp (32 on NVIDIA)</span>
-  </div>
-  <p class="small"><strong>Warp partitioning</strong> = how a block's threads are divided into warps.</p>
-  <div class="cols">
-    <div class="callout"><span class="lbl">Goals</span>
-      <ul><li>Minimize <strong>divergent branches</strong></li><li>Retire warps <strong>early</strong> to free SM clock cycles</li></ul></div>
-    <div class="callout ok"><span class="lbl">Rule</span>
-      Threads are partitioned by <strong>consecutive, increasing</strong> <code class="inline">threadIdx</code> (after row-major linearization for 2D/3D).</div>
-  </div>
-</section>
-
-<!-- 1D / 2D / 3D partitioning -->
-<section data-background-color="#ffffff">
-  <h2>Partitioning 1D, 2D, 3D Blocks</h2>
-  <div class="cols c3">
-    <div class="callout"><span class="lbl">1D block</span>
-      <ul class="small">
-        <li>Warp <em>n</em> = threads <strong>32n … 32n+31</strong></li>
-        <li>Last warp <strong>padded</strong> if block size not a multiple of 32</li>
-        <li>Fermi+: up to <strong>1024</strong> threads/block</li>
-      </ul></div>
-    <div class="callout"><span class="lbl">2D block (e.g. 64×8)</span>
-      <ul class="small">
-        <li>Linearize <strong>row-major</strong>: increase <code class="inline">threadIdx.x</code> first within row <code class="inline">y=0</code>, then next row</li>
-        <li>Warp0 = (x0–31, y0)</li>
-        <li>Warp1 = (x32–63, y0)</li>
-        <li>Warp2 = (x0–31, y1) …</li>
-      </ul></div>
-    <div class="callout"><span class="lbl">3D block</span>
-      <ul class="small">
-        <li>Start at <code class="inline">z=0</code></li>
-        <li>Partition that plane as 2D</li>
-        <li>Then increment <code class="inline">z</code> and repeat</li>
-      </ul></div>
-  </div>
-  <div class="callout takeaway"><span class="lbl">Key</span>Divergence is a property <em>within</em> a warp — threads in different warps never "diverge" from each other.</div>
-</section>
-
-<!-- In-class Q: divergence -->
-<section data-background-color="#ffffff">
-  <h2>In-Class: Does It Diverge? (warpSize = 32)</h2>
-  <div class="cols">
-    <div>
-      <div class="code-label">Fragment A</div>
-      <pre><code class="language-cpp" data-trim>
-if (threadIdx.x &gt; 15) { /* ... */ }
-</code></pre>
-      <div class="callout warn fragment"><span class="lbl">Diverges ✗</span>
-        Threads 0–15 take one path, 16–31 the other — and both halves live in <strong>warp 0</strong>. Divergence within the warp.</div>
-    </div>
-    <div>
-      <div class="code-label">Fragment B</div>
-      <pre><code class="language-cpp" data-trim>
-if (threadIdx.x &gt; warpSize - 1) { /* ... */ }
-</code></pre>
-      <div class="callout ok fragment"><span class="lbl">No divergence ✓</span>
-        The boundary sits exactly on a <strong>warp boundary</strong> (any warpSize). Warp 0 all-false, warp 1 all-true → no warp splits.</div>
-    </div>
-  </div>
-</section>
-
-<!-- Which reduction is better -->
-<section data-background-color="#ffffff">
-  <h2>Which Reduction Is Better? (pretend warpSize = 2)</h2>
-  <p class="small">8 threads → 4 warps of 2. Count divergent warps per pass.</p>
-  <div class="cols">
-    <div class="callout warn"><span class="lbl">Interleaved</span>
-      <table>
-        <tr><th>Pass</th><th>Divergent warps</th></tr>
-        <tr><td>1</td><td>4</td></tr>
-        <tr><td>2</td><td>2</td></tr>
-        <tr><td>3</td><td>1</td></tr>
-      </table>
-      <p class="small">Active threads scattered → every warp has a live + idle thread.</p></div>
-    <div class="callout ok"><span class="lbl">Contiguous</span>
-      <table>
-        <tr><th>Pass</th><th>Divergent warps</th></tr>
-        <tr><td>1</td><td>0</td></tr>
-        <tr><td>2</td><td>0</td></tr>
-        <tr><td>3</td><td>1</td></tr>
-      </table>
-      <p class="small">Active threads packed; diverges only once #elements &lt; warpSize.</p></div>
-  </div>
-  <div class="callout takeaway"><span class="lbl">Retire warps early</span>
-    Contiguous retires whole warps sooner — <strong>2 warps retired after pass 1</strong> vs. <strong>0</strong> for interleaved. Rework algorithms to minimize warp divergence and retire warps early to save SM clock time.</div>
-</section>
-
-<!-- ============================ PART 3 ============================ -->
-<section class="divider" data-background-color="#ffffff">
-  <div class="mod-num">Part 4</div>
+  <div class="mod-num">Part A</div>
   <div class="mod-title">Memory Coalescing</div>
-  <div class="objectives" style="margin-top:1em;">
-    <h4>By the end you can…</h4>
-    <ul>
-      <li>Pick the access pattern a warp can coalesce into one DRAM transaction</li>
-      <li>Recall GPU DRAM bandwidths across generations</li>
-      <li>State the global→shared staging strategy</li>
-    </ul>
-  </div>
 </section>
 
 <!-- Coalescing Q -->
 <section data-background-color="#ffffff">
   <h2>Memory Coalescing — Which Access Pattern?</h2>
-  <p class="small">A matrix is stored <strong>row-major</strong> in global memory. Each thread iterates over the matrix. Which pattern does the hardware like?</p>
+  <p class="small">A matrix is stored <strong>row-major</strong> in global memory. Each thread loops over the matrix. Which pattern does the hardware like?</p>
   <div class="cols">
-    <div class="callout"><span class="lbl">(a) Column after column</span>
-      Within one load iteration, each thread reads <strong>consecutive addresses</strong> across threads.</div>
-    <div class="callout"><span class="lbl">(b) Row after row</span>
-      Within one load iteration, adjacent threads read <strong>strided addresses</strong> (one full row apart).</div>
+    <div class="callout"><span class="lbl">(a) Each thread walks down a column</span>
+      In each iteration, adjacent threads read adjacent words of one row.</div>
+    <div class="callout"><span class="lbl">(b) Each thread walks along a row</span>
+      In each iteration, adjacent threads read words a full row apart.</div>
   </div>
   <div class="callout ok fragment"><span class="lbl">Answer: (a) is coalesced ✓</span>
-    We want the threads <em>active in a given load iteration</em> to touch <strong>contiguous</strong> memory. The GPU then fuses a full warp's reads into one transaction.</div>
+    We want the threads <em>active in one load iteration</em> to touch <strong>contiguous</strong> memory. The hardware then fuses the warp's reads into the fewest <strong>32-byte sectors</strong> (CC ≥ 6.0).</div>
+  <div class="src">CUDA C++ Best Practices Guide.</div>
 </section>
 
 <!-- DRAM bandwidth -->
 <section data-background-color="#ffffff">
   <h2>Why Coalescing — DRAM Bandwidth</h2>
-  <p class="small">The GPU coalesces consecutive reads from a <strong>full warp</strong> into one wide read. Peak bandwidth needs large consecutive requests.</p>
+  <p class="small">The GPU fuses a warp's consecutive reads into the fewest 32 B sectors: 32 floats fill 4 sectors. Peak bandwidth needs large consecutive requests.</p>
   <table>
-    <tr><th>GPU generation</th><th>Peak DRAM bandwidth</th></tr>
-    <tr><td>G80</td><td>86.4 GB/s</td></tr>
-    <!-- bandwidth figures: NVIDIA architecture whitepapers -->
-    <tr><td>GT200</td><td>150 GB/s</td></tr>
-    <tr><td>Fermi</td><td>192 GB/s</td></tr>
-    <tr><td>Kepler</td><td>240 GB/s</td></tr>
-    <tr><td class="hi">Hopper H100 (HBM3, SXM5)</td><td class="hi">~3,350 GB/s (3.35 TB/s)</td></tr>
+    <tr><th>GPU (memory)</th><th>Peak DRAM bandwidth</th></tr>
+    <tr><td>V100 (HBM2)</td><td>0.9 TB/s</td></tr>
+    <tr><td>A100 40 GB (HBM2)</td><td>1.55 TB/s</td></tr>
+    <tr><td>H100 SXM5 (HBM3)</td><td>3 TB/s</td></tr>
   </table>
   <div class="callout warn"><span class="lbl">Random access</span>
-    Scattered / random reads cannot be fused → effective bandwidth drops far below peak.</div>
+    Scattered or random reads cannot be fused, so effective bandwidth drops far below peak.</div>
+  <div class="src">NVIDIA V100, A100 &amp; H100 whitepapers; CUDA C++ Best Practices Guide.</div>
 </section>
 
 <!-- Coalescing strategy -->
@@ -511,25 +99,324 @@ if (threadIdx.x &gt; warpSize - 1) { /* ... */ }
     <ol>
       <li>Read global memory <strong>coalesced</strong> into <strong>shared memory</strong> (whole warp, contiguous)</li>
       <li>Then access shared memory <strong>randomly</strong> at full on-chip bandwidth</li>
-      <li>(ignoring bank conflicts — covered next)</li>
+      <li>(ignoring bank conflicts — Part H)</li>
     </ol></div>
   <div class="callout"><span class="lbl">Modern note</span>
     Less critical on GPUs with large on-chip caches, but the coalesced global → staged shared pattern is still the workhorse for tiled kernels.</div>
-  <div class="src">Per-GPU DRAM bandwidths from NVIDIA architecture whitepapers (G80 → Hopper H100); framework from UIUC ECE498/AL.</div>
+  <div class="src">CUDA C++ Best Practices Guide.</div>
 </section>
 
-<!-- ============================ PART 4 ============================ -->
+<!-- ==================================================================
+     PART B — SEEING MEMORY INEFFICIENCIES
+     ================================================================== -->
 <section class="divider" data-background-color="#ffffff">
-  <div class="mod-num">Part 5</div>
-  <div class="mod-title">Bank Conflicts</div>
-  <div class="objectives" style="margin-top:1em;">
-    <h4>By the end you can…</h4>
-    <ul>
-      <li>Explain shared-memory banks and the word → bank mapping</li>
-      <li>Identify a bank conflict and its serialization cost</li>
-      <li>Predict conflict-free strides (odd, coprime with 32)</li>
-    </ul>
+  <div class="mod-num">Part B</div>
+  <div class="mod-title">Seeing Memory Inefficiencies</div>
+</section>
+
+<!-- Distinct-warp metric -->
+<section data-background-color="#ffffff">
+  <h2>Count Distinct Warps, Not Accesses</h2>
+  <div class="symkey">
+    <span><strong>sector</strong> — 32 B, the transaction unit (8 words)</span>
+    <span><strong>word</strong> — 4 B</span>
+    <span><strong>temperature</strong> — distinct warps touching a word or a sector</span>
   </div>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">The coalescing rule</span><span class="small">A memory instruction issues <strong>per warp</strong>. One warp's accesses to different words of a sector coalesce into <strong>one 32 B transaction</strong>. Accesses to that sector from <strong>different warps cannot coalesce</strong>; each costs its own transaction.</span></div>
+      <div class="callout takeaway"><span class="lbl">So count distinct warps</span><span class="small">In (a) and (b) every word is accessed once, so the access counts are identical. Only the distinct-warp count separates them: 1 transaction vs. 8. A sector's distinct-warp count ≈ the number of sector transactions it costs.</span></div>
+    </div>
+    <div class="center">
+      <img src="assets/cuthermo/fig3-coalescing-vs-false-sharing.png" alt="Perfect coalescing vs. false sharing in one global-memory sector" style="max-height:330px">
+    </div>
+  </div>
+  <div class="src">Figure: cuThermo (Zhao et al., arXiv:2507.18729).</div>
+</section>
+
+<!-- Patterns at a glance -->
+<section data-background-color="#ffffff">
+  <h2>Inefficient Access Patterns at a Glance</h2>
+  <table style="font-size:.7em">
+    <tr><th>Pattern</th><th>Distinct-warp signature</th><th>Why it's slow</th><th>Fix</th></tr>
+    <tr><td><strong>Hot spot</strong></td><td>every word hot (e.g. 32 warps); sector ≈ its hottest word</td><td>many warps re-read the same sectors</td><td>stage in shared memory or registers</td></tr>
+    <tr><td><strong>Random hot</strong></td><td>words shared by a random number of warps</td><td>input-dependent contention</td><td>stage in shared memory; reorder the input</td></tr>
+    <tr><td><strong>False sharing</strong></td><td>each word 1 warp; sector 8 warps</td><td>8 sector transactions instead of 1</td><td>swap the thread-to-index mapping so <code class="inline">threadIdx.x</code> runs along the contiguous dimension</td></tr>
+    <tr><td><strong>Misalignment</strong></td><td>boundary sectors touched by 2 warps</td><td>one extra sector per warp (5 vs. 4)</td><td>align to 32 B; pad the row pitch</td></tr>
+    <tr><td><strong>Strided</strong></td><td>1 word of 8 used; that word and the sector 8 warps</td><td>7/8 of each sector wasted; L1 wasted</td><td>transpose the index or layout (e.g. AoS → SoA)</td></tr>
+    <tr><td><strong>Abuse of shared memory</strong></td><td>shared-memory words touched by 1 thread or 1 warp</td><td>no cross-warp reuse; less L1, extra instructions</td><td>registers (thread-local); <code class="inline">__shfl_sync</code> (warp-local)</td></tr>
+  </table>
+  <div class="src">cuThermo (Zhao et al., arXiv:2507.18729).</div>
+</section>
+
+<!-- ==================================================================
+     PART C — HOT SPOTS
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Part C</div>
+  <div class="mod-title">Hot Spots</div>
+</section>
+
+<!-- Hot / random hot heat maps -->
+<section data-background-color="#ffffff">
+  <h2>Hot and Random Hot Sectors</h2>
+  <div class="cols">
+    <div class="center">
+      <img src="assets/cuthermo/fig6e-hotspot.png" alt="Hot spot heat map: every word of five sectors touched by 32 warps" style="max-height:230px">
+      <p class="small" style="text-align:left">Every word of every sector is touched by all 32 warps. The sector total (32) equals its hottest word.</p>
+    </div>
+    <div class="center">
+      <img src="assets/cuthermo/fig6f-random-hot.png" alt="Random hot heat map: words touched by varying numbers of warps" style="max-height:230px">
+      <p class="small" style="text-align:left">Words are shared by a random number of warps (0–8). Which words are hot depends on the input.</p>
+    </div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Why it costs, and the fix</span>Each warp that reads a hot sector issues its own transaction. Data that many warps share belongs on-chip: stage it in shared memory once per block.</div>
+  <div class="src">Figure: cuThermo (Zhao et al., arXiv:2507.18729).</div>
+</section>
+
+<!-- Hot spot example -->
+<section data-background-color="#ffffff">
+  <h2>Hot Spot — GEMM</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">GEMM — every k step goes back to global memory</div>
+      <pre><code class="language-cpp" data-trim>
+for (size_t k_idx = 0; k_idx &lt; k; ++k_idx)
+    sum += A[C_row_idx * lda + k_idx]
+         * B[k_idx * ldb + C_col_idx];
+</code></pre>
+      <p class="small">Every warp in a block re-reads the same sectors of <code class="inline">B</code> from global memory. Every word of those sectors is touched by all the warps.</p>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Fix</span>Stage tiles in shared memory, exactly the tiled kernel from Session 1. Each tile of <code class="inline">B</code> is read from global memory once per block, then reused on-chip by every warp.</div>
+      <div class="callout ok"><span class="lbl">Demo</span><span class="small"><code class="inline">hotspot/gemm_coalesced.cu</code> → <code class="inline">gemm_tiled.cu</code>: 32×32×32 shared-memory tiling added. 1.551 → 1.235 ms (1.26×).</span></div>
+    </div>
+  </div>
+  <div class="src">cuThermo (arXiv:2507.18729); leimao/CUDA-GEMM-Optimization; parallel-demos, RTX A4500.</div>
+</section>
+
+<!-- Random hot spot example -->
+<section data-background-color="#ffffff">
+  <h2>Random Hot Spot — SpMV</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">COO SpMV — a gather through the column indices</div>
+      <pre><code class="language-cpp" data-trim>
+int j = blockIdx.x * BLK + threadIdx.x;
+if (j &lt; nnz)
+    atomicAdd(&amp;y[rowidx[j]],
+              val[j] * x[colidx[j]]);   // random gather on x
+</code></pre>
+      <p class="small">Which entries of <code class="inline">x</code> are hot depends on the input, so hot words are shared by a random number of warps. There is no regular structure to tile.</p>
+      <div class="callout warn"><span class="lbl">Size matters</span><span class="small">The gap appears only once <code class="inline">x</code> (16.8 MB) outgrows the L2 cache. At n = 2<sup>20</sup> the same change gives just 1.6×.</span></div>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Fix the data, not the kernel</span>Reorder the matrix so nonzero columns sit in a band near the diagonal. A bandwidth-reducing permutation (e.g. reverse Cuthill–McKee) does this. The kernel is unchanged.</div>
+      <div class="callout ok"><span class="lbl">Demo</span><span class="small"><code class="inline">random_hot/spmv_naive.cu</code> → <code class="inline">spmv_opt.cu</code>, 4.19 M × 4.19 M with 33.5 M nonzeros: 4.167 → 0.887 ms (4.70×).</span></div>
+    </div>
+  </div>
+  <div class="src">cuThermo (arXiv:2507.18729); parallel-demos, RTX A4500.</div>
+</section>
+
+<!-- ==================================================================
+     PART D — FALSE SHARING
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Part D</div>
+  <div class="mod-title">False Sharing</div>
+</section>
+
+<!-- False sharing concept -->
+<section data-background-color="#ffffff">
+  <h2>False Sharing on Global Memory</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout warn"><span class="lbl">The trap</span>A warp's accesses to <strong>different words of one sector</strong> coalesce into <strong>one</strong> 32 B transaction. The same sector accessed by <strong>different warps</strong> cannot be coalesced. A sector whose 8 words are each <em>warp-private</em> costs <strong>8 sector transactions</strong> instead of 1.</div>
+    </div>
+    <div class="center">
+      <img src="assets/cuthermo/fig6b-false-sharing.png" alt="False sharing heat map: each word 1 warp, sector total 8" style="max-width:100%">
+      <img src="assets/cuthermo/fig3-coalescing-vs-false-sharing.png" alt="Eight warps each touching one word of sector 00" style="max-height:260px;margin-top:.4em">
+    </div>
+  </div>
+  <div class="src">Figures: cuThermo (Zhao et al., arXiv:2507.18729).</div>
+</section>
+
+<!-- False sharing example -->
+<section data-background-color="#ffffff">
+  <h2>False Sharing — GEMM</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Naive — threadIdx.x feeds the row of C</div>
+      <pre><code class="language-cpp" data-trim>
+size_t C_row_idx = blockIdx.x * blockDim.x + threadIdx.x;
+size_t C_col_idx = blockIdx.y * blockDim.y + threadIdx.y;
+</code></pre>
+      <div class="code-label">Fixed — the two lines swapped</div>
+      <pre><code class="language-cpp" data-trim>
+size_t C_col_idx = blockIdx.x * blockDim.x + threadIdx.x;
+size_t C_row_idx = blockIdx.y * blockDim.y + threadIdx.y;
+</code></pre>
+      <p class="small">Inner loop for both: <code class="inline">sum += A[C_row_idx*lda + k] * B[k*ldb + C_col_idx];</code></p>
+    </div>
+    <div>
+      <p class="small">In the naive kernel, warp <em>w</em> has <code class="inline">threadIdx.y = w</code>, so its column is fixed. Eight warps each take one word of the same sector of <code class="inline">B</code> and <code class="inline">C</code>.</p>
+      <div class="callout takeaway"><span class="lbl">Fix</span>Swap the thread-to-index mapping so <code class="inline">threadIdx.x</code> runs along the contiguous dimension. A warp then reads 32 consecutive words: 4 sectors, one warp.</div>
+      <div class="callout ok"><span class="lbl">Demo</span><span class="small"><code class="inline">false_sharing/gemm_naive.cu</code> → <code class="inline">gemm_opt.cu</code>: 12.613 → 1.550 ms (8.14×).</span></div>
+    </div>
+  </div>
+  <div class="src">cuThermo (arXiv:2507.18729); leimao/CUDA-GEMM-Optimization; parallel-demos, RTX A4500.</div>
+</section>
+
+<!-- ==================================================================
+     PART E — MISALIGNMENT
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Part E</div>
+  <div class="mod-title">Misalignment</div>
+</section>
+
+<!-- Misalignment concept -->
+<section data-background-color="#ffffff">
+  <h2>Misaligned Memory Requests</h2>
+  <img src="assets/cuthermo/fig7-misaligned-request.png" alt="Aligned warp request covers sectors 00 to 03; misaligned request spans sectors 00 to 04" style="max-height:250px">
+  <div class="cols w-64" style="margin-top:.5em">
+    <div>
+      <ul class="small">
+        <li>Top: a warp's 32 floats (128 B) start on a sector boundary and fill exactly 4 sectors.</li>
+        <li>Bottom: the request starts 4 words late. The warp needs <strong>5 sectors instead of 4</strong>; sectors 00 and 04 are half-used and waste L1.</li>
+      </ul>
+    </div>
+    <div class="center">
+      <img src="assets/cuthermo/fig6c-misalignment.png" alt="Misalignment heat map: boundary sectors 0 and 4 have total 2" style="max-height:150px">
+    </div>
+  </div>
+  <div class="src">Figures: cuThermo (Zhao et al., arXiv:2507.18729).</div>
+</section>
+
+<!-- Misalignment example -->
+<section data-background-color="#ffffff">
+  <h2>Misalignment — Row Pitch</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Row-scale kernel over a 2-D array</div>
+      <pre><code class="language-cpp" data-trim>
+size_t idx = (size_t)r * pitch + c;
+y[idx] = x[idx] * 2.0f + 1.0f;
+
+// host side
+pitch = nx;                  // naive: 1001 floats
+pitch = ((nx + 7) / 8) * 8;  // fixed: 1008 floats
+</code></pre>
+      <p class="small">With 1001-float rows, each row starts one float further off a 32 B boundary, so a warp's 128 bytes straddle 5 sectors instead of 4.</p>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Fix</span>Pad the row pitch to a multiple of 32 B so every row starts on a sector boundary. <code class="inline">cudaMallocPitch</code> does this for you. Cost: 0.7% more memory.</div>
+      <div class="callout ok"><span class="lbl">Demo</span><span class="small"><code class="inline">misalignment/rowscale_naive.cu</code> → <code class="inline">rowscale_opt.cu</code>: sectors per request 4.28 → 3.43 (−24.6%).</span></div>
+      <div class="callout warn"><span class="lbl">But the time is unchanged</span><span class="small">Misalignment adds L1↔L2 traffic, not DRAM traffic, and this kernel is DRAM-bandwidth-bound.</span></div>
+    </div>
+  </div>
+  <div class="src">cuThermo (arXiv:2507.18729); parallel-demos, RTX A4500.</div>
+</section>
+
+<!-- ==================================================================
+     PART F — STRIDED ACCESS
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Part F</div>
+  <div class="mod-title">Strided Access</div>
+</section>
+
+<!-- Strided concept -->
+<section data-background-color="#ffffff">
+  <h2>Strided Memory Access</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Consecutive threads access words spaced a fixed stride apart instead of contiguous words.</p>
+      <ul class="small">
+        <li>Only word 0 of each sector is used; 7 of 8 words are never touched</li>
+        <li>7/8 of every sector transaction is wasted</li>
+        <li>That word is touched by 8 distinct warps, so coalescing does not apply</li>
+        <li>The unused words also fill L1, crowding out other data</li>
+      </ul>
+      <div class="callout"><span class="lbl">Real case: Gram-Schmidt</span><span class="small">GRAMSCHM <code class="inline">kernel3</code> reads <code class="inline">q[i*NJ+k]</code>, so successive accesses are a full row apart. Transposing the indices of <code class="inline">q</code> lets a warp read adjacent words.</span></div>
+    </div>
+    <div class="center">
+      <img src="assets/cuthermo/fig6d-strided.png" alt="Strided heat map: only word 0 of each sector used, by 8 warps" style="max-height:230px">
+    </div>
+  </div>
+  <div class="src">Figure: cuThermo (Zhao et al., arXiv:2507.18729).</div>
+</section>
+
+<!-- Strided example -->
+<section data-background-color="#ffffff">
+  <h2>Strided Access — Vector Add</h2>
+  <div class="cols">
+    <div>
+      <div class="code-label">Naive — a scattered (but complete) index mapping</div>
+      <pre><code class="language-cpp" data-trim>
+int t = blockIdx.x * blockDim.x + threadIdx.x;
+int chunk = n / STRIDE;                      // STRIDE = 32
+int i = (t % chunk) * STRIDE + (t / chunk);
+if (i &lt; n) c[i] = a[i] + b[i];
+</code></pre>
+      <div class="code-label">Fixed — identity mapping</div>
+      <pre><code class="language-cpp" data-trim>
+int i = blockIdx.x * blockDim.x + threadIdx.x;
+if (i &lt; n) c[i] = a[i] + b[i];
+</code></pre>
+    </div>
+    <div>
+      <p class="small">In the naive kernel adjacent lanes land 128 bytes apart: one useful word per 32 B sector, so 7/8 of every transaction is wasted. Both versions compute the same result.</p>
+      <div class="callout takeaway"><span class="lbl">Fix</span>Map adjacent threads to adjacent words, by changing the index or the data layout.</div>
+      <div class="callout ok"><span class="lbl">Demo</span><span class="small"><code class="inline">strided/vadd_naive.cu</code> → <code class="inline">vadd_opt.cu</code>: one line changed. 3.721 → 0.353 ms (10.5×).</span></div>
+    </div>
+  </div>
+  <div class="src">cuThermo (arXiv:2507.18729); parallel-demos, RTX A4500.</div>
+</section>
+
+<!-- ==================================================================
+     PART G — ABUSE OF SHARED MEMORY
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Part G</div>
+  <div class="mod-title">Abuse of Shared Memory</div>
+</section>
+
+<!-- SMEM abuse concept -->
+<section data-background-color="#ffffff">
+  <h2>When Shared Memory Is Not Shared</h2>
+  <div class="center">
+    <img src="assets/cuthermo/fig6a-smem-overuse.png" alt="Shared-memory heat map: every word touched by 1 warp" style="max-height:140px">
+  </div>
+  <p class="small">Each word of this shared-memory sector is touched by exactly one warp. The whole sector is touched by one warp or a few, depending on the application.</p>
+  <div class="cols">
+    <div class="callout warn"><span class="lbl">Why it hurts</span><span class="small">Shared memory is carved out of the same on-chip storage as L1. Space spent on data no other warp reads shrinks L1 for everything else. It also adds extra load, store, and synchronization instructions.</span></div>
+    <div class="callout takeaway"><span class="lbl">The purpose of shared memory</span><span class="small">Shorten the latency of data that is <strong>reused</strong>, by several threads or warps of the block. Words with temperature 1 defeat that purpose.</span></div>
+  </div>
+  <div class="src">Figure: cuThermo (Zhao et al., arXiv:2507.18729).</div>
+</section>
+
+<!-- SMEM abuse cases -->
+<section data-background-color="#ffffff">
+  <h2>Abuse of Shared Memory — Three Cases</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Case 1: Thread-local</span><span class="small">A word touched by only <strong>one thread</strong>: thread-private scratch, no sharing at all.<br><strong>Fix:</strong> keep it in <strong>registers</strong>, which also frees L1.</span></div>
+    <div class="callout"><span class="lbl">Case 2: Warp-local</span><span class="small">Words each touched by only <strong>one warp</strong>: no cross-warp reuse.<br><strong>Fix:</strong> exchange inside the warp with <code class="inline">__shfl_sync</code> instead.</span></div>
+    <div class="callout"><span class="lbl">Case 3: Over-allocation</span><span class="small">Shared memory that nobody reuses <strong>shrinks the L1 cache</strong> and can lower <strong>occupancy</strong>.<br><strong>Fix:</strong> allocate only what earns cross-warp reuse.</span></div>
+  </div>
+  <div class="cols">
+    <div class="callout takeaway"><span class="lbl">Rule of thumb</span><span class="small">Use shared memory only when multiple warps reuse the data. Otherwise registers or <code class="inline">__shfl_sync</code> are cheaper and leave L1 intact.</span></div>
+    <div class="callout ok"><span class="lbl">Demo</span><span class="small"><code class="inline">smem_abuse/ttm_naive.cu</code> → <code class="inline">ttm_opt.cu</code>: a per-thread accumulator moved from <code class="inline">__shared__</code> to registers, returning 16 KB/block to L1. 0.0745 → 0.0662 ms (1.13×).</span></div>
+  </div>
+  <div class="src">cuThermo (arXiv:2507.18729); parallel-demos, RTX A4500.</div>
+</section>
+
+<!-- ==================================================================
+     PART H — BANK CONFLICTS
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Part H</div>
+  <div class="mod-title">Bank Conflicts</div>
 </section>
 
 <!-- Banks def -->
@@ -537,16 +424,11 @@ if (threadIdx.x &gt; warpSize - 1) { /* ... */ }
   <h2>Shared Memory = Parallel Data Cache (Banks)</h2>
   <div class="symkey">
     <span><strong>bank</strong> independent shared-memory port</span>
-    <span><strong>SP</strong> streaming processor (CUDA core)</span>
   </div>
-  <p class="small">Shared memory is divided into <strong>32 banks</strong> (Bank 0 … 31). Each bank has a bandwidth of <strong>32 bits per clock cycle</strong> (one 32-bit word per bank per cycle). <strong>Successive 32-bit words → successive banks.</strong> <span class="src">[CUDA C++ Programming Guide — Shared Memory]</span></p>
-  <table>
-    <tr><th>Generation</th><th>Banks</th><th>SPs concurrent</th></tr>
-    <tr><td>G80 / GT200</td><td>16</td><td>8</td></tr>
-    <tr><td>Fermi+</td><td>32</td><td>16</td></tr>
-  </table>
+  <p class="small">Shared memory is divided into <strong>32 equally-sized banks</strong> (Bank 0 … 31). Each bank delivers <strong>32 bits per clock</strong>; <strong>successive 32-bit words map to successive banks</strong>. The warp is 32 threads and the number of banks is also 32, so a warp can read 32 distinct banks in one transaction. <span class="muted">(historical: G80/GT200 had only <strong>16</strong> banks.)</span></p>
   <div class="callout warn"><span class="lbl">Bank conflict</span>
     Two threads access the <strong>same bank</strong> but <strong>different addresses</strong> → accesses are <strong>serialized</strong>.</div>
+  <div class="src">CUDA C++ Best Practices Guide.</div>
 </section>
 
 <!-- Bank patterns -->
@@ -560,11 +442,12 @@ if (threadIdx.x &gt; warpSize - 1) { /* ... */ }
   </div>
   <div class="callout warn" style="margin-top:.6em;"><span class="lbl">Stride 8</span>
     Many threads collapse onto few banks → <strong>heavy</strong> conflict (8-way), accesses fully serialized.</div>
+  <div class="src">CUDA C++ Best Practices Guide.</div>
 </section>
 
 <!-- Fast/slow paths -->
 <section data-background-color="#ffffff">
-  <h2>Fast &amp; Slow Paths (Fermi+)</h2>
+  <h2>Fast &amp; Slow Paths</h2>
   <div class="cols c3">
     <div class="callout ok"><span class="lbl">Fast Path 1</span>
       All threads access <strong>different banks</strong> → one cycle, full throughput.</div>
@@ -574,6 +457,7 @@ if (threadIdx.x &gt; warpSize - 1) { /* ... */ }
       Multiple threads → <strong>same bank, different addresses</strong> → accesses <strong>serialized</strong>.</div>
   </div>
   <div class="callout takeaway"><span class="lbl">Cost</span>An <em>N</em>-way conflict takes <em>N</em> times as long as a conflict-free access.</div>
+  <div class="src">CUDA C++ Best Practices Guide.</div>
 </section>
 
 <!-- In-class bank exercise -->
@@ -594,20 +478,15 @@ float f = shared[index + s * threadIdx.x];
     <div class="callout ok fragment"><span class="lbl">Rule</span>
       <strong>Odd</strong> stride <em>s</em> (coprime with 32) → maps the 32 threads onto a permutation of the 32 banks → conflict-free. <strong>Even</strong> <em>s</em> shares factors with 32 → conflicts.</div>
   </div>
+  <div class="src">CUDA C++ Best Practices Guide.</div>
 </section>
 
-<!-- ============================ PART 5 ============================ -->
+<!-- ==================================================================
+     PART I — SM RESOURCE PARTITIONING (OCCUPANCY)
+     ================================================================== -->
 <section class="divider" data-background-color="#ffffff">
-  <div class="mod-num">Part 6</div>
+  <div class="mod-num">Part I</div>
   <div class="mod-title">SM Resource Partitioning (Occupancy)</div>
-  <div class="objectives" style="margin-top:1em;">
-    <h4>By the end you can…</h4>
-    <ul>
-      <li>List the four SM resources partitioned dynamically</li>
-      <li>Compute how block/thread/register limits cap occupancy</li>
-      <li>Explain the performance cliff</li>
-    </ul>
-  </div>
 </section>
 
 <!-- SM resources table -->
@@ -617,20 +496,20 @@ float f = shared[index + s * threadIdx.x];
     <span><strong>SM</strong> streaming multiprocessor</span>
     <span><strong>TLP</strong> thread-level parallelism</span>
   </div>
-  <p class="small">Each SM splits four resources across resident blocks: <strong>block slots · thread slots · registers · shared memory</strong>.</p>
-  <table style="font-size:.82em">
-    <tr><th>Resource</th><th>G80</th><th>Fermi</th><th>Kepler</th><th>Hopper (H100)</th></tr>
-    <tr><td>Thread-block slots</td><td>8</td><td>8</td><td>16</td><td class="hi">32</td></tr>
-    <tr><td>Thread slots</td><td>768</td><td>1536</td><td>2048</td><td class="hi">2048</td></tr>
-    <tr><td>32-bit registers / SM</td><td>8K</td><td>32K</td><td>64K</td><td class="hi">64K (256 KB file)</td></tr>
-    <tr><td>Shared memory / SM</td><td>16 KB</td><td>48 KB</td><td>48 KB</td><td class="hi">up to 228 KB</td></tr>
+  <p class="small">Each SM splits four resources across resident blocks: block slots, thread slots, registers, and shared memory.</p>
+  <table>
+    <tr><th>Resource (per SM)</th><th>V100 (7.0)</th><th>A100 (8.0)</th><th>H100 (9.0)</th></tr>
+    <tr><td>Resident block slots</td><td>32</td><td>32</td><td>32</td></tr>
+    <tr><td>Thread slots</td><td>2048</td><td>2048</td><td>2048</td></tr>
+    <tr><td>32-bit registers</td><td>64K</td><td>64K</td><td>64K</td></tr>
+    <tr><td>Shared memory</td><td>96 KB</td><td>164 KB</td><td>228 KB</td></tr>
   </table>
-  <div class="src">Register &amp; shared-memory limits: NVIDIA CUDA C++ Programming Guide, "Technical Specifications per Compute Capability" (G80 = cc 1.0 … Hopper H100 = cc 9.0). Earlier "KB" register labels corrected to register <em>counts</em>.</div>
+  <div class="src">CUDA C++ Programming Guide; NVIDIA A100 &amp; H100 whitepapers.</div>
 </section>
 
 <!-- G80 occupancy example -->
 <section data-background-color="#ffffff">
-  <h2>G80 Occupancy — Block &amp; Thread Slots</h2>
+  <h2>Occupancy — Block &amp; Thread Slots <span class="muted" style="font-size:.6em">(historical example, G80: 768 thread slots)</span></h2>
   <div class="cols">
     <div class="callout ok"><span class="lbl">Works</span>
       <ul class="small">
@@ -643,13 +522,14 @@ float f = shared[index + s * threadIdx.x];
         <li>Exceeds the <strong>768</strong> thread-slot limit ✗</li>
       </ul></div>
   </div>
-  <p class="small">The binding limit is whichever resource runs out first — here, thread slots.</p>
+  <p class="small">The binding limit is whichever resource runs out first; here, thread slots. The <em>method</em> is unchanged today; only the numbers grow (2048 thread slots and 32 resident blocks/SM on V100–H100).</p>
+  <div class="src">CUDA C++ Programming Guide.</div>
 </section>
 
 <!-- Register cliff example -->
 <section data-background-color="#ffffff">
-  <h2>G80 Occupancy — Registers &amp; the Cliff</h2>
-  <p class="small">G80 has 8192 registers/SM. Blocks of 256 threads.</p>
+  <h2>Occupancy — Registers &amp; the Cliff <span class="muted" style="font-size:.6em">(historical example, G80)</span></h2>
+  <p class="small">G80 has 8192 registers/SM. Blocks of 256 threads. A modern SM has <strong>64K</strong> registers, but the same cliff appears at its own thresholds.</p>
   <div class="cols">
     <div class="callout ok"><span class="lbl">10 regs / thread</span>
       <ul class="small">
@@ -663,170 +543,34 @@ float f = shared[index + s * threadIdx.x];
       </ul></div>
   </div>
   <div class="callout takeaway"><span class="lbl">Performance cliff</span>
-    One extra register/thread drops occupancy 768 → 512. <strong>More registers → less TLP.</strong> A small increase in resource use can sharply cut parallelism — unless the extra resources hide global-memory latency.</div>
+    One extra register/thread drops occupancy 768 → 512. <strong>More registers → less TLP.</strong> A small increase in resource use can sharply cut parallelism, unless the extra resources hide global-memory latency.</div>
+  <div class="src">CUDA C++ Programming Guide.</div>
 </section>
 
-<!-- ============================ PART 6 ============================ -->
-<section class="divider" data-background-color="#ffffff">
-  <div class="mod-num">Part 7</div>
-  <div class="mod-title">Data Prefetching</div>
-  <div class="objectives" style="margin-top:1em;">
-    <h4>By the end you can…</h4>
-    <ul>
-      <li>Use independent instructions to hide global-memory latency</li>
-      <li>Restructure tiled matmul to prefetch the next tile</li>
-    </ul>
-  </div>
-</section>
-
-<!-- Prefetch idea -->
+<!-- Know your bound -->
 <section data-background-color="#ffffff">
-  <h2>Hiding Latency with Independent Instructions</h2>
-  <p class="small">Put independent work <em>between</em> a global read and the instruction that uses it. The load runs in the background while the SM keeps issuing.</p>
-  <div class="code-label">CUDA C — independent work between load and use</div>
-  <pre><code class="language-cpp" data-trim>
-float m  = Md[i];          // global read (long latency)
-float f  = a*b + c*d;      // independent — overlaps the load
-float f2 = m * f;          // first use of m
-</code></pre>
-  <div class="callout ok"><span class="lbl">Prefetching</span>
-    Issue the load <strong>earlier</strong> to widen the gap of independent instructions, hiding more of the memory latency.</div>
+  <h2>Know What Bounds Your Kernel Before Fixing a Pattern</h2>
+  <p class="small">In each demo below the pattern is real and the metric moves as predicted, but the clock does not.</p>
+  <table class="small">
+    <tr><th>Demo</th><th>What the metric shows</th><th>Time</th><th>Why</th></tr>
+    <tr><td><code class="inline">misalignment/</code></td><td>−24.6% sector transactions</td><td>unchanged</td><td>DRAM-bound; misalignment adds only L1↔L2 traffic</td></tr>
+    <tr><td><code class="inline">false_sharing/warpsum_*</code></td><td>8× fewer store sectors</td><td>6% slower</td><td>stores are ~3% of traffic; the added <code class="inline">__syncthreads()</code> costs more</td></tr>
+    <tr><td><code class="inline">random_hot/</code> SMEM staging</td><td>results match, no speedup</td><td>0.88×</td><td>after reordering, L1 already serves the working set</td></tr>
+    <tr><td><code class="inline">bank_conflict/</code> (Part H)</td><td>4.06 M → 0 conflicts</td><td>1.87× at 512², 1.07× at 2048²</td><td>the conflicts matter only while they're on the critical path</td></tr>
+  </table>
+  <div class="callout takeaway"><span class="lbl">The lesson</span>A profiler finds the pattern; the roofline (Topic 2) tells you whether fixing it can pay. Fix the patterns on your kernel's critical path.</div>
+  <div class="src">parallel-demos, RTX A4500.</div>
 </section>
 
-<!-- Tiled matmul prefetch -->
-<section data-background-color="#ffffff">
-  <h2>Tiled Matmul with Prefetch</h2>
-  <div class="code-label">CUDA C — prefetch the next tile into registers</div>
-  <pre><code class="language-cpp" data-trim>
-// load FIRST tile into registers
-load Md/Nd tile -&gt; registers (rMd, rNd);
-
-for (/* each tile */) {
-    // deposit registers -&gt; shared memory
-    Mds[ty][tx] = rMd;  Nds[ty][tx] = rNd;
-    __syncthreads();
-
-    // prefetch NEXT tile into registers (overlaps compute)
-    load next Md/Nd tile -&gt; registers (rMd, rNd);
-
-    // accumulate dot product from shared memory
-    for (k = 0; k &lt; TILE; k++)
-        Pvalue += Mds[ty][k] * Nds[k][tx];
-    __syncthreads();
-}
-</code></pre>
-  <div class="callout takeaway"><span class="lbl">Effect</span>The next tile's global loads run while the current tile's multiply-adds execute — latency is hidden behind useful work.</div>
-</section>
-
-<!-- ============================ PART 7 ============================ -->
-<section class="divider" data-background-color="#ffffff">
-  <div class="mod-num">Part 8</div>
-  <div class="mod-title">Instruction Mix &amp; Loop Unrolling</div>
-  <div class="objectives" style="margin-top:1em;">
-    <h4>By the end you can…</h4>
-    <ul>
-      <li>Account for the non-FP overhead in a tight loop</li>
-      <li>Unroll to eliminate loop and address-arithmetic instructions</li>
-    </ul>
-  </div>
-</section>
-
-<!-- Instruction mix -->
-<section data-background-color="#ffffff">
-  <h2>Instruction Mix — The Inner Loop</h2>
-  <div class="code-label">CUDA C — matmul inner loop</div>
-  <pre><code class="language-cpp" data-trim>
-for (int k = 0; k &lt; BLOCK_SIZE; k++)
-    Pvalue += Ms[ty][k] * Ns[k][tx];
-</code></pre>
-  <div class="callout warn"><span class="lbl">Per iteration</span>
-    <ul class="small">
-      <li><strong>2</strong> floating-point ops (1 mul, 1 add)</li>
-      <li><strong>1</strong> loop branch</li>
-      <li><strong>2</strong> address-arithmetic ops</li>
-      <li><strong>1</strong> counter increment</li>
-    </ul>
-    Only about <strong>1/3</strong> of issued instructions are the FP work we care about.</div>
-  <div class="callout"><span class="lbl">SFU bottleneck</span>Special-function units: only <strong>4 per SM</strong>, <strong>1 instruction/clock</strong> each.</div>
-</section>
-
-<!-- Loop unrolling -->
-<section data-background-color="#ffffff">
-  <h2>Loop Unrolling (BLOCK_SIZE = 16)</h2>
-  <div class="code-label">CUDA C — fully unrolled inner loop</div>
-  <pre><code class="language-cpp" data-trim>
-Pvalue += Ms[ty][0]*Ns[0][tx] + Ms[ty][1]*Ns[1][tx]
-        + Ms[ty][2]*Ns[2][tx] + /* ... */
-        + Ms[ty][15]*Ns[15][tx];
-// or simply:  #pragma unroll BLOCK_SIZE
-</code></pre>
-  <div class="cols">
-    <div class="callout ok"><span class="lbl">Wins</span>
-      <ul class="small">
-        <li>No loop counter / branch</li>
-        <li>Constant indices → <strong>no address arithmetic</strong></li>
-        <li>Nearly all instructions are now FP</li>
-      </ul></div>
-    <div class="callout warn"><span class="lbl">Disadvantages</span>
-      <ul class="small">
-        <li>Code bloat</li>
-        <li>Higher register pressure</li>
-        <li>Fixed bounds (must know BLOCK_SIZE)</li>
-      </ul></div>
-  </div>
-</section>
-
-<!-- ============================ PART 8 ============================ -->
-<section class="divider" data-background-color="#ffffff">
-  <div class="mod-num">Part 9</div>
-  <div class="mod-title">Thread Granularity</div>
-  <div class="objectives" style="margin-top:1em;">
-    <h4>By the end you can…</h4>
-    <ul>
-      <li>Decide how much work to put in one thread</li>
-      <li>Trade redundant memory traffic against occupancy</li>
-    </ul>
-  </div>
-</section>
-
-<!-- Thread granularity -->
-<section data-background-color="#ffffff">
-  <h2>Thread Granularity — How Much Work per Thread?</h2>
-  <p class="small">Compute <strong>1</strong> element of Pd per thread vs. <strong>2</strong> adjacent elements per thread.</p>
-  <div class="callout"><span class="lbl">Observation</span>
-    Two adjacent Pd elements need the <strong>same row of Md</strong>. If one thread computes both, that row is loaded <strong>once</strong>, not twice.</div>
-  <div class="cols">
-    <div class="callout ok"><span class="lbl">Compute 2 / thread — gains</span>
-      <ul class="small">
-        <li>Reduces global-memory access by ~<strong>1/4</strong></li>
-        <li>More <strong>independent instructions</strong> (helps latency hiding)</li>
-      </ul></div>
-    <div class="callout warn"><span class="lbl">Costs</span>
-      <ul class="small">
-        <li>More <strong>registers</strong> &amp; <strong>shared memory</strong> per thread</li>
-        <li>→ lower occupancy (ties back to the <strong>performance cliff</strong>)</li>
-      </ul></div>
-  </div>
-  <div class="callout takeaway"><span class="lbl">Balance</span>Coarser threads cut redundant traffic but spend resources — tune granularity against occupancy.</div>
-</section>
-
+<!-- Wrap-up -->
 <!-- ==================================================================
-     PART 10 — REDUNDANT MEMORY INSTRUCTIONS (RedSan)
+     PART J — REDUNDANT MEMORY INSTRUCTIONS (RedSan)
      ================================================================== -->
 <section class="divider" data-background-color="#ffffff">
-  <div class="mod-num">Part 10</div>
+  <div class="mod-num">Part J</div>
   <div class="mod-title">Redundant Memory Instructions</div>
-  <div class="objectives" style="margin-top:1em;">
-    <h4>By the end you can…</h4>
-    <ul>
-      <li>Define a redundant memory instruction and the three rules that detect one</li>
-      <li>Recognize the four source patterns that leave redundancy in optimized binaries</li>
-      <li>Pick a fix and name its cost — the skills the Lecture 21 in-class lab uses</li>
-    </ul>
-  </div>
 </section>
 
-<!-- Redundancy: definition -->
 <section data-background-color="#ffffff">
   <h2>Redundant Memory Instructions</h2>
   <div class="callout"><span class="lbl">Definition</span>A memory instruction is <strong>redundant</strong> if it loads or stores an address whose value has already been loaded or stored, with <strong>no intervening update</strong> to that location.</div>
@@ -841,7 +585,6 @@ Pvalue += Ms[ty][0]*Ns[0][tx] + Ms[ty][1]*Ns[1][tx]
   <p class="src">Y. Zhao, Y. Hao, Z. Li, S. Jiao, X. Liu, J. Li, &ldquo;RedSan: Redundant Memory Instruction Sanitizer for GPU Programs,&rdquo; SC &rsquo;25 — §2 (definition), §4.1 (rules), abstract (results).</p>
 </section>
 
-<!-- Redundancy: four root causes -->
 <section data-background-color="#ffffff">
   <h2>Why Doesn&rsquo;t the Compiler Remove Them?</h2>
   <p class="small">Four root causes in the source code, found across PolyBench, Rodinia, DARKNET, LULESH and PASTA:</p>
@@ -857,7 +600,6 @@ Pvalue += Ms[ty][0]*Ns[0][tx] + Ms[ty][1]*Ns[1][tx]
   <p class="src">Y. Zhao, Y. Hao, Z. Li, S. Jiao, X. Liu, J. Li, &ldquo;RedSan: Redundant Memory Instruction Sanitizer for GPU Programs,&rdquo; SC &rsquo;25 — §2.1–2.4, §3.2, §7.</p>
 </section>
 
-<!-- Redundancy: DARKNET example -->
 <section data-background-color="#ffffff">
   <h2>Example — A Store That Should Happen Once</h2>
   <div class="cols">
@@ -891,7 +633,6 @@ st.global.f32  [%rd2], %f13;    // dead store
   <p class="src">Y. Zhao, Y. Hao, Z. Li, S. Jiao, X. Liu, J. Li, &ldquo;RedSan: Redundant Memory Instruction Sanitizer for GPU Programs,&rdquo; SC &rsquo;25 — Listings 1 and 3, §2.1, Table 1.</p>
 </section>
 
-<!-- Redundancy: fixes and costs -->
 <section data-background-color="#ffffff">
   <h2>Fixes — and What Each Costs</h2>
   <table>
@@ -907,7 +648,6 @@ st.global.f32  [%rd2], %f13;    // dead store
   <p class="src">Y. Zhao, Y. Hao, Z. Li, S. Jiao, X. Liu, J. Li, &ldquo;RedSan: Redundant Memory Instruction Sanitizer for GPU Programs,&rdquo; SC &rsquo;25 — §2.5.</p>
 </section>
 
-<!-- Redundancy: restrict pitfall -->
 <section data-background-color="#ffffff">
   <h2>Pitfall — <code class="inline">__restrict__</code> Is a Per-Thread Promise</h2>
   <div class="cols">
@@ -933,12 +673,11 @@ __global__ void foo(float * __restrict__ data, int n) {
   <p class="src">Y. Zhao, Y. Hao, Z. Li, S. Jiao, X. Liu, J. Li, &ldquo;RedSan: Redundant Memory Instruction Sanitizer for GPU Programs,&rdquo; SC &rsquo;25 — §3.1, Listing 4 (observed with both NVCC and Clang).</p>
 </section>
 
-<!-- Redundancy: back to matmul -->
 <section data-background-color="#ffffff">
   <h2>Back to Matmul — Why <code class="inline">pValue</code> Matters</h2>
   <div class="cols">
     <div>
-      <div class="code-label">Our naive kernel (Part 1)</div>
+      <div class="code-label">Our naive kernel (Session 1)</div>
       <pre><code class="language-cpp" data-trim>
 float pValue = 0;
 for (int k = 0; k &lt; width; k++)
@@ -964,7 +703,6 @@ for (k = 0; k &lt; _PB_NK; k++)
   <p class="src">Y. Zhao, Y. Hao, Z. Li, S. Jiao, X. Liu, J. Li, &ldquo;RedSan: Redundant Memory Instruction Sanitizer for GPU Programs,&rdquo; SC &rsquo;25 — Table 1 (2mm kernel1), §7.1.</p>
 </section>
 
-<!-- Redundancy: how RedSan finds them -->
 <section data-background-color="#ffffff">
   <h2>How RedSan Finds Them</h2>
   <div class="cols c3">
@@ -980,7 +718,6 @@ for (k = 0; k &lt; _PB_NK; k++)
   <p class="src">Y. Zhao, Y. Hao, Z. Li, S. Jiao, X. Liu, J. Li, &ldquo;RedSan: Redundant Memory Instruction Sanitizer for GPU Programs,&rdquo; SC &rsquo;25 — §4.2, §5, Figure 2. Profiling overhead: 3.21×–111.93× of the original runtime (§6.2).</p>
 </section>
 
-<!-- Redundancy: in-class which pattern -->
 <section data-background-color="#ffffff">
   <h2>In-Class: Which Pattern?</h2>
   <div class="cols c3">
@@ -1022,40 +759,46 @@ for (i = inz_begin; ...)
   <p class="src">Y. Zhao, Y. Hao, Z. Li, S. Jiao, X. Liu, J. Li, &ldquo;RedSan: Redundant Memory Instruction Sanitizer for GPU Programs,&rdquo; SC &rsquo;25 — Listings 2, 5 and 7.</p>
 </section>
 
-<!-- Wrap-up -->
 <section data-background-color="#ffffff">
   <h2>Wrap-Up — The Optimization Toolkit</h2>
   <div class="cols">
-    <div class="callout"><span class="lbl">Algorithm</span>
-      <ul class="small"><li>Contiguous reduction → fewer divergent warps, early retirement</li><li>Warp-aware branch conditions</li></ul></div>
-    <div class="callout"><span class="lbl">Memory</span>
-      <ul class="small"><li>Coalesce global loads (one warp = one transaction)</li><li>Avoid bank conflicts (odd strides)</li><li>Remove redundant loads and stores (keep per-thread values in registers)</li></ul></div>
+    <div class="callout"><span class="lbl">Global memory</span>
+      <ul class="small">
+        <li>Coalesce global loads (fewest 32 B sectors per warp)</li>
+        <li>Count distinct warps per word and per sector</li>
+        <li>Hot spots → stage in shared memory</li>
+        <li>False sharing, strided → adjacent threads on adjacent words</li>
+        <li>Misalignment → align or pad to 32 B</li>
+      </ul></div>
+    <div class="callout"><span class="lbl">Shared memory &amp; resources</span>
+      <ul class="small">
+        <li>Thread- or warp-local data → registers or <code class="inline">__shfl_sync</code></li>
+        <li>Avoid bank conflicts (odd strides)</li>
+        <li>Watch the occupancy cliff</li>
+        <li>Remove redundant loads and stores (keep per-thread values in registers)</li>
+        <li>Fix only what is on the critical path</li>
+      </ul></div>
   </div>
-  <div class="cols">
-    <div class="callout"><span class="lbl">Resources</span>
-      <ul class="small"><li>Watch the occupancy cliff</li><li>Prefetch to hide latency</li></ul></div>
-    <div class="callout"><span class="lbl">Instructions &amp; work</span>
-      <ul class="small"><li>Unroll to maximize FP fraction</li><li>Tune thread granularity</li></ul></div>
-  </div>
-  <div class="callout takeaway" style="text-align:center;">
-    <strong>Efficient data-parallel algorithms + Optimizations based on GPU architecture = Maximum performance.</strong></div>
 </section>
 
 <!-- References -->
 <section data-background-color="#ffffff">
   <h2>References</h2>
-  <ol>
-    <li>UIUC ECE498/AL &amp; NVIDIA, GPU performance optimization lecture materials (tiled matrix multiply, reduction, coalescing, bank conflicts, occupancy).</li>
-    <li>NVIDIA, <em>CUDA C++ Programming Guide</em>. https://docs.nvidia.com/cuda/cuda-c-programming-guide/</li>
-    <li>NVIDIA architecture white papers: G80, GT200, Fermi, Kepler.</li>
+  <ul class="small">
+    <li>Y. Zhao, J. Cui, Z. Li, S. Jiao, X. Liu, J. Li, "cuThermo: Exposing GPU Memory Inefficiencies with Heat Map Profiling," arXiv:2507.18729. Figures are reproduced from this paper.</li>
     <li>Y. Zhao, Y. Hao, Z. Li, S. Jiao, X. Liu, J. Li, &ldquo;RedSan: Redundant Memory Instruction Sanitizer for GPU Programs,&rdquo; SC &rsquo;25. https://doi.org/10.1145/3712285.3759830</li>
-  </ol>
-  <p class="src">Adapted from CIS 565 (UPenn, S. Mohammed); figures from UIUC ECE498/AL &amp; NVIDIA CUDA C Programming Guide.</p>
+    <li>NVIDIA, <em>CUDA C++ Programming Guide</em>.</li>
+    <li>NVIDIA, <em>CUDA C++ Best Practices Guide</em>.</li>
+    <li>NVIDIA V100, A100 &amp; H100 architecture whitepapers.</li>
+    <li>parallel-demos, <code class="inline">Demos/cuda</code> (measured on an RTX A4500).</li>
+    <li>Coalescing, bank-conflict, and occupancy examples adapted from CIS 565 (UPenn) and UIUC ECE498/AL.</li>
+  </ul>
 </section>
+
 </div>
 
 <!-- deck-level fixed footer (course + unit); slide number is reveal-native -->
-<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>GPU Session 2 — Performance Optimization</div>
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>GPU Session 2 — GPU Performance Optimization</div>
 </div>
 
 <!-- reveal.js core + plugins -->
@@ -1085,9 +828,7 @@ for (i = inz_begin; ...)
   function fit(s){ if(!s) return;
     s.style.setProperty('--nc-fit','1');           // reset, then measure natural height
     var h=s.scrollHeight;
-    /* padding-top (88px) is counter-scaled, so only h-88 shrinks:
-       88 + k*(h-88) <= 720  =>  k = 632/(h-88). */
-    if(h>724){ var k=Math.max(0.6, Math.min(1, 632/(h-88)));
+    if(h>724){ var k=Math.max(0.6, Math.min(1, 720/h));
       s.style.setProperty('--nc-fit', k.toFixed(3)); }
   }
   if(window.Reveal){
@@ -1095,6 +836,29 @@ for (i = inz_begin; ...)
     Reveal.on('slidechanged', function(e){ fit(e.currentSlide); });
     try{ if(Reveal.isReady && Reveal.isReady()) fit(Reveal.getCurrentSlide()); }catch(e){}
   }
+})();
+</script>
+<script>
+/* In-class activity: set this to THIS chapter's Google Form link (one form per chapter). */
+const FORM_URL = "PASTE_GOOGLE_FORM_LINK_HERE";
+(function(){
+  function paint(){
+    var set = FORM_URL && FORM_URL.indexOf("PASTE_") === -1;
+    document.querySelectorAll('.activity').forEach(function(a){
+      var lnk=a.querySelector('.form-link'), img=a.querySelector('.qr-img'), ph=a.querySelector('.qr-ph');
+      if(set){
+        if(lnk) lnk.href=FORM_URL;
+        if(img){ img.src='https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=0&data='+encodeURIComponent(FORM_URL); img.style.display=''; }
+        if(ph) ph.style.display='none';
+      } else {
+        if(lnk) lnk.href='#';
+        if(img) img.style.display='none';
+        if(ph) ph.style.display='';
+      }
+    });
+  }
+  if(window.Reveal){ Reveal.on('ready', paint); }
+  document.addEventListener('DOMContentLoaded', paint); paint();
 })();
 </script>
 </body>
