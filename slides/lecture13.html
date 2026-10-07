@@ -16,19 +16,12 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <!-- course theme -->
 <link rel="stylesheet" href="assets/theme.css?v=11">
-
-<style>
-  .reveal ul.tiny-list{font-size:.62em}
-  .reveal table.small-tbl{font-size:.64em}
-  .reveal table.small-tbl td,.reveal table.small-tbl th{padding:.25em .45em}
-  .reveal table.scale-tbl{font-size:.7em}
-  .reveal table.scale-tbl td,.reveal table.scale-tbl th{text-align:center;padding:.5em .8em}
-</style>
 </head>
 <body>
 <div class="reveal">
 <div class="slides">
 
+<!-- ============================ TITLE ============================ -->
 <section class="title-slide" data-background-color="#ffffff">
   <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
   <h1>Lecture 13–14</h1>
@@ -43,6 +36,7 @@
   </aside>
 </section>
 
+<!-- Roadmap -->
 <section data-background-color="#ffffff">
   <h2>Chapter Roadmap</h2>
   <div class="cols c3">
@@ -57,14 +51,23 @@
     A directory <strong>filters coherence traffic</strong> so only the caches that actually share a block get involved. That filtering is what lets shared memory scale to <strong>tens–hundreds</strong> of processors — but it costs storage, extra hops, and a much more complex protocol.</div>
 </section>
 
+<!-- ==================================================================
+     MODULE 10.1 — BASIC DIRECTORY PROTOCOL
+     ================================================================== -->
 <section class="divider" data-background-color="#ffffff">
   <div class="mod-num">Module 10.1</div>
   <div class="mod-title">Basic Directory Protocol</div>
   <div class="objectives" style="margin-top:1em;">
-    <ul><li>Objective<ul><li>Understand how basic directory-based protocol works</li></ul></li><li>Outline:<ul><li>How to scale coherence protocols</li><li>Basic directory coherence protocol design</li><li>Issues: handling read/write, directory location, directory info, sharing information format (full bit, coarse vector, limited pointers, sparse directory)</li><li>Working example</li></ul></li></ul>
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Explain why <strong>snoopy/broadcast</strong> coherence stops scaling, and how a <strong>directory</strong> fixes it</li>
+      <li>Trace the <strong>home / owner / sharer</strong> message exchanges for a read and a write</li>
+      <li>Compare directory-storage formats: <strong>full bit-vector, coarse vector, limited pointers, sparse</strong></li>
+    </ul>
   </div>
 </section>
 
+<!-- Scalable shared memory -->
 <section data-background-color="#ffffff">
   <h2>Why Bus-Based Coherence Doesn't Scale</h2>
   <div class="cols">
@@ -96,133 +99,60 @@
   </div>
 </section>
 
+<!-- Ways to scale -->
 <section data-background-color="#ffffff">
-  <h2>Ways to Scale Bus-Based MP</h2>
-  <table class="scale-tbl" style="margin:0 auto .4em;width:78%">
-    <tr><th rowspan="2" colspan="2"></th><th colspan="2">Interconnection</th></tr>
-    <tr><th>Bus</th><th>Point-to-point</th></tr>
-    <tr><th rowspan="2">Protocol</th><th>Snoopy</th><td>Least scalable</td><td>More scalable</td></tr>
-    <tr><th>Directory</th><td style="background:linear-gradient(to top right,transparent calc(50% - 1px),#94a3b8,transparent calc(50% + 1px)),linear-gradient(to bottom right,transparent calc(50% - 1px),#94a3b8,transparent calc(50% + 1px))"></td><td class="hi">Most scalable</td></tr>
+  <h2>Two Ways to Scale a Bus-Based MP</h2>
+  <table style="margin:0 auto .5em;width:72%;font-size:.62em;border-collapse:collapse">
+    <tr><td rowspan="2" colspan="2" style="background:transparent;border:none"></td><th colspan="2" style="background:#e5e7eb;color:#111827;border:1px solid #cbd5e1;text-align:center">Interconnection</th></tr>
+    <tr><th style="background:#e5e7eb;color:#111827;border:1px solid #cbd5e1;text-align:center">Bus</th><th style="background:#e5e7eb;color:#111827;border:1px solid #cbd5e1;text-align:center">Point-to-point</th></tr>
+    <tr><th rowspan="2" style="background:#e5e7eb;color:#111827;border:1px solid #cbd5e1;text-align:center">Protocol</th><th style="background:#e5e7eb;color:#111827;border:1px solid #cbd5e1;text-align:center">Snoopy</th><td style="background:#fff;border:1px solid #cbd5e1;text-align:center">Least scalable</td><td style="background:#fff;border:1px solid #cbd5e1;text-align:center">More scalable</td></tr>
+    <tr><th style="background:#e5e7eb;color:#111827;border:1px solid #cbd5e1;text-align:center">Directory</th><td style="background:#fff linear-gradient(to top right,transparent calc(50% - 1px),#94a3b8,transparent calc(50% + 1px)),linear-gradient(to bottom right,transparent calc(50% - 1px),#94a3b8,transparent calc(50% + 1px));border:1px solid #cbd5e1"></td><td class="hi" style="border:1px solid #cbd5e1;text-align:center"><strong>Most scalable</strong></td></tr>
   </table>
-  <ul class="small"><li>Approach 1: replace bus with point-to-point interconnection, but keep relying on snooping/broadcast<ul><li>e.g., AMD Opteron (mesh), IBM Cell (ring), Intel Larrabee (ring)</li><li>Still cannot scale to hundreds of processors</li></ul></li><li>Approach 2: replace broadcast with directory protocol<ul><li>e.g. SGI Altix system</li><li>Leads to distributed shared memory (DSM) multiprocessors</li><li>Scaling to tens to hundreds of processors</li></ul></li></ul>
-</section>
-
-<section data-background-color="#ffffff">
-  <h2>How to Map Memory on DSM?</h2>
-  <div style="display:grid;grid-template-columns:50% 50%;gap:1em;align-items:start">
-    <div><svg viewBox="0 0 560 330" class="chart" style="display:block;margin:0 auto;width:100%;max-width:1200px;max-height:250px">
-        <defs></defs>
-        <text x="70" y="92" text-anchor="middle" style="font-size:14px">Caches</text>
-        <text x="70" y="160" text-anchor="middle" style="font-size:14px">Memory</text>
-        <circle cx="150" cy="26" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="150" y="31" text-anchor="middle" style="font-size:14px">P<tspan baseline-shift="sub" font-size="70%">1</tspan></text>
-        <rect x="128" y="50" width="44" height="16" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="112" y="74" width="76" height="18" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="100" y="100" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="110" y="118" text-anchor="start" style="font-size:12px">blk 1</text>
-        <rect x="100" y="128" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="110" y="146" text-anchor="start" style="font-size:12px">blk 5</text>
-        <rect x="100" y="156" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="150" y="174" text-anchor="middle" style="font-size:12px">· · ·</text>
-        <line x1="150" y1="184" x2="150" y2="262" stroke="#334155" stroke-width="1.2"/>
-        <circle cx="270" cy="26" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="270" y="31" text-anchor="middle" style="font-size:14px">P<tspan baseline-shift="sub" font-size="70%">2</tspan></text>
-        <rect x="248" y="50" width="44" height="16" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="232" y="74" width="76" height="18" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="220" y="100" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="230" y="118" text-anchor="start" style="font-size:12px">blk 2</text>
-        <rect x="220" y="128" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="230" y="146" text-anchor="start" style="font-size:12px">blk 6</text>
-        <rect x="220" y="156" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="270" y="174" text-anchor="middle" style="font-size:12px">· · ·</text>
-        <line x1="270" y1="184" x2="270" y2="262" stroke="#334155" stroke-width="1.2"/>
-        <circle cx="390" cy="26" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="390" y="31" text-anchor="middle" style="font-size:14px">P<tspan baseline-shift="sub" font-size="70%">3</tspan></text>
-        <rect x="368" y="50" width="44" height="16" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="352" y="74" width="76" height="18" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="340" y="100" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="350" y="118" text-anchor="start" style="font-size:12px">blk 3</text>
-        <rect x="340" y="128" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="350" y="146" text-anchor="start" style="font-size:12px">blk 7</text>
-        <rect x="340" y="156" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="390" y="174" text-anchor="middle" style="font-size:12px">· · ·</text>
-        <line x1="390" y1="184" x2="390" y2="262" stroke="#334155" stroke-width="1.2"/>
-        <circle cx="510" cy="26" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="510" y="31" text-anchor="middle" style="font-size:14px">P<tspan baseline-shift="sub" font-size="70%">4</tspan></text>
-        <rect x="488" y="50" width="44" height="16" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="472" y="74" width="76" height="18" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="460" y="100" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="470" y="118" text-anchor="start" style="font-size:12px">blk 4</text>
-        <rect x="460" y="128" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="470" y="146" text-anchor="start" style="font-size:12px">blk 8</text>
-        <rect x="460" y="156" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="510" y="174" text-anchor="middle" style="font-size:12px">· · ·</text>
-        <line x1="510" y1="184" x2="510" y2="262" stroke="#334155" stroke-width="1.2"/>
-        <path d="M120,262 C100,250 120,232 150,240 C165,222 205,224 220,238 C240,222 290,222 305,238 C325,222 370,224 385,238 C405,222 455,226 465,240 C495,232 520,250 505,264 C530,280 505,302 478,296 C460,316 410,314 395,302 C370,318 320,316 305,302 C280,318 230,316 215,302 C190,318 140,312 140,296 C110,300 95,278 120,262 Z" fill="#fff" stroke="#334155" stroke-width="1.3"/>
-        <text x="312" y="276" text-anchor="middle" style="font-size:15px">Interconnection&#160;&#160;&#160;&#160;Network</text>
-      </svg><svg viewBox="0 0 560 330" class="chart" style="display:block;margin:0 auto;width:100%;max-width:1200px;max-height:260px">
-        <defs></defs>
-        <text x="70" y="92" text-anchor="middle" style="font-size:14px">Caches</text>
-        <text x="70" y="160" text-anchor="middle" style="font-size:14px">Memory</text>
-        <circle cx="150" cy="26" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="150" y="31" text-anchor="middle" style="font-size:14px">P<tspan baseline-shift="sub" font-size="70%">1</tspan></text>
-        <rect x="128" y="50" width="44" height="16" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="112" y="74" width="76" height="18" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="100" y="100" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="110" y="118" text-anchor="start" style="font-size:12px">pfr 1</text>
-        <rect x="100" y="128" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="110" y="146" text-anchor="start" style="font-size:12px">pfr 2</text>
-        <rect x="100" y="156" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="150" y="174" text-anchor="middle" style="font-size:12px">· · ·</text>
-        <rect x="100" y="184" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="110" y="202" text-anchor="start" style="font-size:12px">pfr m</text>
-        <line x1="150" y1="212" x2="150" y2="262" stroke="#334155" stroke-width="1.2"/>
-        <circle cx="270" cy="26" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="270" y="31" text-anchor="middle" style="font-size:14px">P<tspan baseline-shift="sub" font-size="70%">2</tspan></text>
-        <rect x="248" y="50" width="44" height="16" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="232" y="74" width="76" height="18" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="220" y="100" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="230" y="118" text-anchor="start" style="font-size:12px">pfr m+1</text>
-        <rect x="220" y="128" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="230" y="146" text-anchor="start" style="font-size:12px">pfr m+2</text>
-        <rect x="220" y="156" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="270" y="174" text-anchor="middle" style="font-size:12px">· · ·</text>
-        <rect x="220" y="184" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="230" y="202" text-anchor="start" style="font-size:12px">pfr 2m</text>
-        <line x1="270" y1="212" x2="270" y2="262" stroke="#334155" stroke-width="1.2"/>
-        <circle cx="390" cy="26" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="390" y="31" text-anchor="middle" style="font-size:14px">P<tspan baseline-shift="sub" font-size="70%">3</tspan></text>
-        <rect x="368" y="50" width="44" height="16" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="352" y="74" width="76" height="18" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="340" y="100" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="350" y="118" text-anchor="start" style="font-size:12px">pfr 2m+1</text>
-        <rect x="340" y="128" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="350" y="146" text-anchor="start" style="font-size:12px">pfr 2m+2</text>
-        <rect x="340" y="156" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="390" y="174" text-anchor="middle" style="font-size:12px">· · ·</text>
-        <rect x="340" y="184" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="350" y="202" text-anchor="start" style="font-size:12px">pfr 3m</text>
-        <line x1="390" y1="212" x2="390" y2="262" stroke="#334155" stroke-width="1.2"/>
-        <circle cx="510" cy="26" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="510" y="31" text-anchor="middle" style="font-size:14px">P<tspan baseline-shift="sub" font-size="70%">4</tspan></text>
-        <rect x="488" y="50" width="44" height="16" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="472" y="74" width="76" height="18" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="460" y="100" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="470" y="118" text-anchor="start" style="font-size:12px">pfr 3m+1</text>
-        <rect x="460" y="128" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="470" y="146" text-anchor="start" style="font-size:12px">pfr 3m+2</text>
-        <rect x="460" y="156" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="510" y="174" text-anchor="middle" style="font-size:12px">· · ·</text>
-        <rect x="460" y="184" width="100" height="28" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="470" y="202" text-anchor="start" style="font-size:12px">pfr 4m</text>
-        <line x1="510" y1="212" x2="510" y2="262" stroke="#334155" stroke-width="1.2"/>
-        <path d="M120,262 C100,250 120,232 150,240 C165,222 205,224 220,238 C240,222 290,222 305,238 C325,222 370,224 385,238 C405,222 455,226 465,240 C495,232 520,250 505,264 C530,280 505,302 478,296 C460,316 410,314 395,302 C370,318 320,316 305,302 C280,318 230,316 215,302 C190,318 140,312 140,296 C110,300 95,278 120,262 Z" fill="#fff" stroke="#334155" stroke-width="1.3"/>
-        <text x="312" y="276" text-anchor="middle" style="font-size:15px">Interconnection&#160;&#160;&#160;&#160;Network</text>
-      </svg></div>
-    <div><ul class="small"><li>Block interleaving?<ul><li>distributes data around</li><li>Hard to exploit locality</li></ul></li><li>No interleaving?<ul><li>OS must be involved in deciding where to allocate a page</li><li>with significant impact on performance</li><li>First touch vs. round robin</li></ul></li></ul></div>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Approach 1 — better interconnect, keep broadcast</span>
+        Replace the bus with <strong>point-to-point</strong> links, but still rely on snooping/broadcast.
+        <ul class="small" style="margin-top:.4em">
+          <li>AMD Opteron (mesh), IBM Cell (ring), Intel Larrabee (ring)</li>
+          <li>Still <strong>cannot scale to hundreds</strong> of processors — broadcast is the bottleneck</li>
+        </ul></div>
+    </div>
+    <div>
+      <div class="callout ok"><span class="lbl">Approach 2 — replace broadcast with a directory</span>
+        Track sharers explicitly so coherence messages go only where needed.
+        <ul class="small" style="margin-top:.4em">
+          <li>e.g. the SGI Altix system</li>
+          <li>Leads to <strong>Distributed Shared Memory (DSM)</strong></li>
+          <li>Scales to <strong>tens–hundreds</strong> of processors</li>
+        </ul></div>
+    </div>
   </div>
+  <div class="callout takeaway"><span class="lbl">Direction of this chapter</span>
+    We take Approach 2. Memory is <strong>physically distributed</strong> across nodes, but still presents a <strong>single shared address space</strong> — a directory keeps it coherent.</div>
 </section>
 
+<!-- Memory mapping on DSM -->
+<section data-background-color="#ffffff">
+  <h2>Mapping Memory onto a DSM</h2>
+  <p class="small">Memory is split across nodes. <em>How</em> we assign addresses to nodes trades off locality against balance.</p>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Block interleaving</span>
+      Spread consecutive blocks across nodes.
+      <ul class="small" style="margin-top:.3em">
+        <li><strong>Distributes data around</strong> — hard to exploit locality</li>
+      </ul></div>
+    <div class="callout"><span class="lbl">No interleaving (page granularity)</span>
+      The <strong>OS</strong> decides where each page lives — with big performance impact.
+      <ul class="small" style="margin-top:.3em">
+        <li><strong>First-touch</strong>: page goes to the node that first accesses it (good locality)</li>
+        <li><strong>Round-robin</strong>: pages cycle across nodes (good balance)</li>
+      </ul></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Key point</span>
+    Whatever the policy, <strong>each block maps to exactly one node</strong> — its <em>home</em>. That single, well-defined home is what makes the directory idea work.</div>
+</section>
+
+<!-- Finding a block / home / directory -->
 <section data-background-color="#ffffff">
   <h2>Finding a Block: Home &amp; Directory</h2>
   <div class="cols w-64">
@@ -255,119 +185,78 @@
   </div>
 </section>
 
+<!-- Read handling diagram -->
 <section data-background-color="#ffffff">
   <h2>Directory Handling of a <em>Load</em> (Read)</h2>
   <div class="center">
-    <svg viewBox="0 0 860 300" class="chart" style="display:block;margin:0 auto;width:100%;max-width:1200px;max-height:300px">
-        <defs><marker id="hr0" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#334155"/></marker><marker id="hr0s" markerWidth="9" markerHeight="9" refX="0.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M8,0 L0,3.5 L8,7 z" fill="#334155"/></marker></defs>
-        <text x="40" y="22" text-anchor="start" style="font-size:15px;font-weight:700">Handling of read</text>
-        <text x="28" y="108" text-anchor="start" style="font-size:14px">Cache</text>
-        <ellipse cx="160" cy="48" rx="32" ry="20" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="160" y="53" text-anchor="middle" style="font-size:14px">P0</text>
-        <rect x="90" y="88" width="92" height="30" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="188" y="88" width="46" height="30" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <line x1="90" y1="100" x2="182" y2="100" stroke="#334155"/><line x1="188" y1="100" x2="234" y2="100" stroke="#334155"/>
-        <ellipse cx="365" cy="48" rx="32" ry="20" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="365" y="53" text-anchor="middle" style="font-size:14px">P1</text>
-        <rect x="295" y="88" width="92" height="30" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="393" y="88" width="46" height="30" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <line x1="295" y1="100" x2="387" y2="100" stroke="#334155"/><line x1="393" y1="100" x2="439" y2="100" stroke="#334155"/>
-        <ellipse cx="570" cy="48" rx="32" ry="20" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="570" y="53" text-anchor="middle" style="font-size:14px">P2</text>
-        <rect x="500" y="88" width="92" height="30" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="598" y="88" width="46" height="30" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <line x1="500" y1="100" x2="592" y2="100" stroke="#334155"/><line x1="598" y1="100" x2="644" y2="100" stroke="#334155"/>
-        <ellipse cx="775" cy="48" rx="32" ry="20" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="775" y="53" text-anchor="middle" style="font-size:14px">P3</text>
-        <rect x="705" y="88" width="92" height="30" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="803" y="88" width="46" height="30" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <line x1="705" y1="100" x2="797" y2="100" stroke="#334155"/><line x1="803" y1="100" x2="849" y2="100" stroke="#334155"/>
-        <text x="136" y="82" text-anchor="middle" style="font-size:12px">Tag&amp;data</text>
-        <text x="211" y="82" text-anchor="middle" style="font-size:12px">State</text>
-        <text x="751" y="114" text-anchor="middle" style="font-size:13px">B</text>
-        <text x="826" y="114" text-anchor="middle" style="font-size:13px">M</text>
-        <rect x="400" y="222" width="52" height="40" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="458" y="222" width="140" height="40" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <line x1="400" y1="243" x2="452" y2="243" stroke="#334155"/><line x1="458" y1="243" x2="598" y2="243" stroke="#334155"/>
-        <text x="426" y="216" text-anchor="middle" style="font-size:12px">Tag</text>
-        <text x="528" y="216" text-anchor="middle" style="font-size:12px">Dir Info</text>
-        <text x="426" y="238" text-anchor="middle" style="font-size:13px">B</text>
-        <text x="528" y="238" text-anchor="middle" style="font-size:13px">M@P3</text>
-        <text x="500" y="282" text-anchor="middle" style="font-size:14px">Directory</text>
-        <path d="M130,122 Q190,210 396,242" fill="none" stroke="#334155" stroke-width="1.4" stroke-dasharray="6 5" marker-end="url(#hr0)"/>
-        <text x="112" y="200" text-anchor="middle" style="font-size:12.5px;font-style:italic">1. Read request,</text>
-        <text x="112" y="216" text-anchor="middle" style="font-size:12.5px;font-style:italic">Miss inquires directory</text>
-        <path d="M602,242 Q700,240 770,122" fill="none" stroke="#334155" stroke-width="1.4" stroke-dasharray="6 5" marker-end="url(#hr0)"/>
-        <text x="790" y="196" text-anchor="middle" style="font-size:12.5px;font-style:italic">2. Intervention,</text>
-        <text x="790" y="212" text-anchor="middle" style="font-size:12.5px;font-style:italic">Directory forwards</text>
-        <text x="790" y="228" text-anchor="middle" style="font-size:12.5px;font-style:italic">read request</text>
-        <path d="M708,122 Q450,168 222,122" fill="none" stroke="#334155" stroke-width="1.4" stroke-dasharray="6 5" marker-end="url(#hr0)"/>
-        <text x="462" y="162" text-anchor="middle" style="font-size:12.5px;font-style:italic">3. P3 replies with data</text>
+    <svg viewBox="0 0 760 270" class="chart" style="max-width:920px">
+        <defs><marker id="rdA0" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#CC0000"/></marker><marker id="rdA1" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#7c3aed"/></marker><marker id="rdA2" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#16a34a"/></marker></defs>
+        <circle cx="110" cy="62" r="24" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+        <text x="110" y="67" text-anchor="middle" class="lbl" style="font-weight:700">P0</text>
+        <text x="72.0" y="67.0" text-anchor="end" class="small" style="fill:#CC0000">requestor</text>
+        <rect x="55" y="104" width="110" height="30" rx="5" fill="#fff" stroke="#64748b" stroke-width="1.5"/>
+        <text x="110.0" y="123.0" text-anchor="middle" class="small">cache (miss)</text>
+        <circle cx="650" cy="62" r="24" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+        <text x="650" y="67" text-anchor="middle" class="lbl" style="font-weight:700">P3</text>
+        <text x="688.0" y="67.0" text-anchor="start" class="small" style="fill:#16a34a">owner</text>
+        <rect x="590" y="104" width="120" height="30" rx="5" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+        <text x="650.0" y="123.0" text-anchor="middle" class="small">B (M, dirty)</text>
+        <rect x="290" y="196" width="180" height="50" rx="5" fill="#fff7ed" stroke="#f59e0b" stroke-width="2"/>
+        <text x="380.0" y="218.0" text-anchor="middle" class="small" style="font-weight:700;fill:#b45309">Home directory</text>
+        <text x="380.0" y="232.0" text-anchor="middle" class="small">B : EM @ P3</text>
+        <path d="M165.0,125.9 Q257.2,137.6 343.2,196.0" fill="none" stroke="#CC0000" stroke-width="1.8" marker-end="url(#rdA0)"/>
+        <text x="236.5" y="177.4" text-anchor="middle" class="small" style="fill:#CC0000">1. Read (P0→H)</text>
+        <path d="M416.8,196.0 Q502.8,137.6 590.0,126.6" fill="none" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#rdA1)"/>
+        <text x="521.9" y="176.8" text-anchor="middle" class="small" style="fill:#7c3aed">2. Int (H→P3)</text>
+        <path d="M603.1,104.0 Q380.0,32.6 156.9,104.0" fill="none" stroke="#16a34a" stroke-width="1.8" marker-end="url(#rdA2)"/>
+        <text x="380.0" y="58.3" text-anchor="middle" class="small" style="fill:#16a34a">3. Flush: owner supplies B to P0 (and updates home)</text>
       </svg>
   </div>
   <div class="callout"><span class="lbl">Three hops</span>
     <strong>1.</strong> P0 misses, sends Read to the home.<br><strong>2.</strong> Home looks up the directory, finds owner P3, sends an <strong>intervention</strong>.<br><strong>3.</strong> Owner P3 <strong>flushes</strong> the block to P0 (and may update home).</div>
 </section>
 
+<!-- Write handling diagram -->
 <section data-background-color="#ffffff">
   <h2>Directory Handling of a <em>Store</em> (Write)</h2>
   <div class="center">
-    <svg viewBox="0 0 860 300" class="chart" style="display:block;margin:0 auto;width:100%;max-width:1200px;max-height:300px">
-        <defs><marker id="hw0" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#334155"/></marker><marker id="hw0s" markerWidth="9" markerHeight="9" refX="0.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M8,0 L0,3.5 L8,7 z" fill="#334155"/></marker></defs>
-        <text x="40" y="22" text-anchor="start" style="font-size:15px;font-weight:700">Handling of write</text>
-        <text x="28" y="108" text-anchor="start" style="font-size:14px">Cache</text>
-        <ellipse cx="160" cy="48" rx="32" ry="20" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="160" y="53" text-anchor="middle" style="font-size:14px">P0</text>
-        <rect x="90" y="88" width="92" height="30" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="188" y="88" width="46" height="30" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <line x1="90" y1="100" x2="182" y2="100" stroke="#334155"/><line x1="188" y1="100" x2="234" y2="100" stroke="#334155"/>
-        <ellipse cx="365" cy="48" rx="32" ry="20" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="365" y="53" text-anchor="middle" style="font-size:14px">P1</text>
-        <rect x="295" y="88" width="92" height="30" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="393" y="88" width="46" height="30" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <line x1="295" y1="100" x2="387" y2="100" stroke="#334155"/><line x1="393" y1="100" x2="439" y2="100" stroke="#334155"/>
-        <ellipse cx="570" cy="48" rx="32" ry="20" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="570" y="53" text-anchor="middle" style="font-size:14px">P2</text>
-        <rect x="500" y="88" width="92" height="30" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="598" y="88" width="46" height="30" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <line x1="500" y1="100" x2="592" y2="100" stroke="#334155"/><line x1="598" y1="100" x2="644" y2="100" stroke="#334155"/>
-        <ellipse cx="775" cy="48" rx="32" ry="20" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="775" y="53" text-anchor="middle" style="font-size:14px">P3</text>
-        <rect x="705" y="88" width="92" height="30" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="803" y="88" width="46" height="30" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <line x1="705" y1="100" x2="797" y2="100" stroke="#334155"/><line x1="803" y1="100" x2="849" y2="100" stroke="#334155"/>
-        <text x="136" y="114" text-anchor="middle" style="font-size:13px">C</text>
-        <text x="211" y="114" text-anchor="middle" style="font-size:13px">S</text>
-        <text x="341" y="114" text-anchor="middle" style="font-size:13px">C</text>
-        <text x="416" y="114" text-anchor="middle" style="font-size:13px">S</text>
-        <text x="546" y="114" text-anchor="middle" style="font-size:13px">C</text>
-        <text x="621" y="114" text-anchor="middle" style="font-size:13px">S</text>
-        <rect x="400" y="222" width="52" height="40" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <rect x="458" y="222" width="140" height="40" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <line x1="400" y1="243" x2="452" y2="243" stroke="#334155"/><line x1="458" y1="243" x2="598" y2="243" stroke="#334155"/>
-        <text x="426" y="238" text-anchor="middle" style="font-size:13px">C</text>
-        <text x="528" y="238" text-anchor="middle" style="font-size:13px">S@P1,2,3</text>
-        <text x="500" y="282" text-anchor="middle" style="font-size:14px">Directory</text>
-        <path d="M125,122 Q200,220 396,242" fill="none" stroke="#334155" stroke-width="1.4" stroke-dasharray="6 5" marker-end="url(#hw0)"/>
-        <text x="120" y="196" text-anchor="middle" style="font-size:12.5px;font-style:italic">1. Upgr request</text>
-        <text x="120" y="212" text-anchor="middle" style="font-size:12.5px;font-style:italic">(request to write)</text>
-        <path d="M520.0,220.0 L390.0,122.0" fill="none" stroke="#334155" stroke-width="1.4" stroke-dasharray="6 5" marker-end="url(#hw0)"/>
-        <path d="M520.0,220.0 L598.0,122.0" fill="none" stroke="#334155" stroke-width="1.4" stroke-dasharray="6 5" marker-end="url(#hw0)"/>
-        <text x="600" y="176" text-anchor="start" style="font-size:12.5px;font-style:italic">2. Invalidate</text>
-        <path d="M290,86 Q260,64 226,86" fill="none" stroke="#334155" stroke-width="1.4" stroke-dasharray="6 5" marker-end="url(#hw0)"/>
-        <path d="M500,86 Q360,50 228,84" fill="none" stroke="#334155" stroke-width="1.4" stroke-dasharray="6 5" marker-end="url(#hw0)"/>
-        <text x="300" y="56" text-anchor="middle" style="font-size:12.5px;font-style:italic">3. Inv ack</text>
+    <svg viewBox="0 0 760 300" class="chart" style="max-width:920px">
+        <defs><marker id="wrA0" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#CC0000"/></marker><marker id="wrA1" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#7c3aed"/></marker><marker id="wrA2" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#16a34a"/></marker></defs>
+        <circle cx="110" cy="92" r="24" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+        <text x="110" y="97" text-anchor="middle" class="lbl" style="font-weight:700">P0</text>
+        <text x="110.0" y="136.0" text-anchor="middle" class="small" style="fill:#CC0000">requestor</text>
+        <circle cx="470" cy="92" r="24" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+        <text x="470" y="97" text-anchor="middle" class="lbl" style="font-weight:700">P1</text>
+        <rect x="430" y="128" width="80" height="26" rx="5" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
+        <text x="470.0" y="145.0" text-anchor="middle" class="small">B (S)</text>
+        <circle cx="660" cy="92" r="24" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+        <text x="660" y="97" text-anchor="middle" class="lbl" style="font-weight:700">P2</text>
+        <rect x="620" y="128" width="80" height="26" rx="5" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
+        <text x="660.0" y="145.0" text-anchor="middle" class="small">B (S)</text>
+        <text x="565.0" y="145.0" text-anchor="middle" class="small" style="fill:#b45309">sharers</text>
+        <rect x="250" y="226" width="190" height="50" rx="5" fill="#fff7ed" stroke="#f59e0b" stroke-width="2"/>
+        <text x="345.0" y="248.0" text-anchor="middle" class="small" style="font-weight:700;fill:#b45309">Home directory</text>
+        <text x="345.0" y="262.0" text-anchor="middle" class="small">B : S @ {P1, P2}</text>
+        <path d="M126.9,109.1 Q211.6,195.0 285.4,226.0" fill="none" stroke="#CC0000" stroke-width="1.8" marker-end="url(#wrA0)"/>
+        <text x="176.7" y="228.4" text-anchor="middle" class="small" style="fill:#CC0000">1. Upgr / Write (P0→H)</text>
+        <path d="M365.7,226.0 Q398.7,186.0 449.4,154.0" fill="none" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#wrA1)"/>
+        <path d="M387.3,226.0 Q491.5,164.5 620.0,146.6" fill="none" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#wrA1)"/>
+        <text x="497.3" y="213.9" text-anchor="middle" class="small" style="fill:#7c3aed">2. Inv (H→P1, P2)</text>
+        <path d="M446.7,86.4 Q290.0,48.8 133.3,86.4" fill="none" stroke="#16a34a" stroke-width="1.8" marker-end="url(#wrA2)"/>
+        <path d="M637.1,84.7 Q385.0,4.0 132.9,84.7" fill="none" stroke="#16a34a" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#wrA2)"/>
+        <text x="385.0" y="34.3" text-anchor="middle" class="small" style="fill:#16a34a">3. InvAck (P1, P2 → P0)</text>
       </svg>
   </div>
   <div class="callout"><span class="lbl">Targeted invalidation</span>
     <strong>1.</strong> P0 sends Write/Upgrade to home.<br><strong>2.</strong> Home knows P1, P2 are sharers and sends <strong>invalidations</strong> only to them.<br><strong>3.</strong> Sharers reply with <strong>InvAck</strong> to the requestor.</div>
 </section>
 
+<!-- Directory location choices -->
 <section data-background-color="#ffffff">
   <h2>Directory Location Choices</h2>
   <p class="small">The directory can live at different points in the hierarchy — the principle (track sharers at the home) is the same.</p>
-  <div style="display:grid;grid-template-columns:0.9fr 1.1fr;gap:1em;align-items:end">
-    <div><svg viewBox="0 0 580 560" class="chart" style="display:block;margin:0 auto;width:100%;max-width:1200px;max-height:390px">
+  <div style="display:grid;grid-template-columns:0.9fr 1.1fr;gap:1em;align-items:end;margin-bottom:.4em">
+    <div><svg viewBox="0 0 580 560" class="chart" style="display:block;margin:0 auto;width:100%;max-height:330px">
         <defs><marker id="dl10" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#334155"/></marker><marker id="dl10s" markerWidth="9" markerHeight="9" refX="0.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M8,0 L0,3.5 L8,7 z" fill="#334155"/></marker></defs>
         <text x="30" y="22" text-anchor="start" style="font-size:19.5px;font-weight:700">Distributed Shared Memory</text>
         <text x="40" y="160" text-anchor="middle" style="font-size:16.9px">Chip</text>
@@ -429,7 +318,7 @@
         <rect x="90" y="470" width="414" height="40" rx="0" fill="#fff" stroke="#334155" stroke-width="1.4"/>
         <text x="297" y="495" text-anchor="middle" style="font-size:18.2px">Interconnect</text>
       </svg></div>
-    <div><svg viewBox="0 0 600 628" class="chart" style="display:block;margin:0 auto;width:100%;max-width:1200px;max-height:400px">
+    <div><svg viewBox="0 0 600 628" class="chart" style="display:block;margin:0 auto;width:100%;max-height:340px">
         <defs><marker id="dl20" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#334155"/></marker><marker id="dl20s" markerWidth="9" markerHeight="9" refX="0.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M8,0 L0,3.5 L8,7 z" fill="#334155"/></marker></defs>
         <text x="20" y="20" text-anchor="start" style="font-size:16.8px;font-weight:700">Multicore with directory-coherent LLCs</text>
         <text x="40" y="52" text-anchor="middle" style="font-size:14.4px">Chip</text>
@@ -536,12 +425,17 @@
         <text x="516" y="603" text-anchor="middle" style="font-size:15.0px">Main Memory</text>
       </svg></div>
   </div>
-  <div class="cols c3 small" style="display:grid;grid-template-columns:repeat(3,1fr);gap:.6em;margin-top:.4em"><div class="callout"><span class="lbl">Classic DSM</span>
-      Directory sits beside <strong>main memory</strong> at each node; nodes joined by an interconnect. Each node = P + L1/L2 + its local memory + its directory.</div><div class="callout"><span class="lbl">Directory-coherent LLCs</span>
-      On one multicore chip, the directory sits at each memory controller and tracks the cores' private <strong>last-level caches</strong> (L2).</div><div class="callout"><span class="lbl">Directory-coherent non-LLCs (L2)</span>
-      The directory sits with the shared <strong>L3 slices</strong> and tracks the private L2 caches above them.</div></div>
+  <div class="cols c3 small">
+    <div class="callout"><span class="lbl">Classic DSM</span>
+      Directory sits beside <strong>main memory</strong> at each node; nodes joined by an interconnect. Each node = P + L1/L2 + its local memory + its directory.</div>
+    <div class="callout"><span class="lbl">Directory-coherent LLCs</span>
+      On one multicore chip, the directory sits at each memory controller and tracks the cores' private <strong>last-level caches</strong> (L2).</div>
+    <div class="callout"><span class="lbl">Directory-coherent non-LLCs (L2)</span>
+      The directory sits with the shared <strong>L3 slices</strong> and tracks the private L2 caches above them.</div>
+  </div>
 </section>
 
+<!-- What info in directory -->
 <section data-background-color="#ffffff">
   <h2>What Information Does the Directory Keep?</h2>
   <div class="cols w-64">
@@ -568,6 +462,7 @@
   </div>
 </section>
 
+<!-- Performance criteria -->
 <section data-background-color="#ffffff">
   <h2>Performance Criteria for a Directory Design</h2>
   <div class="cols">
@@ -591,6 +486,7 @@
     An <strong>invalidation</strong> may involve <em>many</em> sharers, while an <strong>intervention</strong> involves a <em>single</em> owner. So the cost and scalability of the design is driven by invalidation behavior.</div>
 </section>
 
+<!-- Example setup -->
 <section data-background-color="#ffffff">
   <h2>A Worked Protocol: Setup</h2>
   <div class="cols">
@@ -618,6 +514,7 @@
   </div>
 </section>
 
+<!-- Coherence messages -->
 <section data-background-color="#ffffff">
   <h2>Full Bit-Vector: Coherence Messages</h2>
   <div class="cols c3">
@@ -650,11 +547,12 @@
   <div class="callout"><span class="lbl">Note the variety</span>Far more message types than a snoopy protocol — that richness is what enables point-to-point, traffic-filtered coherence.</div>
 </section>
 
+<!-- Directory state transition diagram -->
 <section data-background-color="#ffffff">
   <h2>State Transition at the Directory</h2>
   <div class="cols w-64">
     <div class="center">
-      <svg viewBox="0 0 470 350" class="chart" style="display:block;margin:0 auto;width:100%;max-width:1200px;max-height:380px">
+      <svg viewBox="0 0 470 350" class="chart" style="max-width:560px">
         <defs><marker id="dsA0" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#334155"/></marker></defs>
         <ellipse cx="170" cy="92" rx="36" ry="26" fill="#fee2e2" stroke="#CC0000" stroke-width="2"/>
         <text x="170" y="97" text-anchor="middle" class="lbl" style="font-weight:700">EM</text>
@@ -689,21 +587,27 @@
   </div>
 </section>
 
+<!-- Visualization: initial -->
 <section data-background-color="#ffffff">
-  <h2>Full-bit Vector Protocol Visualization</h2>
-  <div class="r-stack">
-    <img src="assets/lecture13/fbv1.svg" alt="Full-bit Vector Protocol Visualization" style="display:block;margin:0 auto;max-width:100%;max-height:520px;height:auto">
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv2.svg" alt="Full-bit Vector Protocol Visualization" style="display:block;margin:0 auto;max-width:100%;max-height:520px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv3.svg" alt="Full-bit Vector Protocol Visualization" style="display:block;margin:0 auto;max-width:100%;max-height:520px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv4.svg" alt="Full-bit Vector Protocol Visualization" style="display:block;margin:0 auto;max-width:100%;max-height:520px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv5.svg" alt="Full-bit Vector Protocol Visualization" style="display:block;margin:0 auto;max-width:100%;max-height:520px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv6.svg" alt="Full-bit Vector Protocol Visualization" style="display:block;margin:0 auto;max-width:100%;max-height:520px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv7.svg" alt="Full-bit Vector Protocol Visualization" style="display:block;margin:0 auto;max-width:100%;max-height:520px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv8.svg" alt="Full-bit Vector Protocol Visualization" style="display:block;margin:0 auto;max-width:100%;max-height:520px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv9.svg" alt="Full-bit Vector Protocol Visualization" style="display:block;margin:0 auto;max-width:100%;max-height:520px;height:auto"></div>
+  <h2>Full Bit-Vector Walkthrough — Layout</h2>
+  <div class="center">
+    <div class="r-stack">
+    <img src="assets/lecture13/fbv1.svg" alt="Full-bit vector protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:430px;height:auto">
+    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv2.svg" alt="Full-bit vector protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:430px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv3.svg" alt="Full-bit vector protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:430px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv4.svg" alt="Full-bit vector protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:430px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv5.svg" alt="Full-bit vector protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:430px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv6.svg" alt="Full-bit vector protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:430px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv7.svg" alt="Full-bit vector protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:430px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv8.svg" alt="Full-bit vector protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:430px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img src="assets/lecture13/fbv9.svg" alt="Full-bit vector protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:430px;height:auto"></div>
   </div>
+  </div>
+  <div class="callout"><span class="lbl">Scenario</span>
+    Block <strong>X</strong> is homed at the middle node (P2's local memory). We trace a sequence of accesses by P1 and P3 and watch the cache states, the directory state, and the presence bits evolve. Directory starts at <strong>U, 000</strong>.</div>
 </section>
 
+<!-- Walkthrough table -->
 <section data-background-color="#ffffff">
   <h2>Full Bit-Vector Walkthrough — Trace</h2>
   <p class="small muted">Directory entry shown as <code class="inline">state, presence-bits(P1 P2 P3)</code>. X is homed at P2.</p>
@@ -719,6 +623,50 @@
   </table>
 </section>
 
+<!-- Annotated visualization of one step -->
+<section data-background-color="#ffffff">
+  <h2>Walkthrough Detail — R3 on a Modified Block</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 560 290" class="chart" style="max-width:640px">
+        <defs><marker id="r3A0" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#CC0000"/></marker><marker id="r3A1" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#7c3aed"/></marker><marker id="r3A2" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#16a34a"/></marker></defs>
+        <circle cx="90" cy="50" r="22" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+        <text x="90" y="55" text-anchor="middle" class="lbl" style="font-weight:700">P1</text>
+        <text x="54.0" y="55.0" text-anchor="end" class="small" style="fill:#16a34a">owner</text>
+        <rect x="40" y="86" width="100" height="28" rx="5" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+        <text x="90.0" y="104.0" text-anchor="middle" class="small">X=2 · M→S</text>
+        <circle cx="470" cy="50" r="22" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+        <text x="470" y="55" text-anchor="middle" class="lbl" style="font-weight:700">P3</text>
+        <text x="506.0" y="55.0" text-anchor="start" class="small" style="fill:#CC0000">requestor</text>
+        <rect x="420" y="86" width="100" height="28" rx="5" fill="#fff" stroke="#334155" stroke-width="1.5"/>
+        <text x="470.0" y="104.0" text-anchor="middle" class="small">X=2 · S</text>
+        <rect x="190" y="214" width="180" height="50" rx="5" fill="#fff7ed" stroke="#f59e0b" stroke-width="1.5"/>
+        <text x="280.0" y="236.0" text-anchor="middle" class="small" style="font-weight:700;fill:#b45309">Home (P2)</text>
+        <text x="280.0" y="250.0" text-anchor="middle" class="small">EM,100 → S,101</text>
+        <path d="M470.0,114.0 Q388.9,188.5 370.0,239.0" fill="none" stroke="#CC0000" stroke-width="1.8" marker-end="url(#r3A0)"/>
+        <text x="381.7" y="167.8" text-anchor="middle" class="small" style="fill:#CC0000">1. Read</text>
+        <path d="M190.0,239.0 Q171.1,188.5 70.0,114.0" fill="none" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#r3A1)"/>
+        <text x="131.8" y="204.0" text-anchor="middle" class="small" style="fill:#7c3aed">2. Int</text>
+        <path d="M140.0,100.0 Q280.0,100.0 420.0,100.0" fill="none" stroke="#16a34a" stroke-width="1.8" marker-end="url(#r3A2)"/>
+        <text x="280.0" y="117.0" text-anchor="middle" class="small" style="fill:#16a34a">3. Flush (P1→P3)</text>
+        <path d="M115.0,114.0 Q173.9,184.7 250.0,214.0" fill="none" stroke="#16a34a" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#r3A2)"/>
+        <text x="207.8" y="150.2" text-anchor="middle" class="small" style="fill:#16a34a">3. Flush (P1→H)</text>
+      </svg>
+    </div>
+    <div>
+      <p class="small">P3 wants to read X, which P1 holds <strong>Modified</strong>.</p>
+      <ol class="small">
+        <li>P3 → <strong>Read</strong> to home.</li>
+        <li>Home is in <strong>EM,100</strong>; sends <strong>Int</strong> to owner P1.</li>
+        <li>P1 <strong>flushes</strong> X to home <em>and</em> P3, downgrades to S.</li>
+        <li>Home becomes <strong>S, 101</strong>.</li>
+      </ol>
+      <div class="callout"><span class="lbl">3 hops</span>Read → Int → Flush. The classic three-hop miss to a remotely-modified block.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Note on the protocol -->
 <section data-background-color="#ffffff">
   <h2>Observations on the Basic Protocol</h2>
   <div class="cols">
@@ -743,6 +691,7 @@
   <aside class="notes">"Reply forwarding" is the trick that gets writes down to 3 hops: instead of the home collecting all the invalidation acks and then telling the requestor, the home replies to the requestor and the sharers send their InvAcks straight to the requestor, who counts them.</aside>
 </section>
 
+<!-- Overheads of full bit-vector -->
 <section data-background-color="#ffffff">
   <h2>Overheads of the Full Bit-Vector Scheme</h2>
   <div class="cols">
@@ -766,6 +715,7 @@
   <div class="callout takeaway"><span class="lbl">Conclusion</span>The full bit-vector <strong>does not scale</strong> in storage. The next slides reduce it.</div>
 </section>
 
+<!-- Reducing storage overhead -->
 <section data-background-color="#ffffff">
   <h2>Reducing Storage: Coarse Vector &amp; Limited Pointers</h2>
   <div class="cols">
@@ -785,6 +735,7 @@
   <div class="callout"><span class="lbl">Also simple</span>Larger cache lines amortize the per-line directory cost (fewer lines). But limited pointers raise a question: <strong>what happens on overflow</strong> — more sharers than pointers?</div>
 </section>
 
+<!-- Overflow schemes -->
 <section data-background-color="#ffffff">
   <h2>Overflow Schemes for Limited Pointers</h2>
   <div class="cols c3">
@@ -799,6 +750,7 @@
     Each scheme trades <strong>storage</strong> against <strong>extra invalidation traffic</strong> in the (rare) widely-shared case.</div>
 </section>
 
+<!-- Sparse directories -->
 <section data-background-color="#ffffff">
   <h2>Sparse (Cached) Directories</h2>
   <div class="cols w-64">
@@ -817,6 +769,7 @@
   </div>
 </section>
 
+<!-- Mixing formats (Origin2000) -->
 <section data-background-color="#ffffff">
   <h2>Mixing Formats: SGI Origin 2000</h2>
   <p class="small">A real machine uses <strong>several formats at once</strong> (2 processors per node, sharing a "Hub").</p>
@@ -830,6 +783,7 @@
   <div class="src">Origin 2000 specifics (16-/64-bit directory, coarse vector): Laudon &amp; Lenoski, "The SGI Origin: A ccNUMA Highly Scalable Server," ISCA 1997.</div>
 </section>
 
+<!-- Module 10.1 review -->
 <section data-background-color="#f6f8fb">
   <h2>Module 10.1 — Review</h2>
   <div class="qa">
@@ -846,14 +800,23 @@
   </div>
 </section>
 
+<!-- ==================================================================
+     MODULE 10.2 — HANDLING PROTOCOL RACES
+     ================================================================== -->
 <section class="divider" data-background-color="#ffffff">
   <div class="mod-num">Module 10.2</div>
   <div class="mod-title">Handling Protocol Races</div>
   <div class="objectives" style="margin-top:1em;">
-    <ul><li>Objective<ul><li>Understand several protocol races and how to mitigate them</li></ul></li><li>Outline:<ul><li>Races due to out of sync directory</li><li>Races due to non-atomic message delivery</li><li>Write propagation and serialization</li><li>Home-centric and requestor-assisted</li></ul></li></ul>
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Identify the two sources of protocol races: <strong>out-of-sync directory</strong> and <strong>non-atomic messages</strong></li>
+      <li>Apply the general toolkit: <strong>transient states, NACKs, outstanding-transaction buffers</strong></li>
+      <li>Contrast <strong>home-centric</strong> and <strong>requestor-assisted</strong> transaction handling</li>
+    </ul>
   </div>
 </section>
 
+<!-- Assumptions so far -->
 <section data-background-color="#ffffff">
   <h2>The Assumptions We've Been Making</h2>
   <div class="cols">
@@ -868,6 +831,7 @@
     Illustrate <em>approaches</em> for dealing with races — not to enumerate every possible race. We focus on the techniques, not exhaustive coverage.</div>
 </section>
 
+<!-- Out of sync directory -->
 <section data-background-color="#ffffff">
   <h2>Races from an Out-of-Sync Directory</h2>
   <p class="small">The directory's view can lag the caches because of silent replacements and in-flight writebacks.</p>
@@ -891,6 +855,7 @@
   </div>
 </section>
 
+<!-- Out of sync fix -->
 <section data-background-color="#ffffff">
   <h2>Fixing Out-of-Sync Races: Enlist the Nodes</h2>
   <div class="callout"><span class="lbl">The home alone can't solve it</span>
@@ -906,63 +871,27 @@
     Split <strong>EM</strong> into two states — <strong>EM<sub>A</sub></strong> and <strong>EM<sub>B</sub></strong> (the directory thinks the owner is node A or node B) — to distinguish handling a Read/ReadX from the <em>current owner</em> vs. from <em>others</em>. Notation: <code class="inline">Req[Requestor] / Reply1[Dest], Reply2[Dest]</code>.</div>
 </section>
 
-<section data-background-color="#ffffff">
-  <h2>Protocol Modification</h2>
-  <svg viewBox="0 0 760 486" class="chart" style="display:block;margin:0 auto;width:100%;max-width:1200px;max-height:420px">
-        <defs><marker id="pm410" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#334155"/></marker><marker id="pm410s" markerWidth="9" markerHeight="9" refX="0.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M8,0 L0,3.5 L8,7 z" fill="#334155"/></marker></defs>
-        <ellipse cx="240" cy="120" rx="42" ry="26" fill="#fff" stroke="#334155" stroke-width="2"/>
-        <text x="240" y="125" text-anchor="middle" class="lbl" style="font-weight:700">EM<tspan baseline-shift="sub" font-size="75%">A</tspan></text>
-        <ellipse cx="560" cy="120" rx="36" ry="24" fill="#fff" stroke="#334155" stroke-width="2"/>
-        <text x="560" y="125" text-anchor="middle" class="lbl" style="font-weight:700">U</text>
-        <ellipse cx="240" cy="330" rx="36" ry="24" fill="#fff" stroke="#334155" stroke-width="2"/>
-        <text x="240" y="335" text-anchor="middle" class="lbl" style="font-weight:700">S</text>
-        <ellipse cx="560" cy="330" rx="42" ry="26" fill="#fff" stroke="#334155" stroke-width="2"/>
-        <text x="560" y="335" text-anchor="middle" class="lbl" style="font-weight:700">EM<tspan baseline-shift="sub" font-size="75%">B</tspan></text>
-        <path d="M524.0,120.0 Q400.0,120.0 282.0,120.0" fill="none" stroke="#334155" stroke-width="1.8" marker-end="url(#pm410)"/>
-        <path d="M560.0,144.0 Q560.0,225.0 560.0,304.0" fill="none" stroke="#334155" stroke-width="1.8" marker-end="url(#pm410)"/>
-        <path d="M233.8,145.7 Q214.8,225.0 234.3,306.3" fill="none" stroke="#334155" stroke-width="1.8" marker-end="url(#pm410)"/>
-        <path d="M245.7,306.3 Q265.2,225.0 246.2,145.7" fill="none" stroke="#334155" stroke-width="1.8" marker-end="url(#pm410)"/>
-        <path d="M520.0,322.0 Q400.0,298.0 274.5,323.1" fill="none" stroke="#334155" stroke-width="1.8" marker-end="url(#pm410)"/>
-        <path d="M274.5,336.9 Q400.0,362.0 520.0,338.0" fill="none" stroke="#334155" stroke-width="1.8" marker-end="url(#pm410)"/>
-        <path d="M200.3,111.6 C169.3,98.6 211.7,66.5 229.8,94.8" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#pm410)"/>
-        <text x="150" y="68" text-anchor="end" style="font-size:13px">Read<tspan baseline-shift="sub" font-size="75%">[A]</tspan>/ReplyD<tspan baseline-shift="sub" font-size="75%">[A]</tspan></text>
-        <text x="150" y="86" text-anchor="end" style="font-size:13px">ReadX<tspan baseline-shift="sub" font-size="75%">[A]</tspan>/ReplyD<tspan baseline-shift="sub" font-size="75%">[A]</tspan></text>
-        <path d="M237.1,353.9 C226.9,385.9 184.9,365.1 211.4,344.6" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#pm410)"/>
-        <text x="230" y="400" text-anchor="middle" style="font-size:13px">Read/ReplyD</text>
-        <path d="M599.7,338.4 C630.7,351.4 588.3,383.5 570.2,355.2" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#pm410)"/>
-        <text x="640" y="392" text-anchor="start" style="font-size:13px">Read<tspan baseline-shift="sub" font-size="75%">[B]</tspan>/ReplyD<tspan baseline-shift="sub" font-size="75%">[B]</tspan></text>
-        <text x="640" y="410" text-anchor="start" style="font-size:13px">ReadX<tspan baseline-shift="sub" font-size="75%">[B]</tspan>/ReplyD<tspan baseline-shift="sub" font-size="75%">[B]</tspan></text>
-        <path d="M598,318 C760,250 740,60 520,48 C420,44 330,70 280,104" fill="none" stroke="#334155" stroke-width="1.5" marker-end="url(#pm410)"/>
-        <text x="470" y="26" text-anchor="middle" style="font-size:13px">ReadX<tspan baseline-shift="sub" font-size="75%">[A]</tspan>/Reply<tspan baseline-shift="sub" font-size="75%">[A]</tspan>,Inv<tspan baseline-shift="sub" font-size="75%">[B]</tspan></text>
-        <path d="M200,132 C40,180 -10,330 120,420 C250,480 420,420 520,350" fill="none" stroke="#334155" stroke-width="1.5" marker-end="url(#pm410)"/>
-        <text x="300" y="470" text-anchor="middle" style="font-size:13px">ReadX<tspan baseline-shift="sub" font-size="75%">[B]</tspan>/Reply<tspan baseline-shift="sub" font-size="75%">[B]</tspan>,Inv<tspan baseline-shift="sub" font-size="75%">[A]</tspan></text>
-      </svg>
-  <ul class="small"><li>Format: RequestMsg[Requestor]/ReplyMsg1[Destination],ReplyMsg2[Destination]</li><li>Split EM into two states: EM<sub>A</sub> and EM<sub>B</sub></li><li>Distinguish handling Read/ReadX requests from current owner or others</li></ul>
-</section>
-
+<!-- Non-atomic messages -->
 <section data-background-color="#ffffff">
   <h2>Races from Non-Atomic Messages: Early Invalidation</h2>
   <div class="cols w-64">
     <div class="center">
-      <svg viewBox="0 0 760 300" class="chart" style="display:block;margin:0 auto;width:100%;max-width:1200px;max-height:300px">
-        <defs><marker id="ei420" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#334155"/></marker><marker id="ei421" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#CC0000"/></marker><marker id="ei420s" markerWidth="9" markerHeight="9" refX="0.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M8,0 L0,3.5 L8,7 z" fill="#334155"/></marker><marker id="ei421s" markerWidth="9" markerHeight="9" refX="0.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M8,0 L0,3.5 L8,7 z" fill="#CC0000"/></marker></defs>
-        <text x="40" y="24" text-anchor="middle" style="font-size:17px;font-weight:700">B</text>
-        <line x1="40" y1="34" x2="40" y2="290" stroke="#334155" stroke-width="2.4"/>
-        <text x="330" y="24" text-anchor="middle" style="font-size:17px;font-weight:700">Home</text>
-        <line x1="330" y1="34" x2="330" y2="290" stroke="#334155" stroke-width="2.4"/>
-        <text x="620" y="24" text-anchor="middle" style="font-size:17px;font-weight:700">A</text>
-        <line x1="620" y1="34" x2="620" y2="290" stroke="#334155" stroke-width="2.4"/>
-        <path d="M620.0,60.0 L332.0,92.0" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#ei420)"/>
-        <text x="500" y="62" text-anchor="middle" style="font-size:16px;font-style:italic">1 Read</text>
-        <path d="M330.0,104.0 L618.0,282.0" fill="none" stroke="#334155" stroke-width="1.6" marker-end="url(#ei420)"/>
-        <text x="520" y="140" text-anchor="middle" style="font-size:16px;font-style:italic">2 ReplyD</text>
-        <path d="M40.0,106.0 L328.0,150.0" fill="none" stroke="#CC0000" stroke-width="1.6" marker-end="url(#ei421)"/>
-        <text x="160" y="112" text-anchor="middle" style="font-size:16px;font-style:italic">3 ReadX</text>
-        <path d="M330.0,168.0 L610.0,206.0" fill="none" stroke="#CC0000" stroke-width="1.6" marker-end="url(#ei421)"/>
-        <text x="560" y="188" text-anchor="middle" style="font-size:16px;font-style:italic">4 Inv</text>
-        <ellipse cx="620" cy="207" rx="14" ry="8" fill="#334155"/>
-        <text x="650" y="206" text-anchor="start" style="font-size:16px;font-style:italic">How should</text>
-        <text x="650" y="226" text-anchor="start" style="font-size:16px;font-style:italic">A respond?</text>
+      <svg viewBox="0 0 520 270" class="chart" style="max-width:600px">
+        <defs><marker id="eiA0" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#2563eb"/></marker><marker id="eiA1" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#16a34a"/></marker><marker id="eiA2" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#CC0000"/></marker><marker id="eiA3" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#7c3aed"/></marker></defs>
+        <text x="60.0" y="22.0" text-anchor="middle" class="lbl" style="font-weight:700">A</text>
+        <line x1="60" y1="32" x2="60" y2="258" stroke="#cbd5e1" stroke-width="1.5"/>
+        <text x="300.0" y="22.0" text-anchor="middle" class="lbl" style="font-weight:700">Home</text>
+        <line x1="300" y1="32" x2="300" y2="258" stroke="#cbd5e1" stroke-width="1.5"/>
+        <text x="460.0" y="22.0" text-anchor="middle" class="lbl" style="font-weight:700">B</text>
+        <line x1="460" y1="32" x2="460" y2="258" stroke="#cbd5e1" stroke-width="1.5"/>
+        <path d="M60.0,50.0 Q180.0,58.0 300.0,66.0" fill="none" stroke="#2563eb" stroke-width="1.8" marker-end="url(#eiA0)"/>
+        <text x="180.9" y="48.6" text-anchor="middle" class="small" style="fill:#2563eb">1. Read</text>
+        <path d="M300.0,80.0 Q180.0,158.0 60.0,236.0" fill="none" stroke="#16a34a" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#eiA1)"/>
+        <text x="132.1" y="245.4" text-anchor="middle" class="small" style="fill:#16a34a">2. ReplyD (delayed)</text>
+        <path d="M460.0,104.0 Q380.0,111.0 300.0,118.0" fill="none" stroke="#CC0000" stroke-width="1.8" marker-end="url(#eiA2)"/>
+        <text x="381.2" y="128.1" text-anchor="middle" class="small" style="fill:#CC0000">3. Write</text>
+        <path d="M300.0,134.0 Q180.0,150.0 60.0,166.0" fill="none" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#eiA3)"/>
+        <text x="117.2" y="140.4" text-anchor="middle" class="small" style="fill:#7c3aed">4. Inv (arrives first)</text>
       </svg>
     </div>
     <div>
@@ -973,6 +902,7 @@
   </div>
 </section>
 
+<!-- How should A respond -->
 <section data-background-color="#ffffff">
   <h2>How Should A Respond?</h2>
   <div class="cols">
@@ -991,62 +921,9 @@
   </div>
 </section>
 
+<!-- Processing a read request -->
 <section data-background-color="#ffffff">
   <h2>Processing a Read: Home-Centric vs. Requestor-Assisted</h2>
-  <div style="display:grid;grid-template-columns:44% 1fr;gap:1em;align-items:start">
-    <div><svg viewBox="0 0 520 560" class="chart" style="display:block;margin:0 auto;width:100%;max-width:1200px;max-height:440px">
-        <defs><marker id="rp440" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#334155"/></marker><marker id="rp440s" markerWidth="9" markerHeight="9" refX="0.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M8,0 L0,3.5 L8,7 z" fill="#334155"/></marker></defs>
-        <text x="10" y="20" text-anchor="start" style="font-size:13px;font-weight:700;font-style:italic">Read to clean block:</text>
-        <circle cx="40" cy="62" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="40" y="67" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">R</text>
-        <circle cx="140" cy="62" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="140" y="67" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <circle cx="240" cy="62" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="240" y="67" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">R</text>
-        <circle cx="340" cy="62" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="340" y="67" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <path d="M57.0,62.0 L123.0,62.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#rp440)"/>
-        <text x="90.0" y="55" text-anchor="middle" style="font-size:13px">Read</text>
-        <path d="M157.0,62.0 L223.0,62.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#rp440)"/>
-        <text x="190.0" y="55" text-anchor="middle" style="font-size:13px">ReplyD</text>
-        <path d="M257.0,62.0 L323.0,62.0" fill="none" stroke="#334155" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#rp440)"/>
-        <text x="290.0" y="55" text-anchor="middle" style="font-size:13px">Done</text>
-        <line x1="140" y1="104" x2="340" y2="104" stroke="#dc2626" stroke-width="2" stroke-dasharray="9 7"/><line x1="140" y1="97" x2="140" y2="111" stroke="#dc2626" stroke-width="2"/><line x1="340" y1="97" x2="340" y2="111" stroke="#dc2626" stroke-width="2"/>
-        <line x1="140" y1="128" x2="172" y2="128" stroke="#1e3a8a" stroke-width="2"/><line x1="140" y1="121" x2="140" y2="135" stroke="#1e3a8a" stroke-width="2"/><line x1="172" y1="121" x2="172" y2="135" stroke="#1e3a8a" stroke-width="2"/>
-        <text x="10" y="196" text-anchor="start" style="font-size:13px;font-weight:700;font-style:italic">Read to Excl/Modified block:</text>
-        <circle cx="40" cy="290" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="40" y="295" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">R</text>
-        <circle cx="140" cy="290" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="140" y="295" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <circle cx="240" cy="290" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="240" y="295" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">O</text>
-        <circle cx="340" cy="290" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="340" y="295" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <path d="M57.0,290.0 L123.0,290.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#rp440)"/>
-        <text x="90.0" y="283" text-anchor="middle" style="font-size:13px">Read</text>
-        <path d="M157.0,290.0 L223.0,290.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#rp440)"/>
-        <text x="190.0" y="283" text-anchor="middle" style="font-size:13px">Int</text>
-        <path d="M257.0,290.0 L323.0,290.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#rp440)"/>
-        <text x="290.0" y="283" text-anchor="middle" style="font-size:13px">Flush</text>
-        <circle cx="380" cy="238" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="380" y="243" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">R</text>
-        <circle cx="480" cy="238" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="480" y="243" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <path d="M252.0,277.0 L274.0,238.0 L363.0,238.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#rp440)"/>
-        <text x="318.5" y="231" text-anchor="middle" style="font-size:13px">Flush</text>
-        <path d="M397.0,238.0 L463.0,238.0" fill="none" stroke="#334155" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#rp440)"/>
-        <text x="430.0" y="231" text-anchor="middle" style="font-size:13px">Done</text>
-        <line x1="140" y1="332" x2="490" y2="332" stroke="#dc2626" stroke-width="2" stroke-dasharray="9 7"/><line x1="140" y1="325" x2="140" y2="339" stroke="#dc2626" stroke-width="2"/><line x1="490" y1="325" x2="490" y2="339" stroke="#dc2626" stroke-width="2"/>
-        <line x1="140" y1="356" x2="340" y2="356" stroke="#1e3a8a" stroke-width="2"/><line x1="140" y1="349" x2="140" y2="363" stroke="#1e3a8a" stroke-width="2"/><line x1="340" y1="349" x2="340" y2="363" stroke="#1e3a8a" stroke-width="2"/>
-        <rect x="30" y="400" width="330" height="80" rx="8" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="46" y="422" text-anchor="start" style="font-size:13px;font-weight:700;font-style:italic">Legend:</text>
-        <line x1="50" y1="444" x2="88" y2="444" stroke="#dc2626" stroke-width="2" stroke-dasharray="9 7"/><line x1="50" y1="437" x2="50" y2="451" stroke="#dc2626" stroke-width="2"/><line x1="88" y1="437" x2="88" y2="451" stroke="#dc2626" stroke-width="2"/>
-        <text x="102" y="449" text-anchor="start" style="font-size:13px">processing period (home-centric)</text>
-        <line x1="50" y1="466" x2="88" y2="466" stroke="#1e3a8a" stroke-width="2"/><line x1="50" y1="459" x2="50" y2="473" stroke="#1e3a8a" stroke-width="2"/><line x1="88" y1="459" x2="88" y2="473" stroke="#1e3a8a" stroke-width="2"/>
-        <text x="102" y="471" text-anchor="start" style="font-size:13px">processing period (requestor-assisted)</text>
-        <text x="245" y="532" text-anchor="middle" style="font-size:14px"><tspan font-weight="700">Figure</tspan> 10.9: The processing period of a Read request.</text>
-      </svg></div>
-    <div>
   <div class="cols">
     <div>
       <div class="callout"><span class="lbl">Read to a clean (U/S) block</span>
@@ -1062,121 +939,11 @@
         <strong>Requestor-assisted:</strong> home → Int, but <strong>cannot close yet</strong> — the final Shared state needs a clean copy at home. Home closes only <strong>after</strong> the owner's Flush arrives.</div>
     </div>
   </div>
-</div>
-  </div>
 </section>
 
+<!-- Processing a write request 1 -->
 <section data-background-color="#ffffff">
   <h2>Processing a Write — U and Shared Blocks</h2>
-  <div style="display:grid;grid-template-columns:44% 1fr;gap:1em;align-items:start">
-    <div><svg viewBox="0 0 560 720" class="chart" style="display:block;margin:0 auto;width:100%;max-width:1200px;max-height:470px">
-        <defs><marker id="wp460" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#334155"/></marker><marker id="wp460s" markerWidth="9" markerHeight="9" refX="0.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M8,0 L0,3.5 L8,7 z" fill="#334155"/></marker></defs>
-        <text x="10" y="18" text-anchor="start" style="font-size:12.5px;font-weight:700;font-style:italic">ReadX to Unowned block:</text>
-        <circle cx="40" cy="48" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="40" y="53" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">R</text>
-        <circle cx="140" cy="48" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="140" y="53" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <circle cx="240" cy="48" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="240" y="53" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">R</text>
-        <circle cx="340" cy="48" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="340" y="53" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <path d="M57.0,48.0 L123.0,48.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#wp460)"/>
-        <text x="90.0" y="41" text-anchor="middle" style="font-size:13px">ReadX</text>
-        <path d="M157.0,48.0 L223.0,48.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#wp460)"/>
-        <text x="190.0" y="41" text-anchor="middle" style="font-size:13px">ReplyD</text>
-        <path d="M257.0,48.0 L323.0,48.0" fill="none" stroke="#334155" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#wp460)"/>
-        <text x="290.0" y="41" text-anchor="middle" style="font-size:13px">Done</text>
-        <line x1="140" y1="82" x2="340" y2="82" stroke="#dc2626" stroke-width="2" stroke-dasharray="9 7"/><line x1="140" y1="75" x2="140" y2="89" stroke="#dc2626" stroke-width="2"/><line x1="340" y1="75" x2="340" y2="89" stroke="#dc2626" stroke-width="2"/>
-        <line x1="140" y1="100" x2="172" y2="100" stroke="#1e3a8a" stroke-width="2"/><line x1="140" y1="93" x2="140" y2="107" stroke="#1e3a8a" stroke-width="2"/><line x1="172" y1="93" x2="172" y2="107" stroke="#1e3a8a" stroke-width="2"/>
-        <text x="10" y="132" text-anchor="start" style="font-size:12.5px;font-weight:700;font-style:italic">ReadX to Shared block:</text>
-        <circle cx="40" cy="196" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="40" y="201" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">R</text>
-        <circle cx="140" cy="196" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="140" y="201" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <circle cx="400" cy="196" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="400" y="201" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">R</text>
-        <circle cx="500" cy="196" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="500" y="201" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <path d="M57.0,196.0 L123.0,196.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#wp460)"/>
-        <text x="90.0" y="189" text-anchor="middle" style="font-size:13px">ReadX</text>
-        <path d="M417.0,196.0 L483.0,196.0" fill="none" stroke="#334155" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#wp460)"/>
-        <text x="450.0" y="189" text-anchor="middle" style="font-size:13px">Done</text>
-        <circle cx="250" cy="158" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="250" y="163" text-anchor="middle" style="font-size:11px;font-weight:700;font-style:italic">Shr1</text>
-        <path d="M152.0,184.0 L174.0,158.0 L233.0,158.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#wp460)"/>
-        <text x="203.5" y="152" text-anchor="middle" style="font-size:12px">Inv</text>
-        <path d="M267.0,158.0 L360.0,158.0 L386.0,186.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#wp460)"/>
-        <text x="313.5" y="152" text-anchor="middle" style="font-size:12px">InvAck</text>
-        <circle cx="290" cy="196" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="290" y="201" text-anchor="middle" style="font-size:11px;font-weight:700;font-style:italic">Shr2</text>
-        <path d="M157.0,196.0 L273.0,196.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#wp460)"/>
-        <text x="223.5" y="190" text-anchor="middle" style="font-size:12px">Inv</text>
-        <path d="M307.0,196.0 L383.0,196.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#wp460)"/>
-        <text x="333.5" y="190" text-anchor="middle" style="font-size:12px">InvAck</text>
-        <circle cx="270" cy="240" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="270" y="245" text-anchor="middle" style="font-size:11px;font-weight:700;font-style:italic">Shrn</text>
-        <path d="M152.0,208.0 L174.0,240.0 L253.0,240.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#wp460)"/>
-        <text x="213.5" y="234" text-anchor="middle" style="font-size:12px">Inv</text>
-        <path d="M287.0,240.0 L360.0,240.0 L386.0,206.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#wp460)"/>
-        <text x="323.5" y="234" text-anchor="middle" style="font-size:12px">InvAck</text>
-        <text x="228" y="220" text-anchor="middle" style="font-size:14px">· · ·</text>
-        <line x1="140" y1="272" x2="520" y2="272" stroke="#dc2626" stroke-width="2" stroke-dasharray="9 7"/><line x1="140" y1="265" x2="140" y2="279" stroke="#dc2626" stroke-width="2"/><line x1="520" y1="265" x2="520" y2="279" stroke="#dc2626" stroke-width="2"/>
-        <line x1="140" y1="290" x2="172" y2="290" stroke="#1e3a8a" stroke-width="2"/><line x1="140" y1="283" x2="140" y2="297" stroke="#1e3a8a" stroke-width="2"/><line x1="172" y1="283" x2="172" y2="297" stroke="#1e3a8a" stroke-width="2"/>
-        <text x="10" y="324" text-anchor="start" style="font-size:12.5px;font-weight:700;font-style:italic">ReadX to Excl/Modified block (no WB race):</text>
-        <circle cx="40" cy="354" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="40" y="359" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">R</text>
-        <circle cx="140" cy="354" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="140" y="359" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <circle cx="240" cy="354" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="240" y="359" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">O</text>
-        <circle cx="340" cy="354" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="340" y="359" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">R</text>
-        <circle cx="440" cy="354" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="440" y="359" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <path d="M57.0,354.0 L123.0,354.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#wp460)"/>
-        <text x="90.0" y="347" text-anchor="middle" style="font-size:13px">ReadX</text>
-        <path d="M157.0,354.0 L223.0,354.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#wp460)"/>
-        <text x="190.0" y="347" text-anchor="middle" style="font-size:13px">Inv</text>
-        <path d="M257.0,354.0 L323.0,354.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#wp460)"/>
-        <text x="290.0" y="347" text-anchor="middle" style="font-size:13px">Flush</text>
-        <path d="M357.0,354.0 L423.0,354.0" fill="none" stroke="#334155" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#wp460)"/>
-        <text x="390.0" y="347" text-anchor="middle" style="font-size:13px">Done</text>
-        <line x1="140" y1="388" x2="450" y2="388" stroke="#dc2626" stroke-width="2" stroke-dasharray="9 7"/><line x1="140" y1="381" x2="140" y2="395" stroke="#dc2626" stroke-width="2"/><line x1="450" y1="381" x2="450" y2="395" stroke="#dc2626" stroke-width="2"/>
-        <line x1="140" y1="406" x2="172" y2="406" stroke="#1e3a8a" stroke-width="2"/><line x1="140" y1="399" x2="140" y2="413" stroke="#1e3a8a" stroke-width="2"/><line x1="172" y1="399" x2="172" y2="413" stroke="#1e3a8a" stroke-width="2"/>
-        <text x="10" y="438" text-anchor="start" style="font-size:12.5px;font-weight:700;font-style:italic">ReadX to Excl/Modified block (WB race):</text>
-        <circle cx="40" cy="486" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="40" y="491" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">R</text>
-        <circle cx="140" cy="486" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="140" y="491" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <circle cx="240" cy="486" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="240" y="491" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">O</text>
-        <path d="M57.0,486.0 L123.0,486.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#wp460)"/>
-        <text x="90.0" y="479" text-anchor="middle" style="font-size:13px">ReadX</text>
-        <path d="M157.0,486.0 L223.0,486.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#wp460)"/>
-        <text x="190.0" y="479" text-anchor="middle" style="font-size:13px">Inv</text>
-        <circle cx="360" cy="458" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="360" y="463" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">R</text>
-        <circle cx="460" cy="458" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="460" y="463" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <circle cx="340" cy="522" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="340" y="527" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <path d="M252.0,473.0 L274.0,458.0 L343.0,458.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#wp460)"/>
-        <text x="308.5" y="451" text-anchor="middle" style="font-size:13px">Flush</text>
-        <path d="M252.0,499.0 L274.0,522.0 L323.0,522.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#wp460)"/>
-        <text x="298.5" y="515" text-anchor="middle" style="font-size:13px">Ack</text>
-        <path d="M377.0,458.0 L443.0,458.0" fill="none" stroke="#334155" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#wp460)"/>
-        <text x="410.0" y="451" text-anchor="middle" style="font-size:13px">Done</text>
-        <line x1="140" y1="560" x2="500" y2="560" stroke="#dc2626" stroke-width="2" stroke-dasharray="9 7"/><line x1="140" y1="553" x2="140" y2="567" stroke="#dc2626" stroke-width="2"/><line x1="500" y1="553" x2="500" y2="567" stroke="#dc2626" stroke-width="2"/>
-        <line x1="140" y1="582" x2="360" y2="582" stroke="#1e3a8a" stroke-width="2"/><line x1="140" y1="575" x2="140" y2="589" stroke="#1e3a8a" stroke-width="2"/><line x1="360" y1="575" x2="360" y2="589" stroke="#1e3a8a" stroke-width="2"/>
-        <rect x="40" y="604" width="360" height="80" rx="8" fill="#fff" stroke="#334155" stroke-width="1.4"/>
-        <text x="56" y="626" text-anchor="start" style="font-size:13px;font-weight:700;font-style:italic">Legend:</text>
-        <line x1="60" y1="648" x2="98" y2="648" stroke="#dc2626" stroke-width="2" stroke-dasharray="9 7"/><line x1="60" y1="641" x2="60" y2="655" stroke="#dc2626" stroke-width="2"/><line x1="98" y1="641" x2="98" y2="655" stroke="#dc2626" stroke-width="2"/>
-        <text x="112" y="653" text-anchor="start" style="font-size:13px">processing period (home-centric)</text>
-        <line x1="60" y1="670" x2="98" y2="670" stroke="#1e3a8a" stroke-width="2"/><line x1="60" y1="663" x2="60" y2="677" stroke="#1e3a8a" stroke-width="2"/><line x1="98" y1="663" x2="98" y2="677" stroke="#1e3a8a" stroke-width="2"/>
-        <text x="112" y="675" text-anchor="start" style="font-size:13px">processing period (requestor-assisted)</text>
-        <text x="270" y="708" text-anchor="middle" style="font-size:14px"><tspan font-weight="700">Figure</tspan> 10.10: The processing period of a ReadX request.</text>
-      </svg></div>
-    <div>
   <div class="cols">
     <div>
       <div class="callout"><span class="lbl">ReadX to a U block</span>
@@ -1191,10 +958,9 @@
         <strong>Requestor-assisted:</strong> home sends Invs and <strong>closes</strong>; <strong>InvAcks collected at the requestor</strong>, which buffers/NACKs new requests until all arrive.</div>
     </div>
   </div>
-</div>
-  </div>
 </section>
 
+<!-- Processing a write request 2 -->
 <section data-background-color="#ffffff">
   <h2>Processing a Write — EM Blocks</h2>
   <div class="cols">
@@ -1211,6 +977,7 @@
     What if the old owner <strong>no longer has the block</strong>? It was Modified and being written back, or it was Exclusive and silently evicted. The home <strong>cannot close yet</strong> — it may still have to supply the block, so it closes <strong>late, after an Ack from the owner</strong>.</div>
 </section>
 
+<!-- Transient states -->
 <section data-background-color="#ffffff">
   <h2>Transient States &amp; the New State Diagram</h2>
   <div class="cols w-37">
@@ -1225,7 +992,7 @@
       <p class="tiny muted">Boxes = transient states. Dashed arcs go into and out of them, labelled <code class="inline">Req[who]/Reply[who]</code>. Solid arcs are the basic transitions; their labels are omitted to reduce clutter.</p>
     </div>
     <div class="center">
-      <svg viewBox="20 96 700 398" class="chart" style="display:block;margin:0 auto;width:100%;max-width:1200px;max-height:470px">
+      <svg viewBox="20 96 700 398" class="chart" style="max-width:780px">
         <defs><marker id="tsA0" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#334155"/></marker><marker id="tsA1" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#7c3aed"/></marker></defs>
         <ellipse cx="230" cy="200" rx="34" ry="24" fill="#fee2e2" stroke="#CC0000" stroke-width="2"/>
         <text x="230" y="205" text-anchor="middle" class="lbl" style="font-weight:700">EM<tspan baseline-shift="sub" font-size="75%">A</tspan></text>
@@ -1276,75 +1043,9 @@
   <div class="src">State diagram after Solihin, Fig. 11.11 (stable-arc labels omitted, as in the book).</div>
 </section>
 
+<!-- Write propagation and serialization -->
 <section data-background-color="#ffffff">
   <h2>Write Propagation &amp; Serialization</h2>
-  <div style="display:grid;grid-template-columns:55% 1fr;gap:1em;align-items:start">
-    <div><svg viewBox="0 0 900 300" class="chart" style="display:block;margin:0 auto;width:100%;max-width:1200px;max-height:300px">
-        <defs><marker id="ws500" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#334155"/></marker><marker id="ws500s" markerWidth="9" markerHeight="9" refX="0.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M8,0 L0,3.5 L8,7 z" fill="#334155"/></marker></defs>
-        <circle cx="40" cy="50" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="40" y="55" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">A</text>
-        <circle cx="150" cy="50" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="150" y="55" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <circle cx="260" cy="50" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="260" y="55" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">O</text>
-        <path d="M57.0,50.0 L133.0,50.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#ws500)"/>
-        <text x="95.0" y="43" text-anchor="middle" style="font-size:13px">ReadX</text>
-        <path d="M167.0,50.0 L243.0,50.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#ws500)"/>
-        <text x="205.0" y="43" text-anchor="middle" style="font-size:13px">Inv</text>
-        <circle cx="380" cy="22" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="380" y="27" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">A</text>
-        <circle cx="350" cy="72" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="350" y="77" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <path d="M272.0,37.0 L294.0,22.0 L363.0,22.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#ws500)"/>
-        <text x="328.5" y="15" text-anchor="middle" style="font-size:13px">Flush</text>
-        <path d="M272.0,63.0 L294.0,72.0 L333.0,72.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#ws500)"/>
-        <text x="313.5" y="65" text-anchor="middle" style="font-size:13px">Ack</text>
-        <circle cx="100" cy="146" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="100" y="151" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">B</text>
-        <circle cx="210" cy="146" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="210" y="151" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <circle cx="390" cy="146" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="390" y="151" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <circle cx="500" cy="146" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="500" y="151" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">A</text>
-        <path d="M117.0,146.0 L193.0,146.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#ws500)"/>
-        <text x="155.0" y="139" text-anchor="middle" style="font-size:13px">ReadX</text>
-        <line x1="227" y1="146" x2="373" y2="146" stroke="#334155" stroke-width="1.2" stroke-dasharray="2 4"/>
-        <text x="300" y="139" text-anchor="middle" style="font-size:13px">Stalled</text>
-        <path d="M407.0,146.0 L483.0,146.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#ws500)"/>
-        <text x="445.0" y="139" text-anchor="middle" style="font-size:13px">Inv</text>
-        <circle cx="620" cy="118" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="620" y="123" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">B</text>
-        <circle cx="590" cy="168" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="590" y="173" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <path d="M512.0,133.0 L534.0,118.0 L603.0,118.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#ws500)"/>
-        <text x="568.5" y="111" text-anchor="middle" style="font-size:13px">Flush</text>
-        <path d="M512.0,159.0 L534.0,168.0 L573.0,168.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#ws500)"/>
-        <text x="553.5" y="161" text-anchor="middle" style="font-size:13px">Ack</text>
-        <circle cx="160" cy="242" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="160" y="247" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">C</text>
-        <circle cx="270" cy="242" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="270" y="247" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <circle cx="620" cy="242" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="620" y="247" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <circle cx="730" cy="242" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="730" y="247" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">B</text>
-        <path d="M177.0,242.0 L253.0,242.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#ws500)"/>
-        <text x="215.0" y="235" text-anchor="middle" style="font-size:13px">ReadX</text>
-        <line x1="287" y1="242" x2="603" y2="242" stroke="#334155" stroke-width="1.2" stroke-dasharray="2 4"/>
-        <text x="445" y="235" text-anchor="middle" style="font-size:13px">Stalled</text>
-        <path d="M637.0,242.0 L713.0,242.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#ws500)"/>
-        <text x="675.0" y="235" text-anchor="middle" style="font-size:13px">Inv</text>
-        <circle cx="860" cy="214" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="860" y="219" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">C</text>
-        <circle cx="830" cy="266" r="17" fill="#d9d9d9" stroke="#334155" stroke-width="1.3"/>
-        <text x="830" y="271" text-anchor="middle" style="font-size:15px;font-weight:700;font-style:italic">H</text>
-        <path d="M742.0,229.0 L764.0,214.0 L843.0,214.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#ws500)"/>
-        <text x="803.5" y="207" text-anchor="middle" style="font-size:13px">Flush</text>
-        <path d="M742.0,255.0 L764.0,266.0 L813.0,266.0" fill="none" stroke="#334155" stroke-width="1.2" marker-end="url(#ws500)"/>
-        <text x="788.5" y="259" text-anchor="middle" style="font-size:13px">Ack</text>
-      </svg></div>
-    <div>
   <ul class="small">
     <li><strong>Write propagation</strong> is achieved through <strong>invalidation</strong>.</li>
     <li>Multiple writes to a block are <strong>serialized by the protocol</strong>.</li>
@@ -1353,10 +1054,9 @@
   </ul>
   <div class="callout takeaway"><span class="lbl">Why it matters</span>
     The home acts as the <strong>serialization point</strong> for each block. By not overlapping conflicting writes to the same block, the directory guarantees a single global order of writes — the core requirement for coherence.</div>
-</div>
-  </div>
 </section>
 
+<!-- Synchronization support -->
 <section data-background-color="#ffffff">
   <h2>Synchronization Support</h2>
   <div class="cols c3">
@@ -1373,6 +1073,7 @@
   </div>
 </section>
 
+<!-- Memory consistency -->
 <section data-background-color="#ffffff">
   <h2>Memory Consistency Models on DSM</h2>
   <div class="cols">
@@ -1389,6 +1090,7 @@
     The bigger the machine, the more the <strong>benefit of relaxed consistency models</strong> grows versus SC — because there is more latency to overlap.</div>
 </section>
 
+<!-- Module 10.2 review -->
 <section data-background-color="#f6f8fb">
   <h2>Module 10.2 — Review</h2>
   <div class="qa">
@@ -1401,11 +1103,23 @@
   </div>
 </section>
 
+<!-- ==================================================================
+     MODULE 10.3 — CACHE-BASED DIRECTORY
+     ================================================================== -->
 <section class="divider" data-background-color="#ffffff">
   <div class="mod-num">Module 10.3</div>
   <div class="mod-title">Cache-Based Directory Protocol</div>
+  <div class="objectives" style="margin-top:1em;">
+    <h4>By the end you can…</h4>
+    <ul>
+      <li>Explain the <strong>linked-list</strong> (cache-based) directory and the <strong>SCI</strong> standard</li>
+      <li>Trace SSCI messages: <strong>WB+Int+UpdPtr</strong>, pointer maintenance, list invalidation</li>
+      <li>Compare cache-based vs. memory-based directories on storage, latency, and traffic</li>
+    </ul>
+  </div>
 </section>
 
+<!-- Flat cache-based scheme -->
 <section data-background-color="#ffffff">
   <h2>Flat, Cache-Based Schemes</h2>
   <div class="cols w-64">
@@ -1441,6 +1155,7 @@
   <div class="src">Cache-based / linked-list directories: Culler, Singh &amp; Gupta, <em>Parallel Computer Architecture</em>, Morgan Kaufmann, 1999 (Ch. 8). SCI = IEEE Std 1596-1992 (Scalable Coherent Interface).</div>
 </section>
 
+<!-- SSCI assumptions -->
 <section data-background-color="#ffffff">
   <h2>SSCI — A Simplified SCI for Illustration</h2>
   <div class="cols">
@@ -1466,18 +1181,66 @@
 <section data-background-color="#ffffff">
   <h2>SSCI Protocol Visualization</h2>
   <div class="r-stack">
-    <img src="assets/lecture13/ssci1.svg" alt="SSCI Protocol Visualization" style="display:block;margin:0 auto;max-width:100%;max-height:520px;height:auto">
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci2.svg" alt="SSCI Protocol Visualization" style="display:block;margin:0 auto;max-width:100%;max-height:520px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci3.svg" alt="SSCI Protocol Visualization" style="display:block;margin:0 auto;max-width:100%;max-height:520px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci4.svg" alt="SSCI Protocol Visualization" style="display:block;margin:0 auto;max-width:100%;max-height:520px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci5.svg" alt="SSCI Protocol Visualization" style="display:block;margin:0 auto;max-width:100%;max-height:520px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci6.svg" alt="SSCI Protocol Visualization" style="display:block;margin:0 auto;max-width:100%;max-height:520px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci7.svg" alt="SSCI Protocol Visualization" style="display:block;margin:0 auto;max-width:100%;max-height:520px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci8.svg" alt="SSCI Protocol Visualization" style="display:block;margin:0 auto;max-width:100%;max-height:520px;height:auto"></div>
-    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci9.svg" alt="SSCI Protocol Visualization" style="display:block;margin:0 auto;max-width:100%;max-height:520px;height:auto"></div>
+    <img src="assets/lecture13/ssci1.svg" alt="SSCI protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:540px;height:auto">
+    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci2.svg" alt="SSCI protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:540px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci3.svg" alt="SSCI protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:540px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci4.svg" alt="SSCI protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:540px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci5.svg" alt="SSCI protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:540px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci6.svg" alt="SSCI protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:540px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci7.svg" alt="SSCI protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:540px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci8.svg" alt="SSCI protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:540px;height:auto"></div>
+    <div class="fragment" style="background:#fff"><img src="assets/lecture13/ssci9.svg" alt="SSCI protocol visualization" style="display:block;margin:0 auto;max-width:100%;max-height:540px;height:auto"></div>
   </div>
 </section>
 
+<!-- SSCI visualization -->
+<section data-background-color="#ffffff">
+  <h2>SSCI Walkthrough — Inserting at the Head</h2>
+  <div class="cols w-64">
+    <div class="center">
+      <svg viewBox="0 0 580 300" class="chart" style="max-width:660px">
+        <defs><marker id="scA0" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#CC0000"/></marker><marker id="scA1" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#16a34a"/></marker><marker id="scA2" markerWidth="9" markerHeight="9" refX="7.5" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,3.5 L0,7 z" fill="#7c3aed"/></marker></defs>
+        <circle cx="90" cy="50" r="22" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+        <text x="90" y="55" text-anchor="middle" class="lbl" style="font-weight:700">P1</text>
+        <text x="54.0" y="55.0" text-anchor="end" class="small" style="fill:#16a34a">old head</text>
+        <rect x="36" y="86" width="108" height="28" rx="5" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+        <text x="90.0" y="104.0" text-anchor="middle" class="small">X=2 · M→S</text>
+        <circle cx="490" cy="50" r="22" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+        <text x="490" y="55" text-anchor="middle" class="lbl" style="font-weight:700">P3</text>
+        <text x="526.0" y="55.0" text-anchor="start" class="small" style="fill:#CC0000">requestor</text>
+        <rect x="436" y="86" width="108" height="28" rx="5" fill="#fff" stroke="#334155" stroke-width="1.5"/>
+        <text x="490.0" y="104.0" text-anchor="middle" class="small">X=2 · S (head)</text>
+        <rect x="190" y="222" width="200" height="50" rx="5" fill="#fff7ed" stroke="#f59e0b" stroke-width="1.5"/>
+        <text x="290.0" y="244.0" text-anchor="middle" class="small" style="font-weight:700;fill:#b45309">Home</text>
+        <text x="290.0" y="258.0" text-anchor="middle" class="small">EM, head=1 → S, head=3</text>
+        <path d="M520.0,114.0 Q404.7,193.5 390.0,247.0" fill="none" stroke="#CC0000" stroke-width="1.8" marker-end="url(#scA0)"/>
+        <text x="409.7" y="170.8" text-anchor="middle" class="small" style="fill:#CC0000">1. Read</text>
+        <path d="M340.0,222.0 Q375.3,153.5 460.0,114.0" fill="none" stroke="#16a34a" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#scA1)"/>
+        <text x="355.2" y="121.7" text-anchor="middle" class="small" style="fill:#16a34a">2. ReplyID</text>
+        <text x="355.2" y="134.7" text-anchor="middle" class="small" style="fill:#16a34a">(old head = P1)</text>
+        <path d="M468.6,44.9 Q290.0,2.0 111.4,44.9" fill="none" stroke="#7c3aed" stroke-width="1.8" marker-end="url(#scA2)"/>
+        <text x="290.0" y="13.4" text-anchor="middle" class="small" style="fill:#7c3aed">3. WB+Int+UpdPtr (P3→P1)</text>
+        <path d="M144.0,100.0 Q290.0,100.0 436.0,100.0" fill="none" stroke="#16a34a" stroke-width="1.8" marker-end="url(#scA1)"/>
+        <text x="231.6" y="91.0" text-anchor="middle" class="small" style="fill:#16a34a">4. Flush (P1→P3)</text>
+        <path d="M70.0,114.0 Q204.7,153.5 225.0,222.0" fill="none" stroke="#16a34a" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#scA1)"/>
+        <text x="153.4" y="196.8" text-anchor="middle" class="small" style="fill:#16a34a">4. Flush (P1→H)</text>
+      </svg>
+    </div>
+    <div>
+      <p class="small">P3 reads X, currently held Modified by P1.</p>
+      <ol class="small">
+        <li>P3 → <strong>Read</strong> to home.</li>
+        <li>Home replies <strong>ReplyID</strong> with the old head pointer (P1), sets head = P3.</li>
+        <li>P3 sends <strong>WB+Int+UpdPtr</strong> to P1.</li>
+        <li>P1 <strong>flushes</strong>, downgrades to S, links to P3.</li>
+      </ol>
+      <div class="callout warn"><span class="lbl">4 hops</span>Read to Modified data costs <strong>4 hops</strong> here (3 if the home forwards the read to the owner).</div>
+    </div>
+  </div>
+  <div class="src">SSCI walkthrough after Culler, Singh &amp; Gupta, 1999 (Ch. 8); SCI = IEEE Std 1596-1992.</div>
+</section>
+
+<!-- SSCI example table -->
 <section data-background-color="#ffffff">
   <h2>SSCI Walkthrough — Trace</h2>
   <p class="small muted">Cache state shown as <code class="inline">state, prev, next</code>; directory as <code class="inline">state, head</code>. Same access sequence as the full-bit-vector example.</p>
@@ -1494,6 +1257,7 @@
   <div class="src">Trace after Culler, Singh &amp; Gupta, 1999 (Ch. 8); SCI = IEEE Std 1596-1992.</div>
 </section>
 
+<!-- Observations cache vs memory -->
 <section data-background-color="#ffffff">
   <h2>Cache-Based vs. Memory-Based Directory</h2>
   <div class="cols">
@@ -1520,6 +1284,7 @@
   <div class="src">Cache- vs. memory-based comparison: Culler, Singh &amp; Gupta, 1999 (Ch. 8).</div>
 </section>
 
+<!-- Scaling properties cache-based -->
 <section data-background-color="#ffffff">
   <h2>Scaling Properties (Cache-Based)</h2>
   <div class="cols">
@@ -1539,17 +1304,7 @@
   <div class="src">Scaling analysis: Culler, Singh &amp; Gupta, 1999 (Ch. 8); SCI = IEEE Std 1596-1992.</div>
 </section>
 
-<section data-background-color="#ffffff">
-  <h2>Comparisons (Fill as Homework)</h2>
-  <table class="small-tbl">
-  <tr><th></th><th>Bus-based broadcast</th><th>Full bit-vector</th><th>Coarse bit-vector</th><th>Limited Pointers</th><th>Cached dirs (sparse directory)</th><th>SCI</th></tr>
-  <tr><td>Traffic (#msgs on inval)</td><td>O(1)</td><td></td><td></td><td></td><td></td><td>O(sharers)</td></tr>
-  <tr><td>Write inval latency</td><td>O(1)</td><td></td><td></td><td></td><td></td><td></td></tr>
-  <tr><td>Storage overheads</td><td>zero</td><td>Mp<sup>2</sup> bits</td><td></td><td></td><td></td><td></td></tr>
-  </table>
-  <p class="tiny">p = num processors<br>g = group size (num procs represented by 1 bit)<br>M = number of memory lines per processor/node<br>C = number of cache lines per processor<br>*: O(p) total num cache lines * O(p) bits(procs)/line</p>
-</section>
-
+<!-- Comparison table -->
 <section data-background-color="#ffffff">
   <h2>Comparing the Schemes</h2>
   <p class="tiny muted">p = #processors · g = group size · k = fraction of dir entries cached · M = mem lines/node · C = cache lines/proc</p>
@@ -1565,6 +1320,24 @@
   <div class="src">Storage formulas (Mp², Mp²/g, …) after Culler, Singh &amp; Gupta, 1999 (Ch. 8); SCI = IEEE Std 1596-1992.</div>
 </section>
 
+<!-- Module 10.3 review -->
+<section data-background-color="#f6f8fb">
+  <h2>Module 10.3 — Review</h2>
+  <div class="qa">
+    <p class="q">1. How does a cache-based (SCI) directory store sharer information?</p>
+    <div class="fragment"><div class="a">As a <strong>doubly-linked list</strong>: the home holds only the <strong>head pointer</strong>; each sharing cache stores prev/next pointers. Storage is proportional to <em>cache</em> size, not p².</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">2. Why is write/invalidation latency O(sharers) in SCI?</p>
+    <div class="fragment"><div class="a">Invalidations must walk the list <strong>node by node</strong> — you can't reach the next sharer until you've processed the current one, so latency grows with the number of sharers.</div></div>
+  </div>
+  <div class="qa">
+    <p class="q">3. State the central trade-off between memory-based and cache-based directories.</p>
+    <div class="fragment"><div class="a">Memory-based = <strong>O(1) inval latency, O(p²) storage</strong>. Cache-based = <strong>tiny storage, O(sharers) inval latency</strong>. Space vs. time.</div></div>
+  </div>
+</section>
+
+<!-- Chapter summary -->
 <section data-background-color="#ffffff">
   <h2>Lecture 13–14 — Big Picture</h2>
   <div class="cols c3">
@@ -1577,6 +1350,8 @@
   <p class="center muted small">Directory coherence is what lets a DSM look like one big coherent memory across tens to hundreds of cores.</p>
 </section>
 
+
+<!-- References -->
 <section data-background-color="#f6f8fb">
   <h2>References</h2>
   <div class="callout"><span class="lbl">Course textbook</span>
@@ -1588,7 +1363,6 @@
   <div class="callout"><span class="lbl">SGI Origin 2000</span>
     J. Laudon &amp; D. Lenoski, "The SGI Origin: A ccNUMA Highly Scalable Server," <em>Proc. ISCA</em>, 1997.</div>
 </section>
-
 </div>
 
 <!-- deck-level fixed footer (course + chapter); slide number is reveal-native -->
