@@ -82,6 +82,38 @@
   <aside class="notes">This chapter focuses mostly on locks and barriers. Event synchronization (flags / point-to-point) is the building block underneath barriers.</aside>
 </section>
 
+<!-- Deadlock with multiple locks -->
+<section data-background-color="#ffffff">
+  <h2>Pitfall of Locks: Deadlock</h2>
+  <p class="small" style="margin-bottom:.3em">A <strong>deadlock</strong> is a situation in which all parties involved are stalled and cannot make any progress. In a program, it comes from the <strong>order of lock acquisitions</strong>.</p>
+  <div class="cols">
+    <div>
+      <div class="code-label">Two threads take two locks in opposite orders</div>
+      <table>
+        <tr><th>Thread P1</th><th>Thread P2</th></tr>
+        <tr><td>Lock(V) ✓</td><td>Lock(X) ✓</td></tr>
+        <tr><td>Lock(X): waits for P2</td><td>Lock(V): waits for P1</td></tr>
+        <tr><td>… still waiting</td><td>… still waiting</td></tr>
+        <tr><td class="hi"><strong>Deadlocked</strong></td><td class="hi"><strong>Deadlocked</strong></td></tr>
+      </table>
+      <p class="small">A cycle in the "waits-for" graph: P1 holds V and wants X; P2 holds X and wants V.</p>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Four necessary conditions</span>
+        <ul class="small" style="margin-top:.3em">
+          <li><strong>Mutual exclusion</strong>: a resource is held by at most one thread.</li>
+          <li><strong>Hold and wait</strong>: a thread holds one resource while waiting for another.</li>
+          <li><strong>No preemption</strong>: a resource is released only by its holder.</li>
+          <li><strong>Circular wait</strong>: a cycle of threads, each waiting for the next.</li>
+        </ul>
+        <span class="small">Deadlock needs all four, so breaking any one prevents it.</span></div>
+      <div class="callout takeaway"><span class="lbl">Avoidance: a global lock order</span>
+        <span class="small">Acquire locks in the same order in every thread (e.g. left-most node first, or by increasing address). Then no cycle of lock acquisitions can form.</span></div>
+    </div>
+  </div>
+  <div class="src">Definition, lock ordering: Solihin Ch. 5, Ch. 12. Example: Chapter 5 deck. Four conditions: Coffman, Elphick &amp; Shoshani, "System Deadlocks," ACM Computing Surveys, 1971.</div>
+</section>
+
 <!-- Typical modern implementation: the stack -->
 <section data-background-color="#ffffff">
   <h2>Typical Modern Implementation: A Stack</h2>
@@ -939,6 +971,8 @@ atomic {
     T. Harris, J. Larus &amp; R. Rajwar, <em>Transactional Memory</em>, 2nd ed., Morgan &amp; Claypool, 2010.</div>
   <div class="callout"><span class="lbl">Atomics (ISAs)</span>
     <em>RISC-V ISA Manual</em> ("A" extension, <code class="inline">LR</code>/<code class="inline">SC</code>); ISO/IEC 14882 C++ standard, <code class="inline">&lt;atomic&gt;</code>.</div>
+  <div class="callout"><span class="lbl">Deadlock conditions</span>
+    E. G. Coffman, M. Elphick &amp; A. Shoshani, "System Deadlocks," <em>ACM Computing Surveys</em> 3(2), 1971.</div>
 </section>
 </div>
 
