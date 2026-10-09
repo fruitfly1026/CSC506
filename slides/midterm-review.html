@@ -25,7 +25,7 @@
 <section class="title-slide" data-background-color="#ffffff">
   <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
   <h1>Midterm Exam Review</h1>
-  <div class="sub">Lectures 1–10 and Lecture 15</div>
+  <div class="sub">Lectures 1–10</div>
   <aside class="notes">
     One pass over everything on the midterm, in lecture order. Each slide condenses one lecture and names the
     deck it comes from, so students know where to re-read. Practice slides reuse the module review questions
@@ -47,12 +47,11 @@
         <tr><td>Task mapping</td><td>7</td></tr>
         <tr><td>OpenMP, variable scope, synchronization primitives</td><td>8</td></tr>
         <tr><td>Memory hierarchy</td><td>8–10</td></tr>
-        <tr><td>Hardware support for synchronization</td><td>15</td></tr>
       </table>
     </div>
     <div>
       <div class="callout warn"><span class="lbl">Not on the midterm</span>
-        Cache coherence: snoopy protocols (MSI, MESI, MOESI, Dragon) and directory protocols.</div>
+        Cache coherence: snoopy protocols (MSI, MESI, MOESI, Dragon) and directory protocols.<br>Hardware support for synchronization (Lecture 15).</div>
       <div class="callout"><span class="lbl">Format</span>
         Wed, Oct 14, in class, 75 minutes.<br>
         Open-note: your own notes for this course. No textbook, no electronic devices.</div>
@@ -152,16 +151,6 @@
       <ul class="small"><li>Inclusion, exclusion, NINE</li><li>Split and multi-banked caches; VIPT</li><li>Types of cache misses</li><li>AAT and CPI</li><li>Prefetching</li></ul></div>
   </div>
 </section>
-
-<section data-background-color="#ffffff">
-  <h2>Part 8 — Hardware Support for Synchronization</h2>
-  <p class="small muted">Lecture 15</p>
-  <div class="cols">
-    <div class="callout"><span class="lbl"><a href="lecture15.html#/2">Module 8.1: Simple Lock Implementation</a></span>
-      <ul class="small"><li>Deadlock and lock ordering</li><li>Lock performance criteria</li><li>Why a software-only lock fails</li><li>Atomic read-modify-write instructions</li><li>test&amp;set, back-off, TTSL</li><li>LL/SC</li></ul></div>
-  </div>
-</section>
-
 
 </div>
 </div>
