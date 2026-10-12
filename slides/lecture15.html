@@ -467,19 +467,23 @@ unlock: st  &amp;lockvar, #0
         <tr><th>Request</th><th>P1</th><th>P2</th><th>P3</th><th>Bus</th></tr>
         <tr><td>ll1</td><td>E</td><td>–</td><td>–</td><td>BusRd</td></tr>
         <tr><td>sc1</td><td class="hi">M</td><td>–</td><td>–</td><td>–</td></tr>
-        <tr><td>ll2, ll3 (spin)</td><td>S</td><td>S</td><td>S</td><td>BusRd</td></tr>
+        <tr><td>ll2, ll3 (spin)</td><td>S</td><td>S</td><td>S</td><td>BusRd / –</td></tr>
         <tr><td>unlock1</td><td class="hi">M</td><td>I</td><td>I</td><td>BusUpgr</td></tr>
+        <tr><td>ll2, ll3</td><td>S</td><td>S</td><td>S</td><td>BusRd</td></tr>
         <tr><td>sc2</td><td>I</td><td class="hi">M</td><td>I</td><td>BusUpgr</td></tr>
-        <tr><td>sc3</td><td>I</td><td>I</td><td class="hi">M</td><td>BusUpgr</td></tr>
+        <tr><td>sc3 (fails)</td><td>I</td><td class="hi">M</td><td>I</td><td>–</td></tr>
+        <tr><td>ll3 (spin)</td><td>I</td><td>S</td><td>S</td><td>BusRd / –</td></tr>
       </table>
+      <p class="small muted">sc2 invalidates P3's copy and clears its link register, so sc3 fails without touching the bus.</p>
     </div>
     <div>
-      <ul class="small">
-        <li><strong>Similar</strong> bus traffic to TTSL overall</li>
-        <li>Spinning on loads → <strong>no</strong> bus transactions while held</li>
-        <li>Successful acquisition = 2 bus transactions</li>
-      </ul>
-      <div class="callout ok"><span class="lbl">Key advantage</span>A <strong>failed SC generates no bus transaction</strong> — unlike a failed <code class="inline">t&amp;s</code>, which always issues a write.</div>
+      <table class="small">
+        <tr><th>Bus cost</th><th>t&amp;s</th><th>TTSL</th><th>LL/SC</th></tr>
+        <tr><td>Spinning while held</td><td>BusRdX per attempt</td><td>none</td><td>none</td></tr>
+        <tr><td>Losing the race at release</td><td>BusRdX</td><td>BusUpgr</td><td>none</td></tr>
+        <tr><td>Winning</td><td>1 (BusRdX)</td><td>2 (BusRd + BusUpgr)</td><td>2 (BusRd + BusUpgr)</td></tr>
+      </table>
+      <div class="callout ok"><span class="lbl">Key advantage</span>A <strong>failed SC generates no bus transaction</strong>. A failed <code class="inline">t&amp;s</code> always issues a write, even in TTSL, where every loser at release pays one BusUpgr.</div>
     </div>
   </div>
 </section>
