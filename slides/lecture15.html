@@ -208,7 +208,7 @@ unlock: sti &amp;lockvar, #0  ; MEM[&amp;lockvar] = 0
   <h2>Atomic Read-Modify-Write Instructions</h2>
   <table>
     <tr><th>Instruction</th><th>Semantics (executed atomically)</th></tr>
-    <tr><td><code class="inline">test-and-set Rx, M</code></td><td>Read <code class="inline">M</code>; if it matches a constant (e.g. 0), write <code class="inline">Rx</code> into <code class="inline">M</code>. Old value returned in <code class="inline">Rx</code>.</td></tr>
+    <tr><td><code class="inline">test-and-set Rx, M</code></td><td>Read <code class="inline">M</code> into <code class="inline">Rx</code>; if the old value matches a constant (e.g. 0), write a fixed value (e.g. 1) into <code class="inline">M</code>.</td></tr>
     <tr><td><code class="inline">fetch-and-op M</code></td><td>Read <code class="inline">M</code>, apply op (inc, dec, add, sub…), store the new value back to <code class="inline">M</code>.</td></tr>
     <tr><td><code class="inline">exchange Rx, M</code></td><td>Atomically swap the value in <code class="inline">M</code> with the value in register <code class="inline">Rx</code>.</td></tr>
     <tr><td class="hi"><code class="inline">compare-and-swap Rx, Ry, M</code></td><td class="hi">Compare <code class="inline">M</code> with <code class="inline">Rx</code>; if equal, write <code class="inline">Ry</code> into <code class="inline">M</code> and copy <code class="inline">Rx</code> into <code class="inline">Ry</code>.</td></tr>
