@@ -581,6 +581,7 @@ void ticketLock_release(int *next_ticket, int *now_serving) {
 </code></pre>
     </div>
     <div>
+      <div class="callout"><span class="lbl">fetch_and_inc</span>Atomically <code class="inline">old = *p; *p = old + 1;</code> and return <code class="inline">old</code>. Each caller gets a distinct number, in arrival order. It is the only atomic operation here: the wait is a plain load, the release a plain increment by the holder.</div>
       <div class="callout ok"><span class="lbl">Fairness ✓</span>Like a deli counter: take a ticket, wait for your number. Acquisition follows <strong>queue order</strong>.</div>
       <div class="callout warn"><span class="lbl">But…</span>Still \(O(p^2)\) traffic — every release updates <code class="inline">now_serving</code>, invalidating <strong>all</strong> p waiters' cached copies.</div>
     </div>
