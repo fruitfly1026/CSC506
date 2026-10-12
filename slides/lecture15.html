@@ -321,6 +321,12 @@ t&amp;s R1, &amp;lockvar   ; successful (after T0 release)
   <h2>Better: test-and-test-and-set (TTSL)</h2>
   <div class="cols w-64">
     <div>
+      <div class="code-label">Simple test&amp;set lock, for comparison</div>
+      <div style="font-size:.88em;opacity:.92"><pre><code class="language-x86asm" data-trim>
+lock:   t&amp;s R1, &amp;lockvar   ; R1 = old value; if 0, set to 1
+        bnz R1, lock       ; loop if R1 != 0 (every try is a t&amp;s)
+        ret
+</code></pre></div>
       <div class="code-label">TTSL — read-spin, then t&amp;s</div>
       <pre><code class="language-x86asm" data-trim>
 lock:   ld  R1, &amp;lockvar   ; ordinary load (spin)
