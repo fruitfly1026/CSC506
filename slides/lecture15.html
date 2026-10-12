@@ -427,6 +427,7 @@ lock:   t&amp;s R1, &amp;lockvar   ; R1 = old value; if 0, set to 1
       <ul class="small">
         <li><strong>Match</strong> → perform the store, return success</li>
         <li><strong>No match</strong> → cancel the store, return failure</li>
+        <li>The outcome replaces the source register: <strong>0</strong> = success, <strong>nonzero</strong> = failure (the convention used on the next slide and in RISC-V; MIPS returns 1 on success)</li>
       </ul>
       <p class="small muted">A failed SC means someone else touched the location — retry the whole sequence.</p>
     </div>
