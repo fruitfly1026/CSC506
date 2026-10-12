@@ -639,7 +639,7 @@ void ABQL_release(int *next_ticket, int *can_serve) {
   <h2>ABQL: Walk-through</h2>
   <p class="small"><code class="inline">can_serve[]</code> shown as a bit string (one slot per ticket). Exactly one slot is "go".</p>
   <table class="small">
-    <tr><th>Step</th><th>next_ticket</th><th>can_serve[]</th><th>P1</th><th>P2</th><th>P3</th></tr>
+    <tr><th>Step</th><th>next_ticket</th><th>can_serve[]</th><th>P1 my_ticket</th><th>P2 my_ticket</th><th>P3 my_ticket</th></tr>
     <tr><td>Initially</td><td>0</td><td>1000</td><td>–</td><td>–</td><td>–</td></tr>
     <tr><td>P1: f&amp;i</td><td>1</td><td>1000</td><td class="hi">0</td><td>–</td><td>–</td></tr>
     <tr><td>P2: f&amp;i</td><td>2</td><td>1000</td><td>0</td><td>1</td><td>–</td></tr>
