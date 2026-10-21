@@ -301,9 +301,9 @@ S5: ld R5, D
     <div>
       <p class="small">S1 must complete before S2, S2 before S3, and so on.</p>
       <ul class="small">
-        <li>If <strong>S1 misses</strong> and S2 hits, S2 <em>still</em> waits for S1 &mdash; B is already in the cache, but S2 idles for the hundreds of cycles of S1&rsquo;s memory access instead of hiding them</li>
-        <li>S5 waits for S4 even though stores are usually retired early and exposed late &mdash; normally S4 would sit in the store buffer and S5 would proceed at once; under SC, S4 must be acknowledged by every other cache first</li>
-        <li>S5 waits for S4 <strong>even though they target the same location D</strong> &mdash; normally the value would be forwarded straight from the store buffer; under SC that would let this processor see its own write before anyone else does, breaking atomicity</li>
+        <li>If <strong>S1 misses</strong> and S2 hits, S2 <em>still</em> waits for S1<br><span class="muted">B is already in the cache, but S2 idles for the hundreds of cycles of S1&rsquo;s memory access instead of hiding them</span></li>
+        <li>S5 waits for S4 even though stores are usually retired early and exposed late<br><span class="muted">Normally S4 would sit in the store buffer and S5 would proceed at once; under SC, S4 must be acknowledged by every other cache first</span></li>
+        <li>S5 waits for S4 <strong>even though they target the same location D</strong><br><span class="muted">Normally the value would be forwarded straight from the store buffer; under SC that would let this processor see its own write before anyone else does, breaking atomicity</span></li>
       </ul>
     </div>
   </div>
