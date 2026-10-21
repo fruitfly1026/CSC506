@@ -103,7 +103,7 @@ S2: datumIsReady = 1;  S4: ... = datum;   // expect 5
     </div>
     <div>
       <div class="callout"><span class="lbl">Hypothesis 1 · Program order</span>
-        Memory accesses in a thread are performed in the order of the load/store instructions in that thread’s instruction stream (program order).<br>This matches source order only if the compiler does not reorder them, which is the first thing an SC system must enforce (see &ldquo;Building an SC System&rdquo;).</div>
+        Memory accesses in a thread are performed in the order of the load/store instructions in that thread’s instruction stream (program order).<br>This matches source order only if the compiler does not reorder them, which is the first thing an SC system must enforce (see <a href="#/13">Slide 14, &ldquo;Building an SC System&rdquo;</a>).</div>
       <div class="callout warn"><span class="lbl">The subtle part</span>
         This order must hold not just within the thread, but <strong>as seen by all other threads</strong>.</div>
     </div>
