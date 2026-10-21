@@ -276,6 +276,7 @@ S2: ...=b;   S4: ...=a;
         <li>Expose accesses to the cache <strong>one at a time, in program order</strong> (pipeline may overlap internally)</li>
         <li><strong>Load</strong> completes when the block is read from cache</li>
         <li><strong>Store</strong> completes when invalidation is posted on the bus / acknowledged</li>
+        <li><strong>Store buffer</strong>: allowed only as an in-order queue; a later load may neither bypass it nor read from it until the store has performed</li>
       </ul>
     </div>
   </div>
