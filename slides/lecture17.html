@@ -197,7 +197,7 @@ S2: b = 1;   S4: ...=a;
       <code class="inline">S1→S2</code> violated — the order between <strong>two writes</strong> is broken.</div>
   </div>
   <div class="callout"><span class="lbl">Takeaway</span>
-    A forbidden SC result is a fingerprint: it can only appear when the hardware reordered accesses the programmer assumed were in order.</div>
+    A forbidden SC result is a fingerprint: it can only appear when the hardware reordered accesses the programmer assumed were in order, assuming the compiler kept program order.</div>
 </section>
 
 <!-- SC example 2 (work on this) -->
