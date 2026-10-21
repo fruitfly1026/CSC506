@@ -759,9 +759,10 @@ void barrier() {
     <div>
       <div class="code-label">C — correct barrier</div>
       <pre><code class="language-c" data-trim>
-int numArrived = 0;
-lock_type barLock = 0;
-int canGo = 0;
+int numArrived = 0;             // shared
+lock_type barLock = 0;          // shared
+int canGo = 0;                  // shared
+int valueToWait = 0;            // per-thread (private); same initial value as canGo
 
 void barrier() {
   valueToWait = 1 - valueToWait;  // toggle (per-thread)
