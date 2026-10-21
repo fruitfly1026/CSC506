@@ -233,14 +233,10 @@ S2: ...=b;   S4: ...=a;
 <section data-background-color="#ffffff">
   <h2>On a Non-SC Machine — Example B</h2>
   <p>The illegal outcome <strong>(0,0)</strong> appears when a write and a younger read to <em>different</em> locations are reordered:</p>
-  <div class="cols">
-    <div class="callout warn"><span class="lbl">Order S4 S1 S2 S3</span>
-      <code class="inline">S3→S4</code> violated — a <strong>write reordered after a younger read</strong>.</div>
-    <div class="callout warn"><span class="lbl">Order S2 S3 S4 S1</span>
-      <code class="inline">S1→S2</code> violated — again a <strong>write↔younger-read</strong> reorder.</div>
-  </div>
+  <div class="callout warn"><span class="lbl">One kind of reorder, on either thread</span>
+    Order S4 S1 S2 S3: <code class="inline">S3→S4</code> violated on P1. Order S2 S3 S4 S1: <code class="inline">S1→S2</code> violated on P0. In both cases a <strong>write is reordered after a younger read</strong> — the same Store → Load reorder, just on a different thread.</div>
   <div class="callout takeaway"><span class="lbl">Exactly the order PC relaxes</span>
-    Both Example-B violations are the <strong>Store → Load</strong> ordering. Processor consistency deliberately drops it — coming up.</div>
+    Example B can only be broken by the <strong>Store → Load</strong> ordering. Processor consistency deliberately drops it — coming up.</div>
 </section>
 
 <!-- Non-determinism -->
