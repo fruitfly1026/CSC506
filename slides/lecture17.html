@@ -353,8 +353,8 @@ S5: ld R5, D
   <div class="cols">
     <div>
       <p class="small">Idea: <strong>allow some accesses to reorder or overlap</strong>. But violating SC can break intuition — so provide a <strong>safety net</strong> the programmer uses where needed.</p>
-      <div class="callout"><span class="lbl">Memory fence / barrier</span>
-        A fence instruction <strong>orders preceding load/stores before following load/stores</strong>. It is the programmer's responsibility to insert fences.</div>
+      <div class="callout"><span class="lbl">Memory fence (also called memory barrier)</span>
+        A fence instruction <strong>orders preceding load/stores before following load/stores</strong>. It is the programmer's responsibility to insert fences.<br><span class="muted">Not the thread barrier of Lecture 15: a fence acts within one thread and involves no other thread.</span></div>
     </div>
     <div>
       <div class="callout takeaway"><span class="lbl">The family</span>
