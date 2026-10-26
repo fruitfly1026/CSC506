@@ -506,6 +506,22 @@ if (flag2==0) ..   if (flag1==0) ..
 
 <!-- Weak ordering -->
 <section data-background-color="#ffffff">
+  <h2>Synchronization vs. Memory Ordering</h2>
+  <table class="small">
+    <tr><th>Synchronization (Lecture 15)</th><th>Memory ordering (this lecture)</th></tr>
+    <tr><td><strong>Between</strong> threads: who may enter, who waits for whom</td><td><strong>Within</strong> one thread: in what order its loads/stores become visible to other threads</td></tr>
+    <tr><td>Mutual exclusion, barriers, post&ndash;wait</td><td>Program order, atomicity, the four LD/ST orderings</td></tr>
+    <tr><td>Built from atomic read-modify-write instructions (t&amp;s, LL/SC)</td><td>Enforced by the consistency model, patched with fences</td></tr>
+  </table>
+  <div class="cols">
+    <div class="callout warn"><span class="lbl">They need each other</span>
+      A lock is useless if the critical section&rsquo;s accesses can leak out of it: a load hoisted above <code class="inline">lock()</code> reads stale data; a store delayed past <code class="inline">unlock()</code> is invisible to the next holder. So every lock/unlock must also <strong>order memory</strong>. Under SC the hardware orders everything, which is why the Lecture 15 code had no fences. Under a relaxed model the fences live <strong>inside the library&rsquo;s lock implementation</strong>: acquire on lock, release on unlock.</div>
+    <div class="callout takeaway"><span class="lbl">The contract behind WO and RC (next slides)</span>
+      The hardware orders memory <strong>only at synchronization operations</strong>. The programmer&rsquo;s side: every shared access is protected by synchronization, so the program has <strong>no data races</strong>. Then the program behaves as if the machine were SC. Synchronize with plain loads and stores (a hand-written flag) and the hardware cannot see it &mdash; insert the fences yourself (Slide 19).</div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
   <h2>Weak Ordering (WO)</h2>
   <div class="cols">
     <div>
