@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CSC/ECE 506 · GPU Session 2 — GPU Performance Optimization</title>
+<title>CSC/ECE 506 · Lecture 20 — GPU Performance Optimization</title>
 
 <!-- reveal.js core (CDN) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
@@ -24,22 +24,22 @@
 
 <!-- ============================ TITLE ============================ -->
 <section class="title-slide" data-background-color="#ffffff">
-  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture · Session 2 of 2</div>
-  <h1>GPU Session 2</h1>
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <h1>Lecture 20</h1>
   <div class="sub">GPU Performance Optimization</div>
   <div class="sub" style="display:block;font-size:.72em;opacity:.72;margin-top:1.2em">Jiajia Li<br>Mon, Nov 2, 2026</div>
   <aside class="notes">
-    Session 2 of 2 in the GPU unit. Session 3 is an in-class lab. Session 1 covered the CUDA model and the tiled matrix multiply.
-    This session is about memory: how a warp's loads become sector transactions, how to see wasted transactions
+    Lecture 20, the second of the GPU unit. Lecture 21 is an in-class lab. Lecture 19 covered the CUDA model and the tiled matrix multiply.
+    This lecture is about memory: how a warp's loads become sector transactions, how to see wasted transactions
     by counting distinct warps per word and sector, and the memory inefficiency patterns one by one. We then cover shared-memory
-    bank conflicts and occupancy, and finish with redundant memory instructions (RedSan), which the Session 3 lab uses.
+    bank conflicts and occupancy, and finish with redundant memory instructions (RedSan), which the Lecture 21 lab uses.
   </aside>
 </section>
 
 <!-- Roadmap -->
 <section data-background-color="#ffffff">
-  <h2>Session Roadmap</h2>
-  <p class="small">The performance-optimization module, centered on memory inefficiencies. <span class="muted">Session 3 is an in-class lab.</span></p>
+  <h2>Lecture Roadmap</h2>
+  <p class="small">The performance-optimization module, centered on memory inefficiencies. <span class="muted">Lecture 21 is an in-class lab.</span></p>
   <table class="small">
     <tr><th>Part</th><th>Topic</th><th>Covers</th></tr>
     <tr><td>A</td><td>Memory Coalescing</td><td>How a warp's loads become 32 B sector transactions</td></tr>
@@ -189,7 +189,7 @@ for (size_t k_idx = 0; k_idx &lt; k; ++k_idx)
       <p class="small">Every warp in a block re-reads the same sectors of <code class="inline">B</code> from global memory. Every word of those sectors is touched by all the warps.</p>
     </div>
     <div>
-      <div class="callout takeaway"><span class="lbl">Fix</span>Stage tiles in shared memory, exactly the tiled kernel from Session 1. Each tile of <code class="inline">B</code> is read from global memory once per block, then reused on-chip by every warp.</div>
+      <div class="callout takeaway"><span class="lbl">Fix</span>Stage tiles in shared memory, exactly the tiled kernel from Lecture 19. Each tile of <code class="inline">B</code> is read from global memory once per block, then reused on-chip by every warp.</div>
       <div class="callout ok"><span class="lbl">Demo</span><span class="small"><code class="inline">hotspot/gemm_coalesced.cu</code> → <code class="inline">gemm_tiled.cu</code>: 32×32×32 shared-memory tiling added. 1.551 → 1.235 ms (1.26×).</span></div>
     </div>
   </div>
@@ -678,7 +678,7 @@ __global__ void foo(float * __restrict__ data, int n) {
   <h2>Back to Matmul — Why <code class="inline">pValue</code> Matters</h2>
   <div class="cols">
     <div>
-      <div class="code-label">Our naive kernel (Session 1)</div>
+      <div class="code-label">Our naive kernel (Lecture 19)</div>
       <pre><code class="language-cpp" data-trim>
 float pValue = 0;
 for (int k = 0; k &lt; width; k++)
@@ -799,7 +799,7 @@ for (i = inz_begin; ...)
 </div>
 
 <!-- deck-level fixed footer (course + unit); slide number is reveal-native -->
-<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>GPU Session 2 — GPU Performance Optimization</div>
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Lecture 20 — GPU Performance Optimization</div>
 </div>
 
 <!-- reveal.js core + plugins -->

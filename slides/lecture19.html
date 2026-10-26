@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CSC/ECE 506 · GPU Session 1 — The CUDA Programming Model</title>
+<title>CSC/ECE 506 · Lecture 19 — The CUDA Programming Model</title>
 
 <!-- reveal.js core (CDN) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
@@ -23,8 +23,8 @@
 
 <!-- ============================ TITLE ============================ -->
 <section class="title-slide" data-background-color="#ffffff">
-  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture · Session 1 of 2</div>
-  <h1>GPU Session 1</h1>
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <h1>Lecture 19</h1>
   <div class="sub">The CUDA programming model</div>
   <div class="sub" style="display:block;font-size:.72em;opacity:.72;margin-top:1.2em">Jiajia Li<br>Wed, Oct 28, 2026</div>
   <aside class="notes">
@@ -852,7 +852,7 @@ if (threadIdx.x &lt; 16) {
       <div class="callout"><span class="lbl">Worst case</span><span class="small">A fully divergent warp serializes its distinct paths, so throughput falls toward the fraction of lanes active on each path — potentially a large slowdown.</span></div>
     </div>
   </div>
-  <p class="tiny muted">Pre-Volta the 32 threads shared one program counter; Volta+ gives each thread its own PC (Independent Thread Scheduling), but a warp still issues one instruction at a time, so divergent paths are still serialized. We revisit divergence as an optimization lever in Session 2.</p>
+  <p class="tiny muted">Pre-Volta the 32 threads shared one program counter; Volta+ gives each thread its own PC (Independent Thread Scheduling), but a warp still issues one instruction at a time, so divergent paths are still serialized. We revisit divergence as an optimization lever in Lecture 20.</p>
   <div class="src">CUDA C++ Programming Guide; NVIDIA V100 whitepaper.</div>
 </section>
 
@@ -1470,7 +1470,7 @@ devP[row*width + col] = pValue;
       <li>A \( 1024 \times 1024 \) output P → \( 64 \times 64 = 4096 \) blocks</li>
       <li>Each block does <strong>512 global loads</strong> (per phase, both tiles) for <strong>8192 mul/add</strong></li>
     </ul></div>
-  <div class="callout takeaway"><span class="lbl">Bottom line</span>Tiling cuts global traffic 16×: 0.25 B/FLOP instead of 4. On A100 that lifts the first-order bound from ~0.39 to ~6.2 TFLOPS — 16× faster, but still <strong>bandwidth-bound</strong> at ~32% of peak. Modern GPUs have far more compute per byte than G80 did, so reaching peak needs more reuse (bigger tiles, register tiling) — Session 2.</div>
+  <div class="callout takeaway"><span class="lbl">Bottom line</span>Tiling cuts global traffic 16×: 0.25 B/FLOP instead of 4. On A100 that lifts the first-order bound from ~0.39 to ~6.2 TFLOPS — 16× faster, but still <strong>bandwidth-bound</strong> at ~32% of peak. Modern GPUs have far more compute per byte than G80 did, so reaching peak needs more reuse (bigger tiles, register tiling) — Lecture 20.</div>
 </section>
 
 <!-- References -->
@@ -1488,7 +1488,7 @@ devP[row*width + col] = pValue;
 </div>
 
 <!-- deck-level fixed footer (course + unit); slide number is reveal-native -->
-<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>GPU Session 1 — The CUDA Programming Model</div>
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Lecture 19 — The CUDA Programming Model</div>
 </div>
 
 <!-- reveal.js core + plugins -->
