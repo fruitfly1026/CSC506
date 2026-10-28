@@ -375,12 +375,17 @@ S5: ld R5, D
   <ul class="small">
     <li>Wait until all older <strong>writes</strong> are posted on the bus (or InvAck received)</li>
     <li>Wait until all older <strong>reads</strong> have completed</li>
-    <li><strong>Flush the pipeline</strong> so younger memory ops can't issue early</li>
+    <li><strong>Block younger memory ops</strong> from issuing until then</li>
   </ul>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Simple implementation: flush the pipeline</span>Treat the fence like a mispredicted branch: squash every younger instruction, wait for the older accesses to perform, then refetch. Nothing younger can sneak in, but ALU work is thrown away too. Short in-order pipelines and serializing instructions (PowerPC <code class="inline">isync</code>, ARM <code class="inline">ISB</code>) work this way.</div>
+    <div class="callout"><span class="lbl">Finer implementation: a marker in the load/store queue</span>Loads and stores are recognized at decode and queued in the LSQ; the fence is a marker in that queue. Younger loads may not access the cache and younger stores may not leave the store buffer until the older accesses have performed. ALU instructions never enter the LSQ, so they keep flowing. This is how an out-of-order core implements x86 <code class="inline">mfence</code>.</div>
+  </div>
   <div class="cols">
     <div class="callout"><span class="lbl">Who inserts them?</span>Thread-library / synchronization-library authors.</div>
     <div class="callout warn"><span class="lbl">If you DIY synchronization without fences</span>The machine does <strong>not</strong> guarantee correctness. (Other, finer fence types exist — later.)</div>
   </div>
+  <div class="src">Power ISA (<code class="inline">sync</code>, <code class="inline">isync</code>); Arm Architecture Reference Manual (<code class="inline">DMB</code>, <code class="inline">DSB</code>, <code class="inline">ISB</code>); Intel SDM (<code class="inline">MFENCE</code>). Beyond Solihin Ch.10.</div>
 </section>
 
 <!-- Processor Consistency -->
