@@ -989,59 +989,7 @@ Rd F
 
 <!-- Fence insertion: PC machine -->
 <section data-background-color="#ffffff">
-  <h2>Exercise 2 — On a Processor-Consistent Machine</h2>
-  <p class="small">Now the machine is already <strong>PC</strong>: it preserves every order <em>except</em> <span class="pill">ST→LD</span>. So we only add fences where a store-then-load ordering actually matters.</p>
-  <div class="cols c3">
-    <div>
-      <div class="code-label" style="color:#CC0000">SC — restore ST→LD only</div>
-      <pre class="tiny"><code class="language-x86asm" data-trim>
-Lock L1
-Rd A
-Rd B
-Wr B
-Wr D
-fence       ; Wr D → Rd E
-Rd E
-Unlock L1
-fence       ; Unlock(st) → Rd F
-Rd F
-</code></pre>
-    </div>
-    <div>
-      <div class="code-label" style="color:#2563eb">PC — nothing to do</div>
-      <pre class="tiny"><code class="language-x86asm" data-trim>
-Lock L1
-Rd A
-Rd B
-Wr B
-Wr D
-Rd E
-Unlock L1
-Rd F
-; machine is already PC
-</code></pre>
-    </div>
-    <div>
-      <div class="code-label" style="color:#16a34a">WO — fence at the release</div>
-      <pre class="tiny"><code class="language-x86asm" data-trim>
-Lock L1
-Rd A
-Rd B
-Wr B
-Wr D
-Rd E
-Unlock L1
-fence       ; synch → ld/st
-Rd F
-</code></pre>
-    </div>
-  </div>
-  <div class="callout small"><span class="lbl">Contrast with Exercise 1</span>Because the PC baseline already keeps LD→LD, LD→ST, and ST→ST, far fewer fences are needed than on the fully-relaxed machine — only the ST→LD gaps must be closed.</div>
-</section>
-
-<!-- Latency example -->
-<section data-background-color="#ffffff">
-  <h2>Exercise 3 — When the Lock Is Not the First Access</h2>
+  <h2>Exercise 2 — When the Lock Is Not the First Access</h2>
   <p class="small">Fully relaxed machine again, but now two accesses come <em>before</em> the lock. Adding <strong>RC</strong> as a fourth column: Lock is an <em>acquire</em>, Unlock a <em>release</em>.</p>
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.6em">
     <div>
@@ -1112,6 +1060,58 @@ Rd F
     </div>
   </div>
   <div class="callout takeaway small"><span class="lbl">WO vs. RC</span>A WO synch is a wall: nothing crosses it in either direction, so <code class="inline">Rd X</code>, <code class="inline">Wr Y</code> must finish before <code class="inline">Lock</code>. RC turns the wall into two one-way doors: the acquire only stops later accesses from moving <em>up</em>, the release only stops earlier accesses from moving <em>down</em>. Accesses outside the lock may drift <em>into</em> the critical section (harmless: they are not the data the lock protects); accesses inside may never leak <em>out</em>.</div>
+</section>
+
+<!-- Latency example -->
+<section data-background-color="#ffffff">
+  <h2>Exercise 3 — On a Processor-Consistent Machine</h2>
+  <p class="small">Now the machine is already <strong>PC</strong>: it preserves every order <em>except</em> <span class="pill">ST→LD</span>. So we only add fences where a store-then-load ordering actually matters.</p>
+  <div class="cols c3">
+    <div>
+      <div class="code-label" style="color:#CC0000">SC — restore ST→LD only</div>
+      <pre class="tiny"><code class="language-x86asm" data-trim>
+Lock L1
+Rd A
+Rd B
+Wr B
+Wr D
+fence       ; Wr D → Rd E
+Rd E
+Unlock L1
+fence       ; Unlock(st) → Rd F
+Rd F
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label" style="color:#2563eb">PC — nothing to do</div>
+      <pre class="tiny"><code class="language-x86asm" data-trim>
+Lock L1
+Rd A
+Rd B
+Wr B
+Wr D
+Rd E
+Unlock L1
+Rd F
+; machine is already PC
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label" style="color:#16a34a">WO — fence at the release</div>
+      <pre class="tiny"><code class="language-x86asm" data-trim>
+Lock L1
+Rd A
+Rd B
+Wr B
+Wr D
+Rd E
+Unlock L1
+fence       ; synch → ld/st
+Rd F
+</code></pre>
+    </div>
+  </div>
+  <div class="callout small"><span class="lbl">Contrast with Exercise 1</span>Because the PC baseline already keeps LD→LD, LD→ST, and ST→ST, far fewer fences are needed than on the fully-relaxed machine — only the ST→LD gaps must be closed.</div>
 </section>
 
 <section data-background-color="#ffffff">
