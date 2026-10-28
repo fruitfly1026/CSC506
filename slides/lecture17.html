@@ -1023,6 +1023,80 @@ Rd F
 
 <!-- Latency example -->
 <section data-background-color="#ffffff">
+  <h2>Exercise 3 — When the Lock Is Not the First Access</h2>
+  <p class="small">Fully relaxed machine again, but now two accesses come <em>before</em> the lock. Adding <strong>RC</strong> as a fourth column: Lock is an <em>acquire</em>, Unlock a <em>release</em>.</p>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.6em">
+    <div>
+      <div class="code-label" style="color:#CC0000">SC — 5 fences</div>
+      <pre class="tiny"><code class="language-x86asm" data-trim>
+Rd X
+fence
+Wr Y
+fence
+Lock L1
+fence
+Rd A
+Wr A        ; dep
+fence
+Unlock L1
+fence
+Rd F
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label" style="color:#2563eb">PC — 3 fences</div>
+      <pre class="tiny"><code class="language-x86asm" data-trim>
+Rd X
+fence       ; LD→ST
+Wr Y
+            ; ST→LD ok
+Lock L1
+fence       ; LD→LD
+Rd A
+Wr A        ; dep
+fence       ; ST→ST
+Unlock L1
+            ; ST→LD ok
+Rd F
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label" style="color:#16a34a">WO — 4 fences</div>
+      <pre class="tiny"><code class="language-x86asm" data-trim>
+Rd X
+Wr Y
+fence       ; before synch
+Lock L1
+fence       ; after synch
+Rd A
+Wr A
+fence       ; before synch
+Unlock L1
+fence       ; after synch
+Rd F
+</code></pre>
+    </div>
+    <div>
+      <div class="code-label" style="color:#b45309">RC — 2 fences</div>
+      <pre class="tiny"><code class="language-x86asm" data-trim>
+Rd X
+Wr Y
+            ; may sink below
+Lock L1
+fence       ; acquire
+Rd A
+Wr A
+fence       ; release
+Unlock L1
+            ; may rise above
+Rd F
+</code></pre>
+    </div>
+  </div>
+  <div class="callout takeaway small"><span class="lbl">WO vs. RC</span>A WO synch is a wall: nothing crosses it in either direction, so <code class="inline">Rd X</code>, <code class="inline">Wr Y</code> must finish before <code class="inline">Lock</code>. RC turns the wall into two one-way doors: the acquire only stops later accesses from moving <em>up</em>, the release only stops earlier accesses from moving <em>down</em>. Accesses outside the lock may drift <em>into</em> the critical section (harmless: they are not the data the lock protects); accesses inside may never leak <em>out</em>.</div>
+</section>
+
+<section data-background-color="#ffffff">
   <h2>Latency Example — SC vs. PC vs. WO</h2>
   <p class="small">Cache hit = 1 cycle, miss = 10, cache initially empty, ≤ 1 op issued/cycle. Completion-time intervals:</p>
   <table class="tiny">
