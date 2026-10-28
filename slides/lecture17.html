@@ -912,7 +912,7 @@ Rd F
 <!-- Fence insertion: fully relaxed machine -->
 <section data-background-color="#ffffff">
   <h2>Exercise 1 — On a Fully Relaxed Machine</h2>
-  <div class="cols c3">
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.6em">
     <div>
       <div class="code-label" style="color:#CC0000">SC — fence every pair</div>
       <pre class="tiny"><code class="language-x86asm" data-trim>
@@ -967,8 +967,24 @@ fence
 Rd F
 </code></pre>
     </div>
+    <div>
+      <div class="code-label" style="color:#b45309">RC — acquire + release</div>
+      <pre class="tiny"><code class="language-x86asm" data-trim>
+Lock L1
+fence       ; acquire
+Rd A
+Rd B
+Wr B
+Wr D
+Rd E
+fence       ; release
+Unlock L1
+            ; may rise above
+Rd F
+</code></pre>
+    </div>
   </div>
-  <div class="callout small"><span class="lbl">Note</span>The <code class="inline">Rd B → Wr B</code> data dependence is enforced by the hardware even under SC, so no fence is needed there.</div>
+  <div class="callout small"><span class="lbl">Note</span>The <code class="inline">Rd B → Wr B</code> data dependence is enforced by the hardware even under SC, so no fence is needed there. Under RC, <code class="inline">Rd F</code> may move above the release, so the fence after <code class="inline">Unlock</code> that WO needs is gone.</div>
 </section>
 
 <!-- Fence insertion: PC machine -->
