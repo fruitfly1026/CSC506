@@ -31,21 +31,18 @@
     Chapter 12 asks: once we have many cores and a coherence protocol, how do the messages
     actually get from one node to another? The interconnection network is the substrate that
     implements coherence. Two modules: (11.1) the design space — components, switching, topology,
-    routing; and (11.2) deadlock avoidance and router microarchitecture, ending with the
-    Alpha 21364 as a real case study.
+    routing; and (11.2) deadlock avoidance and router microarchitecture.
   </aside>
 </section>
 
 <!-- Roadmap -->
 <section data-background-color="#ffffff">
   <h2>Chapter Roadmap</h2>
-  <div class="cols c3">
+  <div class="cols">
     <div class="callout"><span class="lbl">Module 11.1</span><strong>The Design Space</strong><br>
       <span class="small">Nodes, links, flits; circuit vs. packet switching; <em>topology</em> metrics; and routing policies from dimension-ordered to adaptive.</span></div>
     <div class="callout"><span class="lbl">Module 11.2</span><strong>Deadlock &amp; Routers</strong><br>
       <span class="small">Why cyclic buffer dependence deadlocks; turn restrictions and virtual channels; router microarchitecture and pipeline.</span></div>
-    <div class="callout"><span class="lbl">Case Study</span><strong>Alpha 21364</strong><br>
-      <span class="small">A 128-node 2-D torus with minimal adaptive routing, 19 virtual channels, and a 13-stage router pipeline.</span></div>
   </div>
   <div class="callout takeaway"><span class="lbl">The takeaway</span>
     The network <strong>implements the coherence mechanism</strong> — moving many small, fixed-size messages with <strong>low latency and high bandwidth</strong>. Every design choice trades those two against cost.</div>
@@ -662,7 +659,6 @@
       <li>Explain how <strong>cyclic buffer dependence</strong> causes deadlock</li>
       <li>Apply <strong>turn restrictions</strong> (X-Y, west-first, north-last) and <strong>virtual channels</strong></li>
       <li>Describe a <strong>router pipeline</strong> (DC → VA → SA → ST) and speculation</li>
-      <li>Walk through the <strong>Alpha 21364</strong> network as a case study</li>
     </ul>
   </div>
 </section>
@@ -863,88 +859,6 @@
   <aside class="notes">Non-speculative: VA then SA in sequence; if SA fails the flit stalls and retries SA. Speculative pipeline overlaps VA and SA into one stage to cut a cycle, gambling that the VC will be granted.</aside>
 </section>
 
-<!-- Case study Alpha 21364 -->
-<section data-background-color="#ffffff">
-  <h2>Case Study: Alpha 21364 Network</h2>
-  <div class="src">Source: Mukherjee et al., "The Alpha 21364 Network Architecture," IEEE Micro 2002.</div>
-  <div class="cols w-64">
-    <div>
-      <ul class="small">
-        <li>up to <strong>128 nodes</strong> in a <strong>2-D torus</strong> (mesh + wraparound)</li>
-        <li>Each node: Proc + 2 memory controllers + Mem + Router</li>
-        <li>Router ports: <strong>N, E, S, W</strong> + local cache + 2 MCs + 1 I/O</li>
-        <li><strong>Minimal adaptive routing:</strong> one of two ports chosen by congestion, and the selected port must <strong>reduce Manhattan distance</strong></li>
-      </ul>
-    </div>
-    <div class="center">
-      <svg viewBox="0 0 260 150" class="chart" style="max-width:320px">
-        <!-- 4x8 torus sketch (show a 4x4 corner + wrap) -->
-        <g stroke="#cbd5e1" stroke-width="1.2">
-          <line x1="30" y1="30" x2="230" y2="30"/><line x1="30" y1="65" x2="230" y2="65"/>
-          <line x1="30" y1="100" x2="230" y2="100"/><line x1="30" y1="135" x2="230" y2="135"/>
-        </g>
-        <g stroke="#cbd5e1" stroke-width="1.2">
-          <line x1="30" y1="30" x2="30" y2="135"/><line x1="80" y1="30" x2="80" y2="135"/>
-          <line x1="130" y1="30" x2="130" y2="135"/><line x1="180" y1="30" x2="180" y2="135"/><line x1="230" y1="30" x2="230" y2="135"/>
-        </g>
-        <!-- wrap arcs (torus) -->
-        <path d="M30,30 C12,30 12,135 30,135" fill="none" stroke="#CC0000" stroke-width="1.4" stroke-dasharray="3 3"/>
-        <path d="M30,30 C30,12 230,12 230,30" fill="none" stroke="#CC0000" stroke-width="1.4" stroke-dasharray="3 3"/>
-        <g fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.4">
-          <circle cx="30" cy="30" r="6"/><circle cx="80" cy="30" r="6"/><circle cx="130" cy="30" r="6"/><circle cx="180" cy="30" r="6"/><circle cx="230" cy="30" r="6"/>
-          <circle cx="30" cy="65" r="6"/><circle cx="80" cy="65" r="6"/><circle cx="130" cy="65" r="6"/><circle cx="180" cy="65" r="6"/><circle cx="230" cy="65" r="6"/>
-          <circle cx="30" cy="100" r="6"/><circle cx="80" cy="100" r="6"/><circle cx="130" cy="100" r="6"/><circle cx="180" cy="100" r="6"/><circle cx="230" cy="100" r="6"/>
-          <circle cx="30" cy="135" r="6"/><circle cx="80" cy="135" r="6"/><circle cx="130" cy="135" r="6"/><circle cx="180" cy="135" r="6"/><circle cx="230" cy="135" r="6"/>
-        </g>
-        <text x="130" y="150" text-anchor="middle" class="tiny" style="fill:#CC0000">torus = mesh + wraparound</text>
-      </svg>
-    </div>
-  </div>
-</section>
-
-<!-- Alpha 21364 details -->
-<section data-background-color="#ffffff">
-  <h2>Alpha 21364 — Flits, VCs &amp; Deadlock</h2>
-  <div class="src">Source: Mukherjee et al., "The Alpha 21364 Network Architecture," IEEE Micro 2002.</div>
-  <div class="cols">
-    <div>
-      <div class="callout"><span class="lbl">Flits</span><strong>Phit = Flit = 39 bits</strong> (32 data + 7 ECC). The head flit holds the header (2-bit direction + 8-bit destination + 6 others).</div>
-      <div class="callout"><span class="lbl">Packet classes</span>Six classes — read/write = <strong>3 flits</strong>, data response = <strong>18–19 flits</strong>, plus 4 others.</div>
-    </div>
-    <div>
-      <div class="callout"><span class="lbl">Virtual channels</span><strong>19 VCs per physical channel.</strong> Each packet class gets its own VC and uses 2 more. <strong>Virtual cut-through</strong> is used, so VC buffer sizes differ by packet size.</div>
-      <div class="callout warn"><span class="lbl">Deadlock</span>Adaptive routing isn't deadlock-free, so it uses one of <strong>2 escape VCs</strong> — one for <em>source ID &lt; dest ID</em>, the other for <em>&gt;</em>.</div>
-    </div>
-  </div>
-</section>
-
-<!-- Alpha 21364 pipeline -->
-<section data-background-color="#ffffff">
-  <h2>Alpha 21364 — Router Pipeline</h2>
-  <div class="src">Source: Mukherjee et al., "The Alpha 21364 Network Architecture," IEEE Micro 2002.</div>
-  <p class="small">A deep <strong>13-stage</strong> pipeline: a 7-stage scheduling pipeline plus 6 more stages.</p>
-  <div class="cols">
-    <div>
-      <div class="callout"><span class="lbl">Scheduling pipeline (upper)</span>
-        <ul class="tiny" style="margin:.3em 0 0 .9em">
-          <li><strong>ECC</strong> — verify SECDED code (first), generate a new code (second)</li>
-          <li><strong>DW</strong> — decode + write table entry</li>
-          <li><strong>LA, GA</strong> — local arbitration (input port), global arbitration (output port)</li>
-          <li><strong>RE</strong> — entry-table read</li>
-          <li><strong>X</strong> — switch traversal</li>
-        </ul></div>
-    </div>
-    <div>
-      <div class="callout"><span class="lbl">Data pipeline (lower)</span>
-        <ul class="tiny" style="margin:.3em 0 0 .9em">
-          <li><strong>WrQ, RQ</strong> — write to buffer / read from buffer</li>
-          <li><strong>W</strong> — wait</li>
-        </ul></div>
-      <div class="callout takeaway"><span class="lbl">Takeaway</span>The head flit drives scheduling; the data flits flow through the lower pipeline, decoupled from the routing decisions.</div>
-    </div>
-  </div>
-</section>
-
 <!-- Module 11.2 review -->
 <section data-background-color="#f6f8fb">
   <h2>Module 11.2 — Review</h2>
@@ -1123,7 +1037,7 @@
   <div class="cols c3">
     <div class="callout"><span class="lbl">11.1 Design space</span>Nodes, flits, packet switching, topology metrics, and routing — every choice trades latency, bandwidth, and cost.</div>
     <div class="callout"><span class="lbl">11.2 Deadlock</span>Cyclic buffer dependence deadlocks; turn restrictions, up*/down*, and escape VCs break the cycles.</div>
-    <div class="callout"><span class="lbl">Routers</span>DC → VA → SA → ST pipeline; the Alpha 21364 shows it at scale — 128-node torus, 19 VCs, 13 stages.</div>
+    <div class="callout"><span class="lbl">Routers</span>DC → VA → SA → ST pipeline; virtual channels add buffering and an allocation stage but enable escape channels and higher utilization.</div>
   </div>
   <div class="callout takeaway"><span class="lbl">One sentence</span>
     <strong>The interconnection network is the substrate that makes coherence and parallelism actually move</strong> — its topology and routing set the latency and bandwidth that bound the whole machine.</div>
@@ -1144,7 +1058,6 @@
     <li>M. Schroeder et al., "Autonet: A High-Speed, Self-Configuring LAN," 1991.</li>
     <li>L. Valiant, "A Scheme for Fast Parallel Communication," <em>SIAM J. Computing</em>, 1982.</li>
     <li>J. Duato, "A New Theory of Deadlock-Free Adaptive Routing," <em>IEEE TPDS</em>, 1993.</li>
-    <li>S. Mukherjee et al., "The Alpha 21364 Network Architecture," <em>IEEE Micro</em>, 2002.</li>
     <li>D. Culler, J. P. Singh &amp; A. Gupta, <em>Parallel Computer Architecture: A Hardware/Software Approach</em>, Morgan Kaufmann, 1999.</li>
     <li>Real interconnect technologies (Ethernet, InfiniBand, Myrinet, Cray Gemini, Fujitsu Tofu): vendor specifications &amp; HPC interconnect surveys.</li>
   </ol>
