@@ -976,6 +976,85 @@
 </section>
 
 <section data-background-color="#ffffff">
+  <h2>The Whole Model: a Decoder-Only LLM</h2>
+  <div class="symkey">
+    <span><b>N</b> = number of layers</span>
+    <span><b>MLP</b> = multi-layer perceptron (feed-forward network)</span>
+  </div>
+  <svg viewBox="0 0 720 300" class="chart" style="width:100%;max-width:1060px;display:block;margin:0 auto">
+    <defs><marker id="arLLM" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#475569"/></marker></defs>
+    <!-- ===== panel A: the stack ===== -->
+    <g stroke="#475569" stroke-width="1.1" marker-end="url(#arLLM)">
+      <line x1="145" y1="50" x2="145" y2="61"/><line x1="145" y1="92" x2="145" y2="103"/>
+      <line x1="145" y1="176" x2="145" y2="187"/><line x1="145" y1="214" x2="145" y2="225"/>
+      <line x1="145" y1="256" x2="145" y2="267"/>
+    </g>
+    <rect x="60" y="20" width="170" height="30" rx="4" fill="#fff" stroke="#94a3b8" stroke-width="1.2"/>
+    <text x="145" y="33" text-anchor="middle" style="font-size:11px;font-weight:600">Tokenizer</text>
+    <text x="145" y="45" text-anchor="middle" class="tiny">text → token IDs</text>
+    <rect x="60" y="62" width="170" height="30" rx="4" fill="#fde68a" stroke="#b45309" stroke-width="1.2"/>
+    <text x="145" y="75" text-anchor="middle" style="font-size:11px;font-weight:600">Token embedding</text>
+    <text x="145" y="87" text-anchor="middle" class="tiny">token ID → vector (+ position)</text>
+    <rect x="52" y="104" width="186" height="72" rx="6" fill="#f8fafc" stroke="#475569" stroke-width="1.3" stroke-dasharray="5 3"/>
+    <text x="145" y="120" text-anchor="middle" style="font-size:11px;font-weight:600">N × Transformer layer</text>
+    <rect x="62" y="130" width="76" height="34" rx="4" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.2"/>
+    <text x="100" y="151" text-anchor="middle" class="tiny">self-attention</text>
+    <line x1="138" y1="147" x2="151" y2="147" stroke="#475569" stroke-width="1.1" marker-end="url(#arLLM)"/>
+    <rect x="152" y="130" width="76" height="34" rx="4" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2"/>
+    <text x="190" y="151" text-anchor="middle" class="tiny">MLP</text>
+    <rect x="60" y="188" width="170" height="26" rx="4" fill="#f1f5f9" stroke="#64748b" stroke-width="1.2"/>
+    <text x="145" y="205" text-anchor="middle" style="font-size:11px;font-weight:600">Final LayerNorm</text>
+    <rect x="60" y="226" width="170" height="30" rx="4" fill="#fde68a" stroke="#b45309" stroke-width="1.2"/>
+    <text x="145" y="239" text-anchor="middle" style="font-size:11px;font-weight:600">Unembedding (LM head)</text>
+    <text x="145" y="251" text-anchor="middle" class="tiny">vector → score per vocabulary token</text>
+    <rect x="60" y="268" width="170" height="26" rx="4" fill="#fff" stroke="#94a3b8" stroke-width="1.2"/>
+    <text x="145" y="285" text-anchor="middle" style="font-size:11px;font-weight:600">softmax, sample next token</text>
+    <path d="M60,281 H28 V77 H58" fill="none" stroke="#CC0000" stroke-width="1.3" marker-end="url(#arLLMr)"/>
+    <defs><marker id="arLLMr" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#CC0000"/></marker></defs>
+    <text x="19" y="179" text-anchor="middle" class="tiny" style="fill:#CC0000" transform="rotate(-90 19 179)">append the token, repeat</text>
+    <!-- zoom connectors -->
+    <g stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 3">
+      <line x1="238" y1="104" x2="300" y2="14"/><line x1="238" y1="176" x2="300" y2="292"/>
+    </g>
+    <!-- ===== panel B: one layer ===== -->
+    <rect x="300" y="14" width="412" height="278" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+    <text x="506" y="32" text-anchor="middle" style="font-size:11px;font-weight:700">One Transformer layer (pre-norm)</text>
+    <text x="420" y="48" text-anchor="middle" class="tiny">token vectors</text>
+    <g stroke="#475569" stroke-width="1.1" marker-end="url(#arLLM)">
+      <line x1="420" y1="52" x2="420" y2="59"/><line x1="420" y1="80" x2="420" y2="91"/>
+      <line x1="420" y1="126" x2="420" y2="134"/><line x1="420" y1="149" x2="420" y2="157"/>
+      <line x1="420" y1="178" x2="420" y2="189"/><line x1="420" y1="224" x2="420" y2="232"/>
+      <line x1="420" y1="247" x2="420" y2="266"/>
+    </g>
+    <g fill="none" stroke="#64748b" stroke-width="1.1" marker-end="url(#arLLM)">
+      <path d="M420,55 H318 V142 H412"/><path d="M420,153 H318 V240 H412"/>
+    </g>
+    <text x="311" y="100" text-anchor="middle" class="tiny" style="fill:#64748b" transform="rotate(-90 311 100)">residual</text>
+    <text x="311" y="198" text-anchor="middle" class="tiny" style="fill:#64748b" transform="rotate(-90 311 198)">residual</text>
+    <rect x="335" y="60" width="170" height="20" rx="4" fill="#f1f5f9" stroke="#64748b" stroke-width="1.2"/>
+    <text x="420" y="74" text-anchor="middle" class="tiny">LayerNorm</text>
+    <rect x="335" y="92" width="170" height="34" rx="4" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.3"/>
+    <text x="420" y="106" text-anchor="middle" style="font-size:11px;font-weight:600">Multi-head self-attention</text>
+    <text x="420" y="119" text-anchor="middle" class="tiny">causal mask; Q, K, V</text>
+    <circle cx="420" cy="142" r="7" fill="#fff" stroke="#475569" stroke-width="1.2"/><text x="420" y="145.5" text-anchor="middle" style="font-size:11px">+</text>
+    <rect x="335" y="158" width="170" height="20" rx="4" fill="#f1f5f9" stroke="#64748b" stroke-width="1.2"/>
+    <text x="420" y="172" text-anchor="middle" class="tiny">LayerNorm</text>
+    <rect x="335" y="190" width="170" height="34" rx="4" fill="#dcfce7" stroke="#16a34a" stroke-width="1.3"/>
+    <text x="420" y="211" text-anchor="middle" style="font-size:11px;font-weight:600">MLP</text>
+    <circle cx="420" cy="240" r="7" fill="#fff" stroke="#475569" stroke-width="1.2"/><text x="420" y="243.5" text-anchor="middle" style="font-size:11px">+</text>
+    <text x="420" y="280" text-anchor="middle" class="tiny">to the next layer</text>
+    <!-- side notes -->
+    <text x="520" y="108" class="tiny" style="fill:#1d4ed8">tokens exchange information</text>
+    <line x1="505" y1="120" x2="520" y2="134" stroke="#b45309" stroke-width="1" stroke-dasharray="3 2"/>
+    <rect x="520" y="126" width="150" height="18" rx="3" fill="#fef3c7" stroke="#b45309" stroke-width="1.1"/>
+    <text x="595" y="138.5" text-anchor="middle" class="tiny">KV cache: K, V of past tokens</text>
+    <text x="520" y="210" class="tiny" style="fill:#16a34a">each token on its own</text>
+    <text x="520" y="74" class="tiny" style="fill:#64748b">normalize before each block</text>
+  </svg>
+  <div class="src">Vaswani et al., "Attention Is All You Need," NeurIPS 2017; Radford et al., GPT-2, 2019.</div>
+</section>
+
+<section data-background-color="#ffffff">
   <h2>Transformer Anatomy &amp; the Two Phases of Inference</h2>
   <div class="symkey">
     <span><b>n</b> = sequence length</span>
@@ -984,9 +1063,9 @@
   </div>
   <div class="cols">
     <div>
-      <div class="callout"><span class="lbl">One layer</span><span class="small">Multi-head attention, then an MLP. Attention: \(O(n^2 d)\) time, \(O(n^2)\) memory per head. The MLP holds about two thirds of the parameters (for \(d_{ff}=4d\)).</span></div>
+      <div class="callout"><span class="lbl">One Transformer layer</span><span class="small">Multi-head attention, then an MLP. Attention: \(O(n^2 d)\) time, \(O(n^2)\) memory per head. The MLP holds about two thirds of the parameters (for \(d_{ff}=4d\)).</span></div>
       <div class="callout"><span class="lbl">Prefill</span><span class="small">The prompt's \(n\) tokens run <strong>in parallel</strong>: big GEMMs, <strong>compute-bound</strong>. Produces the first token and the KV cache.</span></div>
-      <div class="callout warn"><span class="lbl">Decode</span><span class="small">Then <strong>one token per step</strong>: each step reads all weights and the whole KV cache for ~2 flops per weight. A GEMV in disguise, <strong>memory-bound</strong>; intensity ≈ sequences batched. The serving problem: keep the GPU busy in decode without exhausting KV memory.</span></div>
+      <div class="callout warn"><span class="lbl">Decode</span><span class="small">Then <strong>one token per step</strong>: each step reads all weights and the whole KV cache for ~2 flops per weight. A GEMV in disguise, <strong>memory-bound</strong>; intensity ≈ sequences batched.<br>The serving problem: keep the GPU busy in decode without exhausting KV memory.</span></div>
     </div>
     <div>
       <svg viewBox="0 0 320 150" class="chart" style="width:100%;max-width:440px">
@@ -1201,6 +1280,7 @@
 <section data-background-color="#f6f8fb">
   <h2>References &amp; Links (3 / 3) — LLM Systems</h2>
   <ul class="small" style="line-height:1.5">
+    <li>Vaswani et al., "Attention Is All You Need," NeurIPS 2017; Radford et al., "Language Models are Unsupervised Multitask Learners" (GPT-2), 2019.</li>
     <li>Pope et al., "Efficiently Scaling Transformer Inference," MLSys 2023.</li>
     <li>Dao et al., "FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness," NeurIPS 2022; Dao, "FlashAttention-2," ICLR 2024.</li>
     <li>Kwon et al., "Efficient Memory Management for Large Language Model Serving with PagedAttention" (vLLM), SOSP 2023.</li>
