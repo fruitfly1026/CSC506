@@ -1,0 +1,1695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSC/ECE 506 · Parallel Deep Learning &amp; High-Performance (Multi-)Linear Algebra</title>
+
+<!-- reveal.js core (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<!-- code highlighting + math -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+<!-- fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<!-- course theme -->
+<link rel="stylesheet" href="assets/theme.css?v=11">
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============================ TITLE ============================ -->
+<section class="title-slide" data-background-color="#ffffff">
+  <div class="eyebrow">CSC / ECE 506 · Parallel Computer Architecture</div>
+  <h1>Lectures 23 &amp; 24</h1>
+  <div class="sub">Parallel Deep Learning &amp; High-Performance (Multi-)Linear Algebra</div>
+  <div class="sub" style="display:block;font-size:.72em;opacity:.72;margin-top:1.2em">Jiajia Li<br>Mon, Nov 16 &amp; Wed, Nov 18, 2026</div>
+  <aside class="notes">
+    Two lectures in one deck. Part I: deep learning is the workload driving today's largest parallel systems. We start with just enough
+    neural-network background (DNNs, SGD, CNNs, Transformers, GNNs), then spend most of our time on how
+    training is parallelized across many devices, close with model compression, and end with the systems
+    that serve LLMs (FlashAttention, PagedAttention, scheduling, speculative decoding).
+    Part II is an advanced topic that ties together threads from the whole course: the GEMM you tuned in the
+    midterm, the SpMV in the homeworks, GPU shared-memory tiling, and distributed SUMMA. The unifying idea
+    is that matrix multiply is just the 2-D case of a much larger family — multi-linear algebra on tensors.
+    The dense half surveys how the community reaches near-peak on dense tensor contractions; the sparse half
+    is my own research area, so we will spend real time on formats, kernels, and the systems built around them.
+  </aside>
+</section>
+
+<!-- Agenda -->
+<section data-background-color="#ffffff">
+  <h2>Agenda</h2>
+  <table style="font-size:.7em">
+    <tr><th style="width:24%">Part</th><th style="width:24%">Module</th><th>What we cover</th></tr>
+    <tr><td rowspan="7" class="hi"><strong>I. Parallel Deep Learning</strong><br>Lecture 23 · Mon, Nov 16<br><span class="tiny muted">Partition <em>data</em>, <em>layers</em> and <em>tensors</em>, then shrink the model.</span></td>
+        <td>1. Neural Networks</td><td>DNNs, SGD, CNNs, Transformers, GNNs.</td></tr>
+    <tr><td>2. Data Parallelism</td><td>Replicas, all-reduce, the memory wall.</td></tr>
+    <tr><td>3. Model &amp; Pipeline Parallelism</td><td>Split by layer into stages; placement, GPipe, 1F1B, the bubble.</td></tr>
+    <tr><td>4. Tensor Parallelism</td><td>Split the weight matrices inside a layer.</td></tr>
+    <tr><td>5. 3D Parallelism and Beyond</td><td>Combine the axes: DeepSpeed, then context and expert parallelism.</td></tr>
+    <tr><td>6. Model Compression</td><td>Pruning, quantization, low-rank.</td></tr>
+    <tr><td>7. LLM Systems</td><td>Prefill vs. decode, FlashAttention, PagedAttention (vLLM), batching and scheduling, speculative decoding.</td></tr>
+    <tr><td rowspan="5" class="hi"><strong>II. High-Performance (Multi-)Linear Algebra</strong><br>Lecture 24 · Wed, Nov 18<br><span class="tiny muted">Performance is <strong>reuse</strong>: dense code raises the primitive; sparse code must find it in the input.</span></td>
+        <td>8. Motivation</td><td>Why BLAS lifts vectors to matrices; tensors lift again. GEMM &rarr; batched &rarr; contraction; TTGT vs. GETT.</td></tr>
+    <tr><td>9. Dense frameworks</td><td>TBLIS, Cyclops (CTF), cuTENSOR, and Bientinesi's GETT / Linnea line of work.</td></tr>
+    <tr><td>10. Sparse tensors</td><td>Formats (COO, CSF, HiCOO), kernels (MTTKRP, SpTTM), and the systems built on them.</td></tr>
+    <tr><td>11. Decompositions and systems</td><td>CP &amp; Tucker and their hot inner loops; InTensLi, AdaTM, HiParTI, PASTA, Sparta.</td></tr>
+    <tr><td>12. Takeaways</td><td>What to remember from the dense and the sparse half.</td></tr>
+  </table>
+</section>
+
+<!-- ==================================================================
+     PART I — PARALLEL DEEP LEARNING
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Part I · Lecture 23 · Mon, Nov 16</div>
+  <div class="mod-title">Parallel Deep Learning</div>
+</section>
+
+<!-- ==================================================================
+     MODULE 1 — INTRODUCTION TO NEURAL NETWORKS
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 1</div>
+  <div class="mod-title">Introduction to Neural Networks</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Why Now? Three Ingredients</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Algorithms</span><span class="small">Most core techniques were invented in the 1980s–90s — backprop, conv nets, recurrent nets.</span></div>
+    <div class="callout"><span class="lbl">Big data</span><span class="small">Web-scale labeled datasets arrive in the 2000s.</span></div>
+    <div class="callout"><span class="lbl">Hardware</span><span class="small">GPUs / accelerators become widely available through the 2010s.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">For us</span>Old algorithms + huge data + parallel hardware = a <strong>systems</strong> problem. The interesting question is how to map this compute onto thousands of devices.</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Deep Neural Networks</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">DNN</span>A collection of simple, trainable mathematical units (neurons) composed into layers that together solve a complicated task.</div>
+      <p class="small">Each layer applies a linear map then a nonlinearity:</p>
+      <div class="eq small">\( h^{(\ell)} = \sigma\!\left( W^{(\ell)} h^{(\ell-1)} + b^{(\ell)} \right) \)</div>
+      <p class="small">The weights \(W^{(\ell)}\) are the <strong>parameters</strong> we learn. Modern models have <strong>billions</strong> of them — which is exactly why they no longer fit on one device.</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 300 220" class="chart" style="width:100%;max-width:440px">
+        <!-- layers of neurons -->
+        <g>
+          <circle cx="40" cy="50" r="11" fill="#3b82f6"/><circle cx="40" cy="100" r="11" fill="#3b82f6"/><circle cx="40" cy="150" r="11" fill="#3b82f6"/>
+          <circle cx="120" cy="35" r="11" fill="#fde68a" stroke="#b45309"/><circle cx="120" cy="80" r="11" fill="#fde68a" stroke="#b45309"/><circle cx="120" cy="125" r="11" fill="#fde68a" stroke="#b45309"/><circle cx="120" cy="170" r="11" fill="#fde68a" stroke="#b45309"/>
+          <circle cx="200" cy="35" r="11" fill="#fde68a" stroke="#b45309"/><circle cx="200" cy="80" r="11" fill="#fde68a" stroke="#b45309"/><circle cx="200" cy="125" r="11" fill="#fde68a" stroke="#b45309"/><circle cx="200" cy="170" r="11" fill="#fde68a" stroke="#b45309"/>
+          <circle cx="270" cy="80" r="11" fill="#CC0000"/><circle cx="270" cy="125" r="11" fill="#CC0000"/>
+        </g>
+        <g stroke="#cbd5e1" stroke-width="0.7" opacity="0.7">
+          <line x1="40" y1="50" x2="120" y2="35"/><line x1="40" y1="50" x2="120" y2="80"/><line x1="40" y1="100" x2="120" y2="125"/><line x1="40" y1="150" x2="120" y2="170"/>
+          <line x1="120" y1="80" x2="200" y2="35"/><line x1="120" y1="125" x2="200" y2="125"/><line x1="200" y1="80" x2="270" y2="80"/><line x1="200" y1="125" x2="270" y2="125"/>
+        </g>
+        <text x="40" y="200" text-anchor="middle" class="note">input</text>
+        <text x="160" y="200" text-anchor="middle" class="note">hidden layers</text>
+        <text x="270" y="200" text-anchor="middle" class="note">output</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Training: Gradient Descent</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Training minimizes a <strong>loss</strong> \(L(\theta)\) over parameters \(\theta\). Each step nudges \(\theta\) downhill along the gradient:</p>
+      <div class="eq small">\( \theta \leftarrow \theta - \eta \, \nabla_\theta L(\theta) \)</div>
+      <p class="small">\(\eta\) is the <strong>learning rate</strong>. The gradient is computed by <strong>backpropagation</strong> — a backward pass through the layers applying the chain rule.</p>
+      <div class="callout"><span class="lbl">Two passes</span><strong>Forward</strong> computes the loss; <strong>backward</strong> computes \(\nabla_\theta L\). Both are dense tensor algebra — perfect for accelerators.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 260 200" class="chart" style="width:100%;max-width:440px">
+        <path d="M20,180 Q130,-40 240,180" fill="none" stroke="#cbd5e1" stroke-width="2"/>
+        <circle cx="55" cy="120" r="6" fill="#CC0000"/>
+        <circle cx="85" cy="78" r="6" fill="#3b82f6"/>
+        <circle cx="115" cy="52" r="6" fill="#3b82f6"/>
+        <circle cx="130" cy="46" r="7" fill="#16a34a"/>
+        <g stroke="#16181d" stroke-width="1.3" marker-end="url(#ah)">
+          <line x1="55" y1="120" x2="82" y2="82"/>
+          <line x1="85" y1="78" x2="112" y2="56"/>
+        </g>
+        <defs><marker id="ah" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#16181d"/></marker></defs>
+        <text x="130" y="36" text-anchor="middle" class="note">minimum</text>
+        <text x="130" y="198" text-anchor="middle" class="note">loss surface L(θ)</text>
+      </svg>
+      <div class="src">Each step descends the loss landscape.</div>
+    </div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Stochastic Gradient Descent (SGD)</h2>
+  <div class="cols">
+    <div>
+      <div class="callout warn"><span class="lbl">Full-batch GD is too costly</span>Computing \(\nabla L\) over the <em>whole</em> dataset every step is impossibly slow at scale.</div>
+      <p class="small"><strong>SGD</strong> estimates the gradient from a small random <strong>mini-batch</strong> \(B\) of samples each step:</p>
+      <div class="eq small">\( \theta \leftarrow \theta - \eta \, \nabla_\theta L_B(\theta) \)</div>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Why it matters for parallelism</span>The mini-batch is what we <strong>split across GPUs</strong> in data parallelism — each device processes a slice of \(B\), then the gradients are averaged.</div>
+      <p class="tiny muted">Larger batches expose more parallelism but can hurt convergence — the batch size is itself a systems / accuracy trade-off.</p>
+    </div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>CNNs &amp; Convolution</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">CNN</span>A sequence of <strong>convolutional</strong> layers interspersed with pooling, normalization, and activations — dominant in vision.</div>
+      <p class="small">A small <strong>filter</strong> slides over the input; at each position it computes a weighted sum (a dot product). Weights are <strong>shared</strong> across positions, so far fewer parameters than a dense layer.</p>
+      <p class="tiny muted">Convolution is the compute hot-spot — usually lowered to dense matrix multiply (im2col + GEMM) on the GPU.</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 280 180" class="chart" style="width:100%;max-width:440px">
+        <!-- input grid -->
+        <g stroke="#cbd5e1" fill="#eff6ff">
+          <rect x="20" y="20" width="120" height="120"/>
+          <line x1="20" y1="50" x2="140" y2="50"/><line x1="20" y1="80" x2="140" y2="80"/><line x1="20" y1="110" x2="140" y2="110"/>
+          <line x1="50" y1="20" x2="50" y2="140"/><line x1="80" y1="20" x2="80" y2="140"/><line x1="110" y1="20" x2="110" y2="140"/>
+        </g>
+        <rect x="20" y="20" width="60" height="60" fill="#CC0000" opacity="0.25" stroke="#CC0000" stroke-width="2"/>
+        <text x="80" y="158" text-anchor="middle" class="note">input + sliding filter</text>
+        <!-- output -->
+        <rect x="190" y="50" width="60" height="60" fill="#fde68a" stroke="#b45309"/>
+        <line x1="140" y1="50" x2="190" y2="60" stroke="#16181d" stroke-width="1.3" marker-end="url(#ah2)"/>
+        <defs><marker id="ah2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#16181d"/></marker></defs>
+        <text x="220" y="128" text-anchor="middle" class="note">feature map</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Transformers: Self-Attention</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Each token is projected into <strong>query, key, value</strong> vectors. Attention weights every value by how well its key matches the query:</p>
+      <div class="eq small">\( \text{Attn}(Q,K,V) = \text{softmax}\!\left(\tfrac{QK^{\top}}{\sqrt{d_k}}\right) V \)</div>
+      <div class="callout"><span class="lbl">Multi-head</span>Run <em>h</em> attention computations in parallel on different projections, then concatenate. Heads are an obvious axis to <strong>partition across devices</strong>.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 260 200" class="chart" style="width:100%;max-width:440px">
+        <rect x="20" y="20" width="50" height="26" rx="4" fill="#3b82f6"/><text x="45" y="38" text-anchor="middle" fill="#fff" class="lbl">Q</text>
+        <rect x="105" y="20" width="50" height="26" rx="4" fill="#3b82f6"/><text x="130" y="38" text-anchor="middle" fill="#fff" class="lbl">K</text>
+        <rect x="190" y="20" width="50" height="26" rx="4" fill="#3b82f6"/><text x="215" y="38" text-anchor="middle" fill="#fff" class="lbl">V</text>
+        <rect x="55" y="80" width="80" height="26" rx="4" fill="#fde68a" stroke="#b45309"/><text x="95" y="98" text-anchor="middle" class="lbl">QKᵀ / √dₖ</text>
+        <rect x="55" y="120" width="80" height="26" rx="4" fill="#fde68a" stroke="#b45309"/><text x="95" y="138" text-anchor="middle" class="lbl">softmax</text>
+        <rect x="80" y="162" width="100" height="26" rx="4" fill="#CC0000"/><text x="130" y="180" text-anchor="middle" fill="#fff" class="lbl">weighted V</text>
+        <g stroke="#16181d" stroke-width="1.1">
+          <line x1="45" y1="46" x2="80" y2="80"/><line x1="130" y1="46" x2="110" y2="80"/>
+          <line x1="95" y1="106" x2="95" y2="120"/><line x1="95" y1="146" x2="120" y2="162"/>
+          <line x1="215" y1="46" x2="160" y2="162"/>
+        </g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Graph Neural Networks (GNNs)</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">GNN</span>Neural networks on <strong>relational</strong> data — nodes and edges. Each layer <strong>aggregates</strong> messages from a node's neighbors, then transforms them.</div>
+      <p class="small">Computation alternates between a sparse <strong>aggregate</strong> (gather over neighbors) and a dense <strong>update</strong> (a small MLP per node).</p>
+      <div class="callout warn"><span class="lbl">Hard on GPUs</span>The aggregation is <strong>irregular &amp; sparse</strong> — poor locality and load imbalance, unlike the dense GEMMs in CNNs/Transformers.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 200" class="chart" style="width:100%;max-width:440px">
+        <g stroke="#94a3b8" stroke-width="1.4">
+          <line x1="120" y1="100" x2="60" y2="50"/><line x1="120" y1="100" x2="190" y2="60"/>
+          <line x1="120" y1="100" x2="70" y2="160"/><line x1="120" y1="100" x2="180" y2="150"/>
+          <line x1="60" y1="50" x2="190" y2="60"/>
+        </g>
+        <circle cx="120" cy="100" r="16" fill="#CC0000"/><text x="120" y="105" text-anchor="middle" fill="#fff" class="lbl">v</text>
+        <circle cx="60" cy="50" r="13" fill="#3b82f6"/><circle cx="190" cy="60" r="13" fill="#3b82f6"/>
+        <circle cx="70" cy="160" r="13" fill="#3b82f6"/><circle cx="180" cy="150" r="13" fill="#3b82f6"/>
+        <text x="120" y="192" text-anchor="middle" class="note">aggregate neighbors → update v</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>The Rising Compute Demand</h2>
+  <p class="small">Model size and training FLOPs have grown far faster than the memory and throughput of a single accelerator.</p>
+  <div class="callout warn"><span class="lbl">Two walls</span><strong>Memory:</strong> parameters + activations + optimizer state exceed one GPU.<br><strong>Time:</strong> one device would take months.</div>
+  <div class="callout takeaway"><span class="lbl">Consequence</span>Large-scale training is now <strong>fundamentally parallel</strong> — the rest of this lecture is how.</div>
+</section>
+
+
+
+<!-- ==================================================================
+     MODULE 2 — DATA PARALLELISM
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 2</div>
+  <div class="mod-title">Data Parallelism</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Three Ways to Decompose</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Data parallelism</span><span class="small">Split the <strong>batch</strong> across devices. Each holds a full model replica → independent tasks per device.</span></div>
+    <div class="callout"><span class="lbl">Model parallelism</span><span class="small">Split the <strong>model</strong> (neurons / tensors) across devices → independent or dependent tasks.</span></div>
+    <div class="callout"><span class="lbl">Pipeline (layer)</span><span class="small">Split by <strong>layers</strong> into stages → a chain of <em>dependent</em> tasks.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Big picture</span>These are <strong>orthogonal</strong> axes — real large-scale training combines all three (we get there in Module 5).</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Data Parallelism</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">Idea</span>Replicate the <strong>full model</strong> on every device. Each device gets a different shard of the mini-batch, runs forward + backward locally, then <strong>average gradients</strong>.</div>
+      <div class="code-label">Per-step, per device <em>p</em></div>
+      <pre><code class="language-python" data-trim>
+shard = batch[p]                # disjoint slice
+loss  = forward(model, shard)
+g_p   = backward(loss)          # local gradients
+g     = all_reduce(g_p, SUM) / P  # average across P devices
+model = optimizer.step(model, g)  # identical update
+</code></pre>
+      <p class="tiny muted">After the all-reduce every replica applies the <strong>same</strong> averaged gradient, so all replicas stay in sync.</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 260 220" class="chart" style="width:100%;max-width:440px">
+        <g>
+          <rect x="20" y="20" width="60" height="40" rx="5" fill="#3b82f6"/><text x="50" y="44" text-anchor="middle" fill="#fff" class="lbl">GPU 0</text>
+          <rect x="100" y="20" width="60" height="40" rx="5" fill="#3b82f6"/><text x="130" y="44" text-anchor="middle" fill="#fff" class="lbl">GPU 1</text>
+          <rect x="180" y="20" width="60" height="40" rx="5" fill="#3b82f6"/><text x="210" y="44" text-anchor="middle" fill="#fff" class="lbl">GPU 2</text>
+        </g>
+        <g class="note" text-anchor="middle">
+          <text x="50" y="78">model</text><text x="130" y="78">model</text><text x="210" y="78">model</text>
+        </g>
+        <rect x="20" y="150" width="220" height="28" rx="5" fill="#CC0000"/>
+        <text x="130" y="168" text-anchor="middle" fill="#fff" class="lbl">all-reduce gradients</text>
+        <g stroke="#16181d" stroke-width="1.3">
+          <line x1="50" y1="90" x2="50" y2="150"/><line x1="130" y1="90" x2="130" y2="150"/><line x1="210" y1="90" x2="210" y2="150"/>
+        </g>
+        <text x="130" y="205" text-anchor="middle" class="note">different batch shard per GPU</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>The Memory Issue with Data Parallelism</h2>
+  <div class="cols">
+    <div>
+      <div class="callout warn"><span class="lbl">The catch</span>Every GPU stores a <strong>replica of the entire model</strong> — parameters, gradients, <em>and</em> optimizer state.</div>
+      <p class="small">Data parallelism scales <strong>throughput</strong> (more samples/sec), but <strong>not capacity</strong>. If the model doesn't fit on one GPU, replication doesn't help.</p>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Consequence</span>Cannot train models larger than a single device's memory by data parallelism alone.</div>
+      <p class="small">This is exactly the gap that <strong>model</strong>, <strong>tensor</strong>, and <strong>pipeline</strong> parallelism fill — they split the model so no one device must hold all of it.</p>
+    </div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>ZeRO &amp; FSDP: Shard the Replica</h2>
+  <div class="symkey">
+    <span><b>ZeRO</b> = Zero Redundancy Optimizer (DeepSpeed)</span>
+    <span><b>FSDP</b> = Fully Sharded Data Parallel (PyTorch)</span>
+    <span><b>Ψ</b> = #parameters</span>
+    <span><b>N</b> = #GPUs</span>
+  </div>
+  <p class="small">Mixed-precision Adam keeps 16 bytes per parameter, so <strong>16Ψ bytes</strong> on <em>every</em> replica:<br>FP16 weight + gradient (4 B), FP32 master weight + momentum + variance (12 B).</p>
+  <table style="font-size:.76em">
+    <tr><th>Scheme</th><th>What is sharded</th><th>Memory / GPU</th><th>Example: Ψ = 7.5B, N = 64</th></tr>
+    <tr><td>Plain data parallel</td><td>nothing</td><td>\(16\Psi\)</td><td>120 GB</td></tr>
+    <tr><td>ZeRO-1</td><td>optimizer state</td><td>\(4\Psi + 12\Psi/N\)</td><td>31.4 GB</td></tr>
+    <tr><td>ZeRO-2</td><td>+ gradients</td><td>\(2\Psi + 14\Psi/N\)</td><td>16.6 GB</td></tr>
+    <tr><td class="hi">ZeRO-3 / FSDP</td><td class="hi">+ parameters</td><td class="hi">\(16\Psi/N\)</td><td class="hi">1.9 GB</td></tr>
+  </table>
+  <div class="callout ok"><span class="lbl">Stage 3 is still data parallelism</span><span class="small">Parameters are all-gathered just before a layer runs and freed after; gradients are reduce-scattered to their owner. Each rank still runs every layer on its own batch. FSDP is PyTorch's stage 3; Llama 3 used it for data parallelism.</span></div>
+  <div class="src">Rajbhandari et al., "ZeRO," SC 2020; Zhao et al., "PyTorch FSDP," VLDB 2023.</div>
+</section>
+
+<!-- ==================================================================
+     MODULE 3 — MODEL & PIPELINE PARALLELISM
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 3</div>
+  <div class="mod-title">Model &amp; Pipeline Parallelism</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Model Parallelism: Two Ways to Split</h2>
+  <p class="small">Model parallelism splits the model itself across devices, so no GPU holds the full model. In data parallelism every GPU runs the full model on different data.</p>
+  <table style="font-size:.8em">
+    <tr><th>Kind</th><th>How it splits</th><th>Each GPU holds</th><th>Communication</th></tr>
+    <tr><td><strong>Pipeline parallelism</strong><br>(inter-layer)</td><td>By layer: GPU 0 runs the first layers, GPU 1 the next ones</td><td>All parameters of some layers</td><td>Activations at the cuts only: small, point-to-point</td></tr>
+    <tr><td><strong>Tensor parallelism</strong><br>(intra-layer)</td><td>Inside every layer: each weight matrix is split across GPUs</td><td>\(1/N\) of every layer's parameters</td><td>All-reduce inside every layer: large, frequent</td></tr>
+  </table>
+  <div class="callout"><span class="lbl">Naming</span><span class="small">"Model parallelism" covers both. Older work often uses it for the layer or subgraph split alone, so today the two are usually named separately: 3D parallelism = data, tensor, pipeline.</span></div>
+  <div class="src">Shoeybi et al., "Megatron-LM," 2019; Huang et al., "GPipe," NeurIPS 2019.</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Model Parallelism</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">Idea</span>Split the model into <strong>subgraphs</strong> and assign each to a different device. Each device holds only <em>part</em> of the parameters.</div>
+      <p class="small">A simple form divides the <strong>neurons within each layer</strong>, or assigns whole layers/branches to different devices. Capacity now scales with the number of devices.</p>
+      <div class="callout warn"><span class="lbl">Cost</span>Devices must <strong>exchange activations</strong> at every cut in the graph — communication is on the critical path.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 260 200" class="chart" style="width:100%;max-width:440px">
+        <rect x="20" y="20" width="100" height="160" rx="6" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text x="70" y="16" text-anchor="middle" class="note" fill="#3b82f6">GPU 0</text>
+        <rect x="140" y="20" width="100" height="160" rx="6" fill="none" stroke="#CC0000" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text x="190" y="16" text-anchor="middle" class="note" fill="#CC0000">GPU 1</text>
+        <g>
+          <circle cx="55" cy="55" r="9" fill="#3b82f6"/><circle cx="55" cy="100" r="9" fill="#3b82f6"/><circle cx="55" cy="145" r="9" fill="#3b82f6"/>
+          <circle cx="95" cy="78" r="9" fill="#3b82f6"/><circle cx="95" cy="122" r="9" fill="#3b82f6"/>
+          <circle cx="165" cy="78" r="9" fill="#CC0000"/><circle cx="165" cy="122" r="9" fill="#CC0000"/>
+          <circle cx="210" cy="100" r="9" fill="#CC0000"/>
+        </g>
+        <g stroke="#94a3b8" stroke-width="0.8">
+          <line x1="55" y1="55" x2="95" y2="78"/><line x1="55" y1="100" x2="95" y2="122"/>
+          <line x1="165" y1="78" x2="210" y2="100"/><line x1="165" y1="122" x2="210" y2="100"/>
+        </g>
+        <line x1="95" y1="100" x2="165" y2="100" stroke="#16181d" stroke-width="1.6" marker-end="url(#ah3)"/>
+        <defs><marker id="ah3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#16181d"/></marker></defs>
+        <text x="130" y="95" text-anchor="middle" class="note">activations</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Device Placement is Hard</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Given a computation graph and a set of heterogeneous devices, <strong>which op goes where?</strong> The space is combinatorial, and the objective (step time) depends on compute, memory limits, and communication.</p>
+      <div class="callout"><span class="lbl">A research angle</span>Use <strong>ML to optimize placement for ML</strong> — e.g. reinforcement learning that learns to assign graph nodes to devices to minimize runtime (Mirhoseini et al.).</div>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Combine the axes</span>In practice we <strong>mix data and model parallelism</strong>: replicate some parts across groups while splitting others within a group.</div>
+      <p class="tiny muted">Hand-tuned placement dominates production systems; learned placement is promising but expensive to search.</p>
+    </div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Pipeline (Layer) Parallelism</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">Idea</span>Partition the layers into sequential <strong>stages</strong>, one per device. Stage <em>i</em>'s output feeds stage <em>i</em>+1 — a chain of <strong>dependent</strong> tasks.</div>
+      <p class="small">Naively, only one stage is active at a time and the others sit idle. <strong>GPipe</strong> fixes this by splitting each mini-batch into <strong>micro-batches</strong> that flow through the pipeline back-to-back.</p>
+      <p class="tiny muted">"GPipe: Efficient Training of Giant Neural Networks using Pipeline Parallelism."</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 260 180" class="chart" style="width:100%;max-width:440px">
+        <g>
+          <rect x="30" y="30" width="60" height="30" rx="4" fill="#3b82f6"/><text x="60" y="50" text-anchor="middle" fill="#fff" class="lbl">Stage 0</text>
+          <rect x="30" y="75" width="60" height="30" rx="4" fill="#3b82f6"/><text x="60" y="95" text-anchor="middle" fill="#fff" class="lbl">Stage 1</text>
+          <rect x="30" y="120" width="60" height="30" rx="4" fill="#3b82f6"/><text x="60" y="140" text-anchor="middle" fill="#fff" class="lbl">Stage 2</text>
+        </g>
+        <g class="note" text-anchor="middle">
+          <text x="150" y="50">GPU 0</text><text x="150" y="95">GPU 1</text><text x="150" y="140">GPU 2</text>
+        </g>
+        <g stroke="#CC0000" stroke-width="1.6" marker-end="url(#ah4)">
+          <line x1="60" y1="60" x2="60" y2="75"/><line x1="60" y1="105" x2="60" y2="120"/>
+        </g>
+        <defs><marker id="ah4" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#CC0000"/></marker></defs>
+        <text x="200" y="95" text-anchor="middle" class="note" transform="rotate(90 200 95)">activations flow down</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Device Utilization: the Bubble</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout warn"><span class="lbl">The bubble</span>At pipeline fill and drain, some stages have nothing to do. That idle time is the <strong>pipeline bubble</strong> — pure overhead.</div>
+      <p class="small">With <em>m</em> micro-batches and <em>p</em> stages, the bubble fraction is roughly \(\tfrac{p-1}{m+p-1}\). <strong>More micro-batches → smaller relative bubble</strong>, but more in-flight activations.</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 280 160" class="chart" style="width:100%;max-width:440px">
+        <!-- 3 stage rows, time across -->
+        <g font-size="8">
+          <text x="8" y="35" class="note">S0</text><text x="8" y="65" class="note">S1</text><text x="8" y="95" class="note">S2</text>
+        </g>
+        <!-- stage 0 -->
+        <rect x="25" y="25" width="22" height="18" fill="#3b82f6"/><rect x="48" y="25" width="22" height="18" fill="#3b82f6"/><rect x="71" y="25" width="22" height="18" fill="#3b82f6"/>
+        <!-- stage 1 -->
+        <rect x="48" y="55" width="22" height="18" fill="#3b82f6"/><rect x="71" y="55" width="22" height="18" fill="#3b82f6"/><rect x="94" y="55" width="22" height="18" fill="#3b82f6"/>
+        <!-- stage 2 -->
+        <rect x="71" y="85" width="22" height="18" fill="#3b82f6"/><rect x="94" y="85" width="22" height="18" fill="#3b82f6"/><rect x="117" y="85" width="22" height="18" fill="#3b82f6"/>
+        <!-- bubbles -->
+        <rect x="25" y="55" width="23" height="18" fill="#fca5a5"/><rect x="25" y="85" width="46" height="18" fill="#fca5a5"/>
+        <rect x="94" y="25" width="45" height="18" fill="#fca5a5"/><rect x="117" y="55" width="22" height="18" fill="#fca5a5"/>
+        <text x="160" y="35" class="note">█ work</text>
+        <text x="160" y="55" class="note" fill="#CC0000">█ bubble (idle)</text>
+        <text x="80" y="125" text-anchor="middle" class="note">time →</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>1F1B &amp; Interleaved Schedules</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Memory problem</span>GPipe runs <em>all</em> forwards, then all backwards — so it must keep activations for <strong>every</strong> in-flight micro-batch. Memory grows with micro-batch count.</div>
+      <div class="callout takeaway"><span class="lbl">1F1B</span>"One-forward-one-backward": once the pipe is full, each stage <strong>alternates</strong> a forward and a backward. Backward frees activations early, so peak memory stays <strong>bounded</strong>.</div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Interleaved 1F1B</span>Give each device <strong>multiple non-contiguous stages</strong> (model chunks). This shrinks the bubble further at the cost of more communication.</div>
+      <p class="small">Same total work, finer-grained schedule → higher utilization. Used in large-model training frameworks (e.g. Megatron / DeepSpeed).</p>
+    </div>
+  </div>
+</section>
+
+<!-- ==================================================================
+     MODULE 4 — TENSOR PARALLELISM
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 4</div>
+  <div class="mod-title">Tensor Parallelism</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Tensor Model Parallelism</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">Idea</span>Partition the <strong>parameters / gradients within a single layer</strong> across devices — split the weight matrix itself, not whole layers.</div>
+      <p class="small">A matmul \(Y = XW\) splits \(W\) by columns: each device computes a slice \(Y_i = X W_i\), then the slices are concatenated (an all-gather). Splitting \(W\) by rows instead gives partial sums that need an all-reduce. The whole team cooperates on <strong>one</strong> layer.</p>
+      <div class="callout warn"><span class="lbl">Trade-off</span>Fine-grained → frequent collective communication; best kept <strong>within a fast interconnect</strong> (a single node / NVLink).</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 260 180" class="chart" style="width:100%;max-width:440px">
+        <rect x="20" y="60" width="40" height="60" fill="#cbd5e1"/><text x="40" y="138" text-anchor="middle" class="lbl">X</text>
+        <text x="72" y="95" text-anchor="middle" class="lbl">×</text>
+        <rect x="90" y="40" width="35" height="100" fill="#3b82f6"/><text x="107" y="160" text-anchor="middle" class="lbl">W₀</text>
+        <rect x="128" y="40" width="35" height="100" fill="#CC0000"/><text x="145" y="160" text-anchor="middle" class="lbl">W₁</text>
+        <text x="178" y="95" text-anchor="middle" class="lbl">=</text>
+        <rect x="195" y="40" width="22" height="100" fill="#3b82f6"/><rect x="219" y="40" width="22" height="100" fill="#CC0000"/>
+        <text x="218" y="160" text-anchor="middle" class="lbl">Y</text>
+        <text x="130" y="22" text-anchor="middle" class="note">split W by columns across GPUs</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Data vs. Tensor Model Parallelism</h2>
+  <table style="font-size:.82em">
+    <tr><th></th><th>Data parallelism</th><th>Tensor model parallelism</th></tr>
+    <tr><td class="hi">What is split</td><td>the mini-batch</td><td>the weight tensors within a layer</td></tr>
+    <tr><td class="hi">Per device holds</td><td>a <strong>full</strong> model replica</td><td>a <strong>shard</strong> of each layer</td></tr>
+    <tr><td>Scales</td><td>throughput (samples/sec)</td><td>model capacity (params)</td></tr>
+    <tr><td>Communication</td><td>gradient all-reduce, once per step</td><td>activation collectives, every layer</td></tr>
+    <tr><td>Best across</td><td>nodes (less frequent comm)</td><td>within a node (fast interconnect)</td></tr>
+  </table>
+  <div class="callout takeaway"><span class="lbl">Rule of thumb</span>Data parallelism when the model <em>fits</em> and you want speed; tensor parallelism when a single layer is too big for one device.</div>
+</section>
+
+
+
+<!-- ==================================================================
+     MODULE 5 — 3D PARALLELISM
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 5</div>
+  <div class="mod-title">3D Parallelism and Beyond</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Summary: Data / Model / Pipeline</h2>
+  <table style="font-size:.8em">
+    <tr><th>Axis</th><th>Splits</th><th>Comm pattern</th><th>Scales</th></tr>
+    <tr><td class="hi">Data</td><td>the batch</td><td>gradient all-reduce / step</td><td>throughput</td></tr>
+    <tr><td class="hi">Tensor (model)</td><td>weights within a layer</td><td>activation collectives / layer</td><td>layer size</td></tr>
+    <tr><td class="hi">Pipeline</td><td>layers into stages</td><td>activations between stages</td><td>depth / # layers</td></tr>
+  </table>
+  <div class="callout"><span class="lbl">They compose</span>Each axis splits a <strong>different dimension</strong> of the problem, so they multiply: \(N_{\text{devices}} = d \times t \times p\).</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Example: 3D Parallelism in DeepSpeed</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">DeepSpeed combines all three axes to train models with hundreds of billions of parameters:</p>
+      <div class="callout"><span class="lbl">Tensor</span><span class="small">Within a node (NVLink) — finest-grained, most communication.</span></div>
+      <div class="callout"><span class="lbl">Pipeline</span><span class="small">Across nodes — coarse, bandwidth-light boundaries.</span></div>
+      <div class="callout"><span class="lbl">Data</span><span class="small">Replicate the whole 2D grid; all-reduce once per step.</span></div>
+      <p class="tiny muted">Source: Microsoft Research — "DeepSpeed: Extreme-scale model training for everyone."</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 260 200" class="chart" style="width:100%;max-width:440px">
+        <!-- grid: rows = pipeline stages, cols = tensor shards; two replicas -->
+        <g>
+          <rect x="20" y="30" width="100" height="120" fill="none" stroke="#3b82f6" stroke-width="1.5"/>
+          <text x="70" y="22" text-anchor="middle" class="note" fill="#3b82f6">replica 0</text>
+          <g fill="#cbd5e1" stroke="#94a3b8">
+            <rect x="30" y="40" width="35" height="30"/><rect x="70" y="40" width="35" height="30"/>
+            <rect x="30" y="75" width="35" height="30"/><rect x="70" y="75" width="35" height="30"/>
+            <rect x="30" y="110" width="35" height="30"/><rect x="70" y="110" width="35" height="30"/>
+          </g>
+          <text x="47" y="168" text-anchor="middle" class="note">tensor →</text>
+          <text x="10" y="95" text-anchor="middle" class="note" transform="rotate(-90 10 95)">pipeline ↓</text>
+        </g>
+        <rect x="150" y="30" width="100" height="120" fill="none" stroke="#CC0000" stroke-width="1.5"/>
+        <text x="200" y="22" text-anchor="middle" class="note" fill="#CC0000">replica 1</text>
+        <g fill="#fde68a" stroke="#b45309">
+          <rect x="160" y="40" width="35" height="30"/><rect x="200" y="40" width="35" height="30"/>
+          <rect x="160" y="75" width="35" height="30"/><rect x="200" y="75" width="35" height="30"/>
+          <rect x="160" y="110" width="35" height="30"/><rect x="200" y="110" width="35" height="30"/>
+        </g>
+        <text x="135" y="185" text-anchor="middle" class="note">data parallel across replicas</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+
+
+<section data-background-color="#ffffff">
+  <h2>Beyond 3D: Context &amp; Expert Parallelism (4D / 5D)</h2>
+  <div class="cols">
+    <div class="callout"><span class="lbl">Context (sequence) parallelism</span><span class="small">Split one sample's <strong>sequence</strong> across devices. Feed-forward is per-token, but attention needs every key/value, so devices pass K/V blocks around a ring (Ring Attention). Scales <strong>context length</strong>.</span></div>
+    <div class="callout"><span class="lbl">Expert parallelism</span><span class="small">A mixture-of-experts (MoE) layer routes each token to a few of many <strong>experts</strong>; put experts on different devices and move tokens with an <strong>all-to-all</strong>. Scales <strong>parameters</strong> without more FLOPs per token.</span></div>
+  </div>
+  <table style="font-size:.74em">
+    <tr><th>Axis</th><th>Splits</th><th>Comm pattern</th><th>Scales</th></tr>
+    <tr><td>Data</td><td>the batch</td><td>gradient all-reduce</td><td>throughput</td></tr>
+    <tr><td>Tensor</td><td>weights within a layer</td><td>all-gather / all-reduce per layer</td><td>layer size</td></tr>
+    <tr><td>Pipeline</td><td>layers into stages</td><td>point-to-point between stages</td><td>depth</td></tr>
+    <tr><td class="hi">Context</td><td class="hi">the sequence</td><td class="hi">K/V ring or all-to-all in attention</td><td class="hi">context length</td></tr>
+    <tr><td class="hi">Expert</td><td class="hi">MoE experts</td><td class="hi">token all-to-all</td><td class="hi">parameters (MoE)</td></tr>
+  </table>
+  <p class="tiny muted">In use: Llama 3 trained with 4D (tensor, pipeline, context, data); DeepSeek-V3 with pipeline, 64-way expert and ZeRO data parallelism; Megatron-Core supports all five.</p>
+  <div class="src">Llama 3 report (Meta, 2024); DeepSeek-V3 technical report (2024); Liu et al., Ring Attention (2023); Lepikhin et al., GShard (ICLR 2021); NVIDIA Megatron-Core documentation.</div>
+</section>
+
+<!-- ==================================================================
+     MODULE 6 — MODEL COMPRESSION
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 6</div>
+  <div class="mod-title">Model Compression</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Why Compress?</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Goal</span>Produce a <strong>simplified model</strong> — fewer / smaller parameters, lower inference latency — <strong>without</strong> significantly diminished accuracy.</div>
+      <p class="small">Size and speed usually improve <strong>together</strong>: a smaller model moves less data and does less arithmetic.</p>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Three methods</span><span class="small"><strong>Sparsification (pruning)</strong>, <strong>Quantization</strong>, <strong>Low-rank approximation</strong>.</span></div>
+      <p class="tiny muted">Especially important for inference at the edge, where memory, latency, and energy are all constrained.</p>
+    </div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Pruning (Sparsification)</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">Premise</span>Networks tend to be <strong>over-parameterized</strong> — many weights contribute little. Remove them to save space, time, and energy.</div>
+      <p class="small">Today's sparsity methods reach a <strong>10–100×</strong> (up to ~two-orders-of-magnitude) reduction in model size with little accuracy loss.</p>
+      <div class="src">Hoefler et al., "Sparsity in Deep Learning," JMLR 22, 2021.</div>
+      <div class="callout warn"><span class="lbl">Accuracy curve</span>Light pruning can even <em>improve accuracy</em> (it acts as a regularizer); a wide middle range stays stable; past a point accuracy <strong>drops</strong> — and where that point is depends on the network.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 180" class="chart" style="width:100%;max-width:440px">
+        <g stroke="#cbd5e1" stroke-width="1.2" opacity="0.5">
+          <line x1="30" y1="40" x2="120" y2="30"/><line x1="30" y1="40" x2="120" y2="90"/><line x1="30" y1="90" x2="120" y2="30"/><line x1="30" y1="90" x2="120" y2="150"/><line x1="30" y1="140" x2="120" y2="90"/><line x1="30" y1="140" x2="120" y2="150"/>
+        </g>
+        <g stroke="#CC0000" stroke-width="2">
+          <line x1="150" y1="40" x2="210" y2="55"/><line x1="150" y1="100" x2="210" y2="110"/>
+        </g>
+        <g fill="#3b82f6">
+          <circle cx="30" cy="40" r="8"/><circle cx="30" cy="90" r="8"/><circle cx="30" cy="140" r="8"/>
+          <circle cx="120" cy="30" r="8"/><circle cx="120" cy="90" r="8"/><circle cx="120" cy="150" r="8"/>
+          <circle cx="150" cy="40" r="8"/><circle cx="150" cy="100" r="8"/>
+          <circle cx="210" cy="55" r="8"/><circle cx="210" cy="110" r="8"/>
+        </g>
+        <text x="120" y="172" text-anchor="middle" class="note">dense → pruned (connections &amp; neurons)</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>What, When &amp; How to Sparsify</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">What</span><span class="small"><strong>Model</strong> sparsity (neuron / filter / head — fixed pattern across passes) vs. <strong>ephemeral</strong> sparsity (activations, gradients — per example).</span></div>
+    <div class="callout"><span class="lbl">When</span><span class="small"><strong>Train-then-sparsify</strong> (then fine-tune), <strong>sparsify-during-training</strong>, or <strong>fully-sparse</strong> training from the start.</span></div>
+    <div class="callout"><span class="lbl">How</span><span class="small"><strong>Static</strong> (prune once, fixed) vs. <strong>dynamic</strong> (prune &amp; regrow during training).</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Structured vs. unstructured</span><strong>Unstructured</strong> removes individual weights → highest compression but irregular. <strong>Structured</strong> removes whole neurons / filters / heads → less compression but <strong>hardware-friendly</strong> dense kernels.</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Sparse Storage Formats</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Once a matrix is sparse, storing every zero is wasteful. Sparse formats store only the <strong>m nonzeros</strong> plus index metadata.</p>
+      <div class="callout"><span class="lbl">COO</span>Triples <code class="inline">(row, col, value)</code> per nonzero — simple, easy to build, good for construction.</div>
+      <div class="callout"><span class="lbl">CSR</span>Compressed Sparse Row: <code class="inline">values</code> + <code class="inline">col_idx</code> + <code class="inline">row_ptr</code>. Less index overhead, fast row traversal for SpMV.</div>
+      <p class="tiny muted">Simpler schemes (bitmap, delta) trade index size against random-access cost.</p>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 250 200" class="chart" style="width:100%;max-width:440px">
+        <!-- 4x4 matrix -->
+        <g font-size="9" text-anchor="middle">
+          <rect x="20" y="20" width="100" height="100" fill="none" stroke="#cbd5e1"/>
+          <rect x="20" y="20" width="25" height="25" fill="#CC0000"/><text x="32" y="37" fill="#fff">5</text>
+          <rect x="70" y="45" width="25" height="25" fill="#CC0000"/><text x="82" y="62" fill="#fff">8</text>
+          <rect x="95" y="70" width="25" height="25" fill="#CC0000"/><text x="107" y="87" fill="#fff">3</text>
+          <rect x="45" y="95" width="25" height="25" fill="#CC0000"/><text x="57" y="112" fill="#fff">6</text>
+        </g>
+        <g font-size="9">
+          <text x="20" y="150" class="note">COO  row=[0,1,2,3]</text>
+          <text x="38" y="164" class="note">col=[0,2,3,1]</text>
+          <text x="38" y="178" class="note">val=[5,8,3,6]</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Quantization</h2>
+  <div class="symkey">
+    <span><b>PTQ</b> = post-training quantization</span>
+    <span><b>QAT</b> = quantization-aware training</span>
+  </div>
+  <div class="cols" style="grid-template-columns:11fr 9fr">
+    <div>
+      <div class="callout"><span class="lbl">Idea</span>Store and compute weights (and activations) in <strong>fewer bits</strong>: FP32 → FP16/BF16 → INT8 → 4-bit, via a scale and zero point, \(x \approx s\,(q - z)\).</div>
+      <div class="callout ok"><span class="lbl">Why it pays</span><span class="small">Fewer bytes per weight means less <strong>memory traffic</strong>, which bounds inference; matrix engines also run faster at low precision.</span></div>
+      <div class="callout warn"><span class="lbl">Risk and remedies</span><span class="small">Accuracy loss, mostly from <strong>outliers</strong> that stretch the scale. Remedies: per-channel or per-group scales; keep outliers in higher precision; <strong>QAT</strong> trains with rounding in the loop.</span></div>
+    </div>
+    <div>
+      <table style="font-size:.8em">
+        <tr><th>Format</th><th>Bytes / param</th><th>7B-param model</th></tr>
+        <tr><td>FP32</td><td>4</td><td>28 GB</td></tr>
+        <tr><td>FP16 / BF16</td><td>2</td><td>14 GB</td></tr>
+        <tr><td class="hi">INT8</td><td class="hi">1</td><td class="hi">7 GB</td></tr>
+        <tr><td class="hi">INT4</td><td class="hi">0.5</td><td class="hi">3.5 GB</td></tr>
+      </table>
+      <p class="tiny muted">Weight-only quantization is the common choice for LLM inference: weights dominate memory traffic, activations stay in 16-bit.</p>
+    </div>
+  </div>
+  <div class="src">Jacob et al., CVPR 2018 (integer-arithmetic inference); Dettmers et al., LLM.int8(), NeurIPS 2022; Frantar et al., GPTQ, ICLR 2023.</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Low-Rank Approximation</h2>
+  <div class="cols" style="grid-template-columns:11fr 9fr">
+    <div>
+      <div class="callout"><span class="lbl">Idea</span>Replace a big weight matrix \(W\) by a product of two thin matrices, \(W \approx U V\), with rank \(r \ll n\). Storage and FLOPs drop from \(n^2\) to \(2nr\).</div>
+      <div class="eq small">\( n \times n \;\rightarrow\; n\,r + r\,n \)</div>
+      <div class="callout"><span class="lbl">How to get it</span><span class="small">Truncated <strong>SVD</strong> of a trained weight, or train the layer in factored form. Works when singular values decay fast.</span></div>
+      <div class="callout ok"><span class="lbl">LoRA: low-rank for fine-tuning</span><span class="small">Freeze \(W\); train a low-rank update \(\Delta W = BA\) with \(r\) of 8 to 64. Far fewer trainable parameters, and \(BA\) merges into \(W\) after training: no inference cost.</span></div>
+    </div>
+    <div>
+      <svg viewBox="0 0 260 130" class="chart" style="width:100%;max-width:440px">
+        <rect x="10" y="20" width="80" height="80" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.5"/>
+        <text x="50" y="65" text-anchor="middle" class="lbl">W</text>
+        <text x="50" y="112" text-anchor="middle" class="tiny">n × n</text>
+        <text x="105" y="65" text-anchor="middle" class="lbl">≈</text>
+        <rect x="120" y="20" width="22" height="80" fill="#fde68a" stroke="#b45309" stroke-width="1.5"/>
+        <text x="131" y="65" text-anchor="middle" class="lbl">U</text>
+        <text x="131" y="112" text-anchor="middle" class="tiny">n × r</text>
+        <text x="156" y="65" text-anchor="middle" class="lbl">·</text>
+        <rect x="170" y="20" width="80" height="22" fill="#fde68a" stroke="#b45309" stroke-width="1.5"/>
+        <text x="210" y="35" text-anchor="middle" class="lbl">V</text>
+        <text x="210" y="56" text-anchor="middle" class="tiny">r × n</text>
+        <text x="130" y="126" text-anchor="middle" class="tiny" style="fill:#64748b">two thin factors replace one square matrix</text>
+      </svg>
+      <p class="tiny muted">Same idea as the CP and Tucker decompositions in Part II (Module 11): a low-rank factorization is compression.</p>
+    </div>
+  </div>
+  <div class="src">Denton et al., NeurIPS 2014 (low-rank expansions of conv nets); Hu et al., "LoRA: Low-Rank Adaptation of Large Language Models," ICLR 2022.</div>
+</section>
+
+
+
+<!-- ===== BIG PICTURE ===== -->
+<section data-background-color="#ffffff">
+  <h2>Parallel Deep Learning — Big Picture</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Data</span>Split the batch; all-reduce gradients. Scales throughput, replicates the model.</div>
+    <div class="callout"><span class="lbl">Pipeline</span>Split layers into stages; mind the bubble. 1F1B bounds memory.</div>
+    <div class="callout"><span class="lbl">Tensor</span>Split weights within a layer. Scales layer size; keep it intra-node.</div>
+  </div>
+  <div class="cols">
+    <div class="callout"><span class="lbl">3D parallelism and beyond</span>Combine all three: \(N = d \times t \times p\), each mapped to the right interconnect level (DeepSpeed). Context and expert axes extend it to 4D/5D.</div>
+    <div class="callout"><span class="lbl">Compression</span>Pruning + quantization + low-rank shrink the model — size, latency, energy together.</div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">One sentence</span>
+    <strong>When a model outgrows one device, partition along data, tensor, and layer axes — matching each to the interconnect — then compress the model to make every device do less.</strong></div>
+</section>
+
+<!-- ==================================================================
+     MODULE 7 — LLM SYSTEMS
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 7</div>
+  <div class="mod-title">LLM Systems: Attention Kernels &amp; Serving</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>The Whole Model: a Decoder-Only LLM</h2>
+  <div class="symkey">
+    <span><b>N</b> = number of layers</span>
+    <span><b>MLP</b> = multi-layer perceptron (feed-forward network)</span>
+  </div>
+  <svg viewBox="0 0 720 300" class="chart" style="width:100%;max-width:1060px;display:block;margin:0 auto">
+    <defs><marker id="arLLM" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#475569"/></marker></defs>
+    <!-- ===== panel A: the stack ===== -->
+    <g stroke="#475569" stroke-width="1.1" marker-end="url(#arLLM)">
+      <line x1="145" y1="50" x2="145" y2="61"/><line x1="145" y1="92" x2="145" y2="103"/>
+      <line x1="145" y1="176" x2="145" y2="187"/><line x1="145" y1="214" x2="145" y2="225"/>
+      <line x1="145" y1="256" x2="145" y2="267"/>
+    </g>
+    <rect x="60" y="20" width="170" height="30" rx="4" fill="#fff" stroke="#94a3b8" stroke-width="1.2"/>
+    <text x="145" y="33" text-anchor="middle" style="font-size:11px;font-weight:600">Tokenizer</text>
+    <text x="145" y="45" text-anchor="middle" class="tiny">text → token IDs</text>
+    <rect x="60" y="62" width="170" height="30" rx="4" fill="#fde68a" stroke="#b45309" stroke-width="1.2"/>
+    <text x="145" y="75" text-anchor="middle" style="font-size:11px;font-weight:600">Token embedding</text>
+    <text x="145" y="87" text-anchor="middle" class="tiny">token ID → vector (+ position)</text>
+    <rect x="52" y="104" width="186" height="72" rx="6" fill="#f8fafc" stroke="#475569" stroke-width="1.3" stroke-dasharray="5 3"/>
+    <text x="145" y="120" text-anchor="middle" style="font-size:11px;font-weight:600">N × Transformer layer</text>
+    <rect x="62" y="130" width="76" height="34" rx="4" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.2"/>
+    <text x="100" y="151" text-anchor="middle" class="tiny">self-attention</text>
+    <line x1="138" y1="147" x2="151" y2="147" stroke="#475569" stroke-width="1.1" marker-end="url(#arLLM)"/>
+    <rect x="152" y="130" width="76" height="34" rx="4" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2"/>
+    <text x="190" y="151" text-anchor="middle" class="tiny">MLP</text>
+    <rect x="60" y="188" width="170" height="26" rx="4" fill="#f1f5f9" stroke="#64748b" stroke-width="1.2"/>
+    <text x="145" y="205" text-anchor="middle" style="font-size:11px;font-weight:600">Final LayerNorm</text>
+    <rect x="60" y="226" width="170" height="30" rx="4" fill="#fde68a" stroke="#b45309" stroke-width="1.2"/>
+    <text x="145" y="239" text-anchor="middle" style="font-size:11px;font-weight:600">Unembedding (LM head)</text>
+    <text x="145" y="251" text-anchor="middle" class="tiny">vector → score per vocabulary token</text>
+    <rect x="60" y="268" width="170" height="26" rx="4" fill="#fff" stroke="#94a3b8" stroke-width="1.2"/>
+    <text x="145" y="285" text-anchor="middle" style="font-size:11px;font-weight:600">softmax, sample next token</text>
+    <path d="M60,281 H28 V77 H58" fill="none" stroke="#CC0000" stroke-width="1.3" marker-end="url(#arLLMr)"/>
+    <defs><marker id="arLLMr" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#CC0000"/></marker></defs>
+    <text x="19" y="179" text-anchor="middle" class="tiny" style="fill:#CC0000" transform="rotate(-90 19 179)">append the token, repeat</text>
+    <!-- zoom connectors -->
+    <g stroke="#94a3b8" stroke-width="1" stroke-dasharray="3 3">
+      <line x1="238" y1="104" x2="300" y2="14"/><line x1="238" y1="176" x2="300" y2="292"/>
+    </g>
+    <!-- ===== panel B: one layer ===== -->
+    <rect x="300" y="14" width="412" height="278" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+    <text x="506" y="32" text-anchor="middle" style="font-size:11px;font-weight:700">One Transformer layer (pre-norm)</text>
+    <text x="420" y="48" text-anchor="middle" class="tiny">token vectors</text>
+    <g stroke="#475569" stroke-width="1.1" marker-end="url(#arLLM)">
+      <line x1="420" y1="52" x2="420" y2="59"/><line x1="420" y1="80" x2="420" y2="91"/>
+      <line x1="420" y1="126" x2="420" y2="134"/><line x1="420" y1="149" x2="420" y2="157"/>
+      <line x1="420" y1="178" x2="420" y2="189"/><line x1="420" y1="224" x2="420" y2="232"/>
+      <line x1="420" y1="247" x2="420" y2="266"/>
+    </g>
+    <g fill="none" stroke="#64748b" stroke-width="1.1" marker-end="url(#arLLM)">
+      <path d="M420,55 H318 V142 H412"/><path d="M420,153 H318 V240 H412"/>
+    </g>
+    <text x="311" y="100" text-anchor="middle" class="tiny" style="fill:#64748b" transform="rotate(-90 311 100)">residual</text>
+    <text x="311" y="198" text-anchor="middle" class="tiny" style="fill:#64748b" transform="rotate(-90 311 198)">residual</text>
+    <rect x="335" y="60" width="170" height="20" rx="4" fill="#f1f5f9" stroke="#64748b" stroke-width="1.2"/>
+    <text x="420" y="74" text-anchor="middle" class="tiny">LayerNorm</text>
+    <rect x="335" y="92" width="170" height="34" rx="4" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.3"/>
+    <text x="420" y="106" text-anchor="middle" style="font-size:11px;font-weight:600">Multi-head self-attention</text>
+    <text x="420" y="119" text-anchor="middle" class="tiny">causal mask; Q, K, V</text>
+    <circle cx="420" cy="142" r="7" fill="#fff" stroke="#475569" stroke-width="1.2"/><text x="420" y="145.5" text-anchor="middle" style="font-size:11px">+</text>
+    <rect x="335" y="158" width="170" height="20" rx="4" fill="#f1f5f9" stroke="#64748b" stroke-width="1.2"/>
+    <text x="420" y="172" text-anchor="middle" class="tiny">LayerNorm</text>
+    <rect x="335" y="190" width="170" height="34" rx="4" fill="#dcfce7" stroke="#16a34a" stroke-width="1.3"/>
+    <text x="420" y="211" text-anchor="middle" style="font-size:11px;font-weight:600">MLP</text>
+    <circle cx="420" cy="240" r="7" fill="#fff" stroke="#475569" stroke-width="1.2"/><text x="420" y="243.5" text-anchor="middle" style="font-size:11px">+</text>
+    <text x="420" y="280" text-anchor="middle" class="tiny">to the next layer</text>
+    <!-- side notes -->
+    <text x="520" y="108" class="tiny" style="fill:#1d4ed8">tokens exchange information</text>
+    <line x1="505" y1="120" x2="520" y2="134" stroke="#b45309" stroke-width="1" stroke-dasharray="3 2"/>
+    <rect x="520" y="126" width="150" height="18" rx="3" fill="#fef3c7" stroke="#b45309" stroke-width="1.1"/>
+    <text x="595" y="138.5" text-anchor="middle" class="tiny">KV cache: K, V of past tokens</text>
+    <text x="520" y="210" class="tiny" style="fill:#16a34a">each token on its own</text>
+    <text x="520" y="74" class="tiny" style="fill:#64748b">normalize before each block</text>
+  </svg>
+  <div class="src">Vaswani et al., "Attention Is All You Need," NeurIPS 2017; Radford et al., GPT-2, 2019.</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Recap: Self-Attention in Transformers</h2>
+  <div class="cols">
+    <div>
+      <p class="small">Each token is projected into <strong>query, key, value</strong> vectors. Attention weights every value by how well its key matches the query:</p>
+      <div class="eq small">\( \text{Attn}(Q,K,V) = \text{softmax}\!\left(\tfrac{QK^{\top}}{\sqrt{d_k}}\right) V \)</div>
+      <div class="callout"><span class="lbl">Multi-head</span>Run <em>h</em> attention computations in parallel on different projections, then concatenate. Heads are an obvious axis to <strong>partition across devices</strong>.</div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 260 200" class="chart" style="width:100%;max-width:440px">
+        <rect x="20" y="20" width="50" height="26" rx="4" fill="#3b82f6"/><text x="45" y="38" text-anchor="middle" fill="#fff" class="lbl">Q</text>
+        <rect x="105" y="20" width="50" height="26" rx="4" fill="#3b82f6"/><text x="130" y="38" text-anchor="middle" fill="#fff" class="lbl">K</text>
+        <rect x="190" y="20" width="50" height="26" rx="4" fill="#3b82f6"/><text x="215" y="38" text-anchor="middle" fill="#fff" class="lbl">V</text>
+        <rect x="55" y="80" width="80" height="26" rx="4" fill="#fde68a" stroke="#b45309"/><text x="95" y="98" text-anchor="middle" class="lbl">QKᵀ / √dₖ</text>
+        <rect x="55" y="120" width="80" height="26" rx="4" fill="#fde68a" stroke="#b45309"/><text x="95" y="138" text-anchor="middle" class="lbl">softmax</text>
+        <rect x="80" y="162" width="100" height="26" rx="4" fill="#CC0000"/><text x="130" y="180" text-anchor="middle" fill="#fff" class="lbl">weighted V</text>
+        <g stroke="#16181d" stroke-width="1.1">
+          <line x1="45" y1="46" x2="80" y2="80"/><line x1="130" y1="46" x2="110" y2="80"/>
+          <line x1="95" y1="106" x2="95" y2="120"/><line x1="95" y1="146" x2="120" y2="162"/>
+          <line x1="215" y1="46" x2="160" y2="162"/>
+        </g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Transformer Anatomy &amp; the Two Phases of Inference</h2>
+  <div class="symkey">
+    <span><b>n</b> = sequence length</span>
+    <span><b>d</b> = model width</span>
+    <span><b>KV cache</b> = stored keys and values of past tokens</span>
+  </div>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">One Transformer layer</span><span class="small">Multi-head attention, then an MLP. Attention: \(O(n^2 d)\) time, \(O(n^2)\) memory per head. The MLP holds about two thirds of the parameters (for \(d_{ff}=4d\)).</span></div>
+      <div class="callout"><span class="lbl">Prefill</span><span class="small">The prompt's \(n\) tokens run <strong>in parallel</strong>: big GEMMs, <strong>compute-bound</strong>. Produces the first token and the KV cache.</span></div>
+      <div class="callout warn"><span class="lbl">Decode</span><span class="small">Then <strong>one token per step</strong>: each step reads all weights and the whole KV cache for ~2 flops per weight. A GEMV in disguise, <strong>memory-bound</strong>; intensity ≈ sequences batched.<br>The serving problem: keep the GPU busy in decode without exhausting KV memory.</span></div>
+    </div>
+    <div>
+      <svg viewBox="0 0 320 150" class="chart" style="width:100%;max-width:440px">
+        <rect x="10" y="22" width="120" height="40" rx="5" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.5"/>
+        <text x="70" y="39" text-anchor="middle" class="lbl">prefill</text>
+        <text x="70" y="53" text-anchor="middle" class="tiny">n tokens, one GEMM pass</text>
+        <g fill="#fee2e2" stroke="#CC0000" stroke-width="1.3">
+          <rect x="142" y="22" width="34" height="40" rx="4"/><rect x="180" y="22" width="34" height="40" rx="4"/><rect x="218" y="22" width="34" height="40" rx="4"/><rect x="256" y="22" width="34" height="40" rx="4"/>
+        </g>
+        <g class="tiny" text-anchor="middle"><text x="159" y="46">t₁</text><text x="197" y="46">t₂</text><text x="235" y="46">t₃</text><text x="273" y="46">t₄</text></g>
+        <text x="70" y="78" text-anchor="middle" class="tiny" style="fill:#1d4ed8">compute-bound</text>
+        <text x="216" y="78" text-anchor="middle" class="tiny" style="fill:#CC0000">decode: 1 token / step, memory-bound</text>
+        <line x1="150" y1="92" x2="282" y2="92" stroke="#64748b" stroke-width="1" marker-end="url(#ar)"/>
+        <defs><marker id="ar" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#64748b"/></marker></defs>
+        <text x="216" y="108" text-anchor="middle" class="tiny" style="fill:#64748b">each step reads all weights + KV cache</text>
+        <text x="150" y="138" text-anchor="middle" class="tiny" style="fill:#64748b">batching sequences raises intensity, until KV caches fill memory</text>
+      </svg>
+    </div>
+  </div>
+  <div class="src">Vaswani et al., NeurIPS 2017; Pope et al., "Efficiently Scaling Transformer Inference," MLSys 2023.</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>FlashAttention: Tiling the Attention Kernel</h2>
+  <div class="symkey">
+    <span><b>HBM</b> = GPU main memory (high-bandwidth memory)</span>
+    <span><b>SRAM</b> = on-chip cache, small and fast</span>
+  </div>
+  <div class="cols" style="grid-template-columns:11fr 9fr">
+    <div>
+      <div class="callout warn"><span class="lbl">Standard attention</span><span class="small">Write \(S = QK^{\top}\) (\(n \times n\)) to HBM, read it for softmax, write \(P\), read it for \(PV\). \(O(n^2)\) traffic: <strong>memory-bound</strong>, and the \(n \times n\) matrix limits sequence length.</span></div>
+      <div class="callout ok"><span class="lbl">FlashAttention</span><span class="small">Load <strong>tiles</strong> of Q, K, V into SRAM; keep a <strong>running softmax</strong> (row max and sum, rescaled as blocks arrive) and accumulate the output tile. The \(n \times n\) matrix is never written; backward <strong>recomputes</strong> it from saved statistics.</span></div>
+      <div class="callout"><span class="lbl">Result</span><span class="small">Exact attention, memory linear in \(n\), up to 3× faster than the standard kernel (original paper); FlashAttention-2 adds about 2× by cutting non-matmul work and parallelizing across thread blocks and warps.</span></div>
+    </div>
+    <div>
+      <svg viewBox="0 0 270 178" class="chart" style="width:100%;max-width:420px">
+        <g fill="#fff" stroke="#94a3b8" stroke-width="0.8">
+          <rect x="60" y="20" width="120" height="120"/>
+        </g>
+        <g stroke="#cbd5e1" stroke-width="0.8">
+          <line x1="90" y1="20" x2="90" y2="140"/><line x1="120" y1="20" x2="120" y2="140"/><line x1="150" y1="20" x2="150" y2="140"/>
+          <line x1="60" y1="50" x2="180" y2="50"/><line x1="60" y1="80" x2="180" y2="80"/><line x1="60" y1="110" x2="180" y2="110"/>
+        </g>
+        <rect x="90" y="50" width="30" height="30" fill="#fca5a5" stroke="#CC0000" stroke-width="1.5"/>
+        <rect x="30" y="50" width="22" height="30" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.5"/>
+        <text x="41" y="69" text-anchor="middle" class="tiny">Q<tspan font-size="6" dy="2">i</tspan></text>
+        <rect x="90" y="144" width="30" height="14" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.5"/>
+        <text x="105" y="155" text-anchor="middle" class="tiny">K<tspan font-size="6" dy="2">j</tspan>, V<tspan font-size="6" dy="2">j</tspan></text>
+        <text x="120" y="14" text-anchor="middle" class="tiny" style="fill:#64748b">S = QKᵀ, never materialized</text>
+        <text x="120" y="170" text-anchor="middle" class="tiny" style="fill:#64748b">keys →</text>
+        <text x="12" y="80" text-anchor="middle" class="tiny" style="fill:#64748b" transform="rotate(-90 12 80)">queries ↓</text>
+        <rect x="190" y="50" width="22" height="30" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+        <text x="201" y="69" text-anchor="middle" class="tiny">O<tspan font-size="6" dy="2">i</tspan></text>
+        <text x="232" y="62" class="tiny" style="fill:#CC0000">one tile</text>
+        <text x="232" y="74" class="tiny" style="fill:#CC0000">in SRAM</text>
+      </svg>
+    </div>
+  </div>
+  <div class="src">Dao et al., "FlashAttention," NeurIPS 2022; Dao, "FlashAttention-2," ICLR 2024.</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>KV Cache &amp; PagedAttention (vLLM)</h2>
+  <div class="cols" style="grid-template-columns:11fr 9fr">
+    <div>
+      <div class="callout"><span class="lbl">The KV cache is big</span><span class="small">Every token adds its K and V for every layer: about <strong>800 KB per token</strong> for a 13B FP16 model, 1.6 GB for a 2K-token sequence. The cache, not the weights, decides how many requests fit.</span></div>
+      <div class="callout warn"><span class="lbl">The waste</span><span class="small">Earlier systems reserved one <strong>contiguous</strong> buffer per request at its maximum length; fragmentation and over-reservation wasted <strong>60–80%</strong> of KV memory.</span></div>
+      <div class="callout ok"><span class="lbl">PagedAttention</span><span class="small">Store the cache in fixed-size <strong>blocks</strong> (e.g. 16 tokens); a per-request <strong>block table</strong> maps logical to physical blocks, like virtual-memory paging. Blocks are allocated on demand and shared across sequences (parallel samples, beams, common prefixes) with copy-on-write.</span></div>
+    </div>
+    <div>
+      <svg viewBox="0 0 250 160" class="chart" style="width:100%;max-width:420px">
+        <text x="40" y="14" text-anchor="middle" class="tiny" style="fill:#1d4ed8">logical blocks</text>
+        <g stroke-width="1.3">
+          <rect x="15" y="22" width="50" height="22" rx="3" fill="#dbeafe" stroke="#1d4ed8"/><rect x="15" y="48" width="50" height="22" rx="3" fill="#fde68a" stroke="#b45309"/><rect x="15" y="74" width="50" height="22" rx="3" fill="#dcfce7" stroke="#16a34a"/>
+        </g>
+        <g class="tiny" text-anchor="middle"><text x="40" y="37">0</text><text x="40" y="63">1</text><text x="40" y="89">2</text></g>
+        <text x="110" y="14" text-anchor="middle" class="tiny" style="fill:#64748b">block table</text>
+        <g fill="#f1f5f9" stroke="#64748b" stroke-width="1.2">
+          <rect x="85" y="22" width="50" height="22" rx="3"/><rect x="85" y="48" width="50" height="22" rx="3"/><rect x="85" y="74" width="50" height="22" rx="3"/>
+        </g>
+        <g class="tiny" text-anchor="middle"><text x="110" y="37">7</text><text x="110" y="63">1</text><text x="110" y="89">3</text></g>
+        <text x="200" y="14" text-anchor="middle" class="tiny" style="fill:#64748b">physical KV memory</text>
+        <g fill="#fff" stroke="#94a3b8" stroke-width="1">
+          <rect x="165" y="22" width="70" height="14"/><rect x="165" y="38" width="70" height="14"/><rect x="165" y="54" width="70" height="14"/><rect x="165" y="70" width="70" height="14"/>
+          <rect x="165" y="86" width="70" height="14"/><rect x="165" y="102" width="70" height="14"/><rect x="165" y="118" width="70" height="14"/><rect x="165" y="134" width="70" height="14"/>
+        </g>
+        <g stroke-width="1.2">
+          <rect x="165" y="38" width="70" height="14" fill="#fde68a" stroke="#b45309"/><rect x="165" y="70" width="70" height="14" fill="#dcfce7" stroke="#16a34a"/><rect x="165" y="134" width="70" height="14" fill="#dbeafe" stroke="#1d4ed8"/>
+        </g>
+        <g class="tiny" text-anchor="end"><text x="160" y="48">1</text><text x="160" y="80">3</text><text x="160" y="144">7</text></g>
+      </svg>
+      <p class="tiny muted">Result: near-zero waste, 2–4× serving throughput at the same latency vs. FasterTransformer and Orca (paper's figures).</p>
+    </div>
+  </div>
+  <div class="src">Kwon et al., "Efficient Memory Management for Large Language Model Serving with PagedAttention," SOSP 2023.</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Scheduling Requests: Batching, Chunking, Disaggregation</h2>
+  <div class="symkey">
+    <span><b>TTFT</b> = time to first token (prefill latency)</span>
+    <span><b>TPOT</b> = time per output token (decode latency)</span>
+  </div>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Continuous batching (Orca)</span><span class="small">Static batching waits for the whole batch to finish; short requests leave GPUs idle. Orca schedules at the <strong>iteration</strong> level: after every decode step, finished sequences leave and new ones join. Batch the GEMMs, run attention per request.</span></div>
+    <div class="callout"><span class="lbl">Chunked prefill (Sarathi-Serve)</span><span class="small">A long prompt's prefill stalls every decode in the batch. Split the prefill into <strong>chunks</strong> and run each chunk together with the pending decode steps: decodes never stall, and the chunk fills the GPU the decodes left idle.</span></div>
+    <div class="callout"><span class="lbl">Disaggregation (DistServe)</span><span class="small">Prefill is compute-bound, decode is memory-bound; on shared GPUs they interfere. Run them on <strong>separate GPU pools</strong>, each with its own parallelism, and ship the KV cache across. TTFT and TPOT are tuned independently.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">The common thread</span>Serving is a scheduling problem: the goal is a full GPU at every decode step under latency targets, which is the utilization story of this course with requests instead of threads.</div>
+  <div class="src">Yu et al., "Orca," OSDI 2022; Agrawal et al., "Sarathi-Serve," OSDI 2024; Zhong et al., "DistServe," OSDI 2024.</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Faster Decoding: Speculation, Prefix Sharing, MoE</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Speculative decoding</span><span class="small">A small <strong>draft</strong> model proposes \(k\) tokens; the large model <strong>verifies</strong> all \(k\) in one parallel forward pass and keeps the longest accepted prefix. With rejection sampling the output distribution is unchanged. 2–3× faster decoding (paper's figure): spends spare compute to cut memory-bound steps.</span></div>
+    <div class="callout"><span class="lbl">Prefix sharing (SGLang)</span><span class="small">System prompts, few-shot examples and chat history repeat across requests. <strong>RadixAttention</strong> keeps KV blocks of shared prefixes in a radix tree and reuses them, skipping their prefill. Up to 6.4× higher throughput on such workloads (paper's figure).</span></div>
+    <div class="callout"><span class="lbl">MoE inference</span><span class="small">Each token touches only a few experts, so FLOPs per token stay small while parameters grow. Experts are spread over GPUs with <strong>expert parallelism</strong>; the cost is a token <strong>all-to-all</strong> per MoE layer and load imbalance when a few experts are popular.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Pattern</span>Each trick cuts the memory-bound work per generated token: verify several tokens per weight pass, skip prefill for shared prefixes, touch only a few experts.</div>
+  <div class="src">Leviathan et al., "Fast Inference from Transformers via Speculative Decoding," ICML 2023; Zheng et al., "SGLang," NeurIPS 2024; Lepikhin et al., "GShard," ICLR 2021.</div>
+</section>
+
+<!-- ==================================================================
+     PART II — HIGH-PERFORMANCE (MULTI-)LINEAR ALGEBRA
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Part II · Lecture 24 · Wed, Nov 18</div>
+  <div class="mod-title">High-Performance (Multi-)Linear Algebra</div>
+</section>
+
+<!-- ==================================================================
+     MODULE 8 — MOTIVATION
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 8</div>
+  <div class="mod-title">From GEMM to Multi-Linear Algebra</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Why BLAS? Lift the Operation, Gain the Reuse</h2>
+  <div class="symkey">
+    <span><b>BLAS</b> = Basic Linear Algebra Subprograms</span>
+    <span><b>AI</b> = arithmetic intensity, flops per number moved</span>
+  </div>
+  <div class="cols" style="grid-template-columns:11fr 9fr">
+    <div>
+      <p class="small">Applications were once loops over <strong>vector</strong> operations. Each streams its operands once and does one flop per element: no reuse, so it runs at <strong>memory speed</strong>.</p>
+      <div class="callout"><span class="lbl">The BLAS idea</span><span class="small">Express the work as <strong>matrix-level</strong> operations (BLAS-3). An \(n\times n\) GEMM touches \(3n^2\) numbers but does \(2n^3\) flops, so each number is reused <em>n</em> times: what caches and vector units need. LAPACK's blocked algorithms exist for this.</span></div>
+      <div class="callout takeaway"><span class="lbl">The principle</span><span class="small">Performance comes from <strong>raising the level of the primitive</strong> so the library can find reuse the loop could not. The rest of this lecture applies the same move one order up.</span></div>
+    </div>
+    <div>
+      <table style="font-size:.8em">
+        <tr><th>Level</th><th>Op</th><th>Flops</th><th>Data</th><th>AI</th></tr>
+        <tr><td>BLAS-1</td><td>\(y \leftarrow \alpha x + y\)</td><td>\(2n\)</td><td>\(3n\)</td><td>\(\approx 1\)</td></tr>
+        <tr><td>BLAS-2</td><td>\(y \leftarrow Ax\)</td><td>\(2n^2\)</td><td>\(n^2\)</td><td>\(\approx 2\)</td></tr>
+        <tr><td class="hi">BLAS-3</td><td class="hi">\(C \leftarrow AB\)</td><td class="hi">\(2n^3\)</td><td class="hi">\(3n^2\)</td><td class="hi">\(\approx n\)</td></tr>
+      </table>
+      <p class="tiny muted">Only BLAS-3 has intensity that grows with problem size, so only BLAS-3 can reach the compute roof (recall the roofline lecture).</p>
+    </div>
+  </div>
+  <div class="src">Dongarra, Du Croz, Hammarling &amp; Duff, "A Set of Level 3 Basic Linear Algebra Subprograms," ACM TOMS 16(1), 1990; Anderson et al., LAPACK Users' Guide.</div>
+  <aside class="notes">This is the motivation for the whole lecture: BLAS exists because raising the primitive from vectors to matrices creates reuse that loops over vectors cannot expose. Tensor algebra repeats this move, and sparse tensors are where the move stops working.</aside>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>The Ladder: GEMM &rarr; Batched &rarr; Contraction</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">GEMM</span><span class="small">The BLAS-3 workhorse: \( C_{ij} = \sum_k A_{ik} B_{kj} \). The single most tuned kernel in computing — you climbed this ladder in the <strong>midterm</strong>.</span></div>
+      <div class="callout"><span class="lbl">Batched GEMM</span><span class="small">Many <em>small, independent</em> products at once: \( C^{(b)} = A^{(b)} B^{(b)} \). Fills the machine when one GEMM is too small (deep learning, block solvers).</span></div>
+      <div class="callout takeaway"><span class="lbl">Tensor contraction</span><span class="small">Sum over shared indices of higher-order arrays, e.g. \( C_{abc} = \sum_{k} A_{akc}\,B_{kb} \). GEMM is just the order-2 special case.</span></div>
+      <div class="callout ok"><span class="lbl">Same move, one order up</span><span class="small">Loops over matrix ops (a GEMM per slice, a TTM per mode) reuse data only inside each call. One <strong>whole-contraction</strong> primitive lets the library tile across <em>all</em> modes, as BLAS-3 did for vectors.</span></div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 220" class="chart" style="max-width:250px">
+        <rect x="30" y="18" width="80" height="34" rx="5" fill="#CC0000"/><text x="70" y="40" text-anchor="middle" fill="#fff" class="lbl">GEMM</text>
+        <text x="150" y="40" class="note">order-2</text>
+        <line x1="70" y1="52" x2="70" y2="78" stroke="#16181d" stroke-width="1.5"/>
+        <rect x="20" y="80" width="100" height="34" rx="5" fill="#3b82f6"/><text x="70" y="102" text-anchor="middle" fill="#fff" class="lbl">batched GEMM</text>
+        <text x="150" y="102" class="note">many small</text>
+        <line x1="70" y1="114" x2="70" y2="140" stroke="#16181d" stroke-width="1.5"/>
+        <rect x="10" y="142" width="120" height="40" rx="5" fill="#60a5fa"/><text x="70" y="160" text-anchor="middle" fill="#fff" class="lbl">tensor</text><text x="70" y="174" text-anchor="middle" fill="#fff" class="lbl">contraction</text>
+        <text x="150" y="165" class="note">order-N</text>
+      </svg>
+      <div class="src">Same algebra, rising dimensionality.</div>
+    </div>
+  </div>
+  <aside class="notes">
+    The key mental model for the whole topic: a tensor contraction is a sum over one or more shared ("contracted")
+    index groups, leaving the "free" indices of each operand on the result. Set the order to 2 and you recover GEMM.
+    Everything the community does for tensors is an attempt to reuse the decades of GEMM engineering at higher order.
+  </aside>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Notation — Einstein Summation</h2>
+  <div class="symkey">
+    <span>\(\mathcal{A},\mathcal{B},\mathcal{X}\) &nbsp;order-N tensor</span>
+    <span>order = #indices (modes)</span>
+    <span>free index &nbsp;appears in output</span>
+    <span>contracted index &nbsp;summed away</span>
+  </div>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">Einsum, informally</span><span class="small">Name every index; repeated names on the input side that are absent from the output are <strong>summed</strong>.</span>
+        <div class="eq small" style="margin-top:.35em">\( C_{abc} = \sum_{k,l} A_{akl}\,B_{lbkc} \)</div></div>
+      <p class="small">Contraction generalizes matrix multiply, matrix&ndash;vector product, inner/outer products, and mode-<em>n</em> products all at once.</p>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">Two flagship kernels (sparse world)</span>
+        <span class="small"><strong>TTM / SpTTM</strong> — tensor &times; matrix along one mode:
+        <div class="eq small" style="margin:.2em 0">\( \mathcal{Y}_{ijr} = \sum_{k}\mathcal{X}_{ijk}\,U_{kr} \)</div>
+        <strong>MTTKRP</strong> — matricized tensor &times; Khatri&ndash;Rao product (the CP hot loop):
+        <div class="eq small" style="margin-top:.2em">\( \tilde{A} = X_{(1)}\,(C \odot B) \)</div></span></div>
+    </div>
+  </div>
+  <aside class="notes">
+    Students should leave this slide able to read an einsum expression and identify which indices survive to the
+    output (free) and which are summed (contracted). TTM and MTTKRP are the two kernels we will return to on the
+    sparse side — TTM is the engine of Tucker, MTTKRP is the engine of CP.
+  </aside>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>How Do You Make a Contraction Fast? TTGT vs. GETT</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">TTGT — Transpose-Transpose-GEMM-Transpose</span><span class="small">Permute &amp; flatten each tensor into a matrix, call tuned <strong>GEMM</strong>, then transpose the result back. Simple &amp; portable — reuses all of BLAS.</span></div>
+      <div class="callout warn"><span class="lbl">Cost of TTGT</span><span class="small">The explicit transposes move data with <em>no</em> flops and need scratch memory — pure overhead, worst for "fat" contractions with little arithmetic.</span></div>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">GETT — GEMM-like Tensor-Tensor mult.</span><span class="small">Fold the reshaping <em>into</em> the packing/blocking of a GEMM-style macro-kernel. <strong>No explicit transpose, no scratch</strong> — the permutation happens for free while data is copied into tiles anyway.</span></div>
+      <div class="callout"><span class="lbl">Also: LoG</span><span class="small">"Loops-over-GEMM" — wrap GEMM calls in loops over the remaining indices. A useful middle ground.</span></div>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">The recurring theme</span>The cache/tiling lessons from Topic 6 come back exactly: whoever packs data into cache-sized tiles with the fewest wasted moves wins. <span class="muted">TTGT is the naïve copy; GETT is the fused, tiled version.</span></div>
+  <div class="src">Springer &amp; Bientinesi, "Design of a High-Performance GEMM-like Tensor-Tensor Multiplication," ACM TOMS 44(3), 2018.</div>
+  <aside class="notes">
+    Draw the analogy to tiled matmul from the cache lecture: TTGT is like materializing a transposed copy of B before
+    multiplying, GETT is like transposing-on-the-fly inside the packing routine. TBLIS and GETT are the two clean
+    "no-transpose" designs; cuTENSOR uses similar ideas on the GPU.
+  </aside>
+</section>
+
+<!-- ==================================================================
+     MODULE 9 — DENSE FRAMEWORKS
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 9</div>
+  <div class="mod-title">Dense Tensor Contraction Frameworks</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>TBLIS — Contraction Without Transposition</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">Built on <strong>BLIS</strong> (the GotoBLAS-style GEMM framework you saw behind tuned matmul). TBLIS realizes the GETT idea in full.</p>
+      <div class="callout"><span class="lbl">Key idea</span><span class="small">Fuse the logical tensor transposition into BLIS's own <strong>partitioning &amp; packing</strong> stages via a "block-scatter-matrix" view of the tensor. No permutation pass, no workspace.</span></div>
+      <div class="callout takeaway"><span class="lbl">Result</span><span class="small">Arbitrary contractions run at performance <em>approaching the equivalent GEMM</em> — the transpose overhead simply disappears.</span></div>
+    </div>
+    <div>
+      <div class="code-label">block-scatter-matrix idea</div>
+      <pre><code class="language-c" data-trim>
+// A tensor's modes are split into
+//   M-group (free, rows)
+//   N-group (free, cols)
+//   K-group (contracted)
+// A "scatter" vector maps each logical
+// (i,j) to the real memory offset, so
+// BLIS packs tiles directly from the
+// tensor — transpose happens for free.
+</code></pre>
+    </div>
+  </div>
+  <div class="src">D. A. Matthews, "High-Performance Tensor Contraction without Transposition," SIAM J. Sci. Comput. 40(1):C1–C24, 2018.</div>
+  <aside class="notes">
+    TBLIS is the cleanest existence proof that you never need to physically transpose. The scatter/block-scatter
+    vectors are the trick: they let the BLIS packing kernels read from an arbitrarily-strided tensor as if it were a
+    matrix. Devin Matthews comes from quantum chemistry, where these contractions dominate coupled-cluster methods.
+  </aside>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Cyclops Tensor Framework (CTF) — Distributed</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">Scales tensor contractions to <strong>distributed memory</strong> (thousands of nodes) — the MPI world of Topic 3, generalized to order-N.</p>
+      <div class="callout"><span class="lbl">Cyclic distribution</span><span class="small">Spreads tensor elements <em>cyclically</em> across the process grid → even load and packed storage even for <strong>symmetric</strong> tensors.</span></div>
+      <div class="callout"><span class="lbl">Why symmetry matters</span><span class="small">Quantum-chemistry tensors have permutational symmetry; cyclic layout keeps the compressed form balanced across ranks.</span></div>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Contractions as communication</span><span class="small">CTF reduces each contraction to a distributed matrix multiply and picks a mapping that <strong>minimizes communication</strong> — the same cost model as SUMMA/Cannon, one dimension up.</span></div>
+      <div class="callout"><span class="lbl">Flagship use</span><span class="small">Coupled-cluster electronic-structure codes (e.g. CCSD/CCSDT) — some of the largest tensor contractions run in science.</span></div>
+    </div>
+  </div>
+  <div class="src">Solomonik, Matthews, Hammond, Demmel, "Cyclops Tensor Framework…," IPDPS 2013; journal version in J. Parallel Distrib. Comput. 74(12), 2014.</div>
+  <aside class="notes">
+    Tie CTF back to the distributed-memory lectures: it is literally SUMMA-style 2.5D/redistribution logic applied to
+    contractions, plus symmetry-aware packed storage. Edgar Solomonik's communication-avoiding background shows up in
+    the mapping choices. Good place to remind students that "tensor contraction = matmul after the right reshape/redistribute."
+  </aside>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>cuTENSOR — Tensor Primitives on the GPU</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">NVIDIA's GPU library exposing an <strong>Einstein-summation API</strong>. The "cuBLAS of tensors," with mixed-precision compute (FP16, BF16, TF32).</p>
+      <div class="callout"><span class="lbl">Four operation classes</span>
+        <span class="small">&bull; <strong>Contraction</strong> (generalized GEMM, transpose-free)<br>
+        &bull; <strong>Block-sparse contraction</strong><br>
+        &bull; <strong>Reduction</strong> (sum/max over modes)<br>
+        &bull; <strong>Element-wise</strong> with operator <em>fusion</em> (permute + scale + add in one pass)</span></div>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Where it's used</span><span class="small">Backend for <strong>cuTensorNet</strong> in the <strong>cuQuantum</strong> SDK (quantum-circuit simulation).</span></div>
+      <div class="callout"><span class="lbl">Same tiling story on-GPU</span><span class="small">Selects a contraction plan per operation — the GPU shared-memory tiling of Topic 8, automated.</span></div>
+    </div>
+  </div>
+  <div class="src">NVIDIA cuTENSOR docs (developer.nvidia.com/cutensor); Bayraktar et al., "cuQuantum SDK," arXiv:2308.01999, 2023 (cuTensorNet uses cuTENSOR as its contraction backend).</div>
+  <aside class="notes">
+    cuTENSOR is the vendor answer: you give it the index strings and strides, it selects a plan (which may internally
+    permute) and runs it on the GPU. The important connection for a quantum audience is cuTensorNet/cuQuantum, where
+    contracting a tensor network IS the simulation. Note it also does transposition/permutation as first-class ops.
+  </aside>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Bientinesi's Line — GETT &amp; the Linnea Compiler</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">GETT (kernel level)</span><span class="small">Identify the three index groups of a contraction and drive a tuned GEMM-style macro-kernel — no explicit transpose. Shipped with TTGT &amp; LoG in the open <strong>TCCG</strong> code generator, so you can compare all three.</span></div>
+      <div class="src">Springer &amp; Bientinesi, ACM TOMS 44(3), 2018.</div>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Linnea (expression level)</span><span class="small">A <strong>compiler for linear-algebra expressions</strong>: given a high-level formula, it exploits matrix properties &amp; algebraic identities to emit an efficient sequence of BLAS/LAPACK calls — beating a naïve one-call-per-operation translation.</span></div>
+      <div class="src">Barthels, Psarras, Bientinesi, "Linnea…," ACM TOMS 47(3), 2021.</div>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">Why include this group</span>They span the two altitudes that matter: the <strong>kernel</strong> (GETT, like your GEMM tuning) and the <strong>whole-expression optimizer</strong> (Linnea, like a query planner for matrix math). Their survey "The Landscape of Software for Tensor Computations" (Psarras, Karlsson, Li, Bientinesi, 2021) is a good map of the whole field.</div>
+  <aside class="notes">
+    Bientinesi's HPAC group is worth showing because it connects the two ends of the stack. GETT is the low-level answer
+    to "how do I contract fast"; Linnea is the high-level answer to "given a big matrix expression, what order and which
+    kernels?" — essentially a cost-based compiler. The 2021 survey is a good pointer for the curious.
+  </aside>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Dense Landscape — One Table</h2>
+  <div class="cols w-64">
+    <div>
+      <table>
+        <tr><th>Framework</th><th>Scope</th><th>Trick</th></tr>
+        <tr><td class="hi">TBLIS</td><td>1 node, CPU</td><td>BLIS packing, no transpose</td></tr>
+        <tr><td class="hi">CTF</td><td>distributed</td><td>cyclic layout, symmetry</td></tr>
+        <tr><td class="hi">cuTENSOR</td><td>GPU</td><td>mixed precision, fused einsum</td></tr>
+        <tr><td class="hi">GETT / TCCG</td><td>1 node, CPU</td><td>GEMM-like macro-kernel</td></tr>
+        <tr><td>Linnea</td><td>expression</td><td>algebraic + BLAS planner</td></tr>
+      </table>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">The common thread</span><span class="small">Every one of them is <strong>"reach GEMM performance at order N"</strong> — by avoiding transposes, balancing across nodes, or running mixed-precision GPU kernels. The dense world is, at heart, <em>solved by reduction to GEMM</em>.</span></div>
+      <div class="callout warn"><span class="lbl">…and that's exactly what breaks next</span><span class="small">Reduction-to-GEMM assumes <strong>dense, regular</strong> data. Real tensors — reviews, health records, graphs — are <strong>hyper-sparse</strong>. There is no dense matrix to call GEMM on.</span></div>
+    </div>
+  </div>
+  <div class="src">Framework survey: Psarras, Karlsson, Li &amp; Bientinesi, "The Landscape of Software for Tensor Computations," arXiv:2103.13756, 2021 (per-framework sources on their own slides).</div>
+  <aside class="notes">
+    Use this as the pivot slide. The dense story has a happy ending: everything reduces to GEMM. The sparse story does
+    not — the moment >99.99% of entries are zero, materializing a dense matricization is impossible, and all the format
+    and locality problems come roaring back. That is the research half of the lecture.
+  </aside>
+</section>
+
+<!-- ==================================================================
+     MODULE 10 — SPARSE TENSORS
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 10</div>
+  <div class="mod-title">Sparse Tensors — Formats &amp; Kernels</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Why Sparse Tensors?</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">A tensor is a multi-way array; real data is naturally multi-way:</p>
+      <div class="callout"><span class="lbl">Examples</span><span class="small">&bull; (user &times; item &times; time) reviews<br>&bull; (patient &times; diagnosis &times; procedure) health records<br>&bull; (source &times; dest &times; port) network traffic</span></div>
+      <div class="callout warn"><span class="lbl">Extreme sparsity</span><span class="small">Often &lt; 0.01% nonzero. A dense representation is <em>astronomically</em> too big — you must store only nonzeros, like SpMV in the homeworks but one dimension up.</span></div>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">Why it's hard (vs. SpMV)</span>
+        <span class="small">&bull; No dense GEMM to fall back on: nothing dense to lift.<br>
+        &bull; Not just memory-bound: access follows the <strong>input's nonzero structure</strong>, known only at <strong>runtime</strong>: irregular, poor locality, load imbalance.<br>
+        &bull; Indexing overhead grows with <strong>order</strong>.</span></div>
+      <div class="callout warn"><span class="lbl">Format and kernel are bound together</span><span class="small">A format fixes which indices are cheap to walk, hence the kernel's loop order, parallelism and reuse. It is fast only for the kernel, mode and input it was designed for.</span></div>
+    </div>
+  </div>
+  <div class="src">Motivating data &amp; workloads: Li et al., PASTA benchmark suite, 2019.</div>
+  <aside class="notes">
+    Anchor to the homework SpMV: students already know that sparse matrices need special formats and that the best
+    format is input-dependent. Sparse tensors are the same story with more indices, more overhead, and a format-choice
+    space that explodes. Motivate with the FROSTT-style real datasets (reviews, health, network).
+  </aside>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Format 1 — COO (Coordinate)</h2>
+  <div class="symkey">
+    <span>\(nnz\) &nbsp;number of nonzeros</span>
+    <span>mode = tensor dimension</span>
+    <span>"mode-agnostic" &nbsp;no mode preferred</span>
+  </div>
+  <div class="cols w-64">
+    <div>
+      <p class="small">Store each nonzero as <strong>(i, j, k, value)</strong>. The tensor analog of the simplest sparse-matrix format.</p>
+      <div class="callout"><span class="lbl">Pros</span><span class="small">Dead simple, <strong>mode-agnostic</strong> (no index is privileged), easy to build.</span></div>
+      <div class="callout warn"><span class="lbl">Cons</span><span class="small">Stores an integer index <em>per mode per nonzero</em> → for order-4 that's 4 indices for 1 value. Poor locality; lots of redundant index bytes.</span></div>
+    </div>
+    <div>
+      <div class="code-label">COO for an order-3 tensor</div>
+      <pre><code class="language-c" data-trim>
+i:   [0 0 1 2 2]
+j:   [0 2 1 0 3]
+k:   [1 0 2 1 0]
+val: [a b c d e]
+// 3 index arrays + 1 value array,
+// all of length nnz
+</code></pre>
+      <p class="tiny muted">Index storage dominates: 3&ndash;4&times; the value bytes for high-order tensors.</p>
+    </div>
+  </div>
+  <div class="src">Sparse-tensor COO storage: Bader &amp; Kolda, "Efficient MATLAB Computations with Sparse and Factored Tensors," <em>SIAM J. Sci. Comput.</em> 30(1):205–231, 2007.</div>
+  <aside class="notes">
+    COO is the baseline everyone compares against. Its virtue — mode-agnosticism — matters because tensor kernels
+    operate along different modes, and mode-specific formats (like CSF) pay a cost to switch modes. Its vice is index
+    bloat, which HiCOO attacks directly.
+  </aside>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Format 2 — CSF (Compressed Sparse Fiber)</h2>
+  <div class="cols w-64">
+    <div>
+      <p class="small">Generalizes <strong>CSR</strong> to tensors: nonzeros form a <strong>tree</strong>, one level per mode, sharing common index prefixes.</p>
+      <div class="callout"><span class="lbl">Idea</span><span class="small">A "fiber" is a 1-D section: fix all but one index. CSF compresses repeated outer indices — like CSR row pointers, nested N deep.</span></div>
+      <div class="callout takeaway"><span class="lbl">Foundational work</span><span class="small">The CSF format &amp; the parallel <strong>SPLATT</strong> library are the reference point the whole field builds on.</span></div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 240 190" class="chart" style="max-width:250px">
+        <circle cx="120" cy="24" r="12" fill="#CC0000"/><text x="120" y="28" text-anchor="middle" fill="#fff" class="tiny">i</text>
+        <line x1="120" y1="36" x2="70" y2="66" stroke="#16181d"/><line x1="120" y1="36" x2="170" y2="66" stroke="#16181d"/>
+        <circle cx="70" cy="78" r="12" fill="#3b82f6"/><text x="70" y="82" text-anchor="middle" fill="#fff" class="tiny">j</text>
+        <circle cx="170" cy="78" r="12" fill="#3b82f6"/><text x="170" y="82" text-anchor="middle" fill="#fff" class="tiny">j</text>
+        <line x1="70" y1="90" x2="50" y2="120" stroke="#16181d"/><line x1="70" y1="90" x2="90" y2="120" stroke="#16181d"/><line x1="170" y1="90" x2="170" y2="120" stroke="#16181d"/>
+        <circle cx="50" cy="132" r="11" fill="#60a5fa"/><text x="50" y="136" text-anchor="middle" fill="#fff" class="tiny">k</text>
+        <circle cx="90" cy="132" r="11" fill="#60a5fa"/><text x="90" y="136" text-anchor="middle" fill="#fff" class="tiny">k</text>
+        <circle cx="170" cy="132" r="11" fill="#60a5fa"/><text x="170" y="136" text-anchor="middle" fill="#fff" class="tiny">k</text>
+        <text x="120" y="176" text-anchor="middle" class="note">shared prefixes stored once</text>
+      </svg>
+      <div class="src">CSF tree: one level per mode.</div>
+    </div>
+  </div>
+  <div class="src">Smith &amp; Karypis, CSF format (IA³ 2015); Smith, Ravindran, Sidiropoulos, Karypis, "SPLATT: Efficient and Parallel Sparse Tensor-Matrix Multiplication," IPDPS 2015.</div>
+  <aside class="notes">
+    Attribute CSF and SPLATT clearly to Smith and Karypis — this is the foundational format the community, including my
+    own group, builds on and compares against. The tree view makes the CSR analogy concrete: outer indices are shared
+    like CSR row pointers, but nested to tensor order. Downside: it's mode-specific — you may store several trees to
+    contract along different modes.
+  </aside>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Format 3 — HiCOO (Hierarchical COO)</h2>
+  <div class="symkey">
+    <span>block = small sub-tensor holding nearby nonzeros</span>
+    <span>byte-index = offset within a block</span>
+    <span>goal: keep COO's mode-agnostic simplicity, shrink the bytes</span>
+  </div>
+  <div class="cols w-64">
+    <div>
+      <p class="small">Compress COO indices <strong>in units of sparse blocks</strong>: store each block's origin once, then a tiny <em>byte-sized</em> offset per nonzero within the block.</p>
+      <div class="callout"><span class="lbl">Best of both</span><span class="small">Keeps COO's <strong>mode-agnostic</strong> simplicity <em>and</em> slashes index bytes; blocking also improves <strong>data locality</strong>.</span></div>
+      <div class="callout takeaway"><span class="lbl">Payoff (MTTKRP)</span><span class="small">Up to <strong>23&times;</strong> over COO and up to <strong>15.6&times;</strong> over CSF, with less or comparable storage.</span></div>
+    </div>
+    <div class="center">
+      <svg viewBox="0 0 220 180" class="chart" style="max-width:230px">
+        <rect x="20" y="20" width="80" height="80" fill="none" stroke="#cbd5e1"/>
+        <rect x="20" y="20" width="40" height="40" fill="#fde68a" stroke="#fff"/>
+        <rect x="60" y="60" width="40" height="40" fill="#fca5a5" stroke="#fff"/>
+        <circle cx="34" cy="34" r="3" fill="#CC0000"/><circle cx="50" cy="48" r="3" fill="#CC0000"/>
+        <circle cx="74" cy="74" r="3" fill="#CC0000"/><circle cx="88" cy="88" r="3" fill="#CC0000"/>
+        <text x="60" y="118" text-anchor="middle" class="note">block origins stored once</text>
+        <text x="60" y="134" text-anchor="middle" class="note">byte offsets within block</text>
+        <text x="160" y="45" class="tiny">block (0,0)</text>
+        <text x="160" y="85" class="tiny">block (1,1)</text>
+      </svg>
+      <div class="src">Blocked indices → fewer bytes, more locality.</div>
+    </div>
+  </div>
+  <div class="src">Li, Sun, Vuduc, "HiCOO: Hierarchical Storage of Sparse Tensors," SC 2018.</div>
+  <aside class="notes">
+    HiCOO (pronounced "haiku") is my SC18 work. The one-line pitch: COO wastes bytes on full-width indices; if you
+    block the tensor, most of each index is the block origin (shared) and only a small within-block offset varies, which
+    fits in a byte. You get COO's mode-agnostic flexibility, far smaller footprint, and better locality — hence the big
+    MTTKRP speedups over both COO and CSF.
+  </aside>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Format 4 — ALTO (Adaptive Linearized Tensor Order)</h2>
+  <div class="symkey">
+    <span>linearize = map (i,j,k,…) → one integer</span>
+    <span>mode-agnostic &nbsp;same layout serves every mode</span>
+    <span>adaptive bit-encoding &nbsp;bits per mode ∝ its extent</span>
+  </div>
+  <div class="cols w-64">
+    <div>
+      <p class="small">Encode each nonzero's whole coordinate as a <strong>single linearized integer</strong> that interleaves the mode bits, so spatially-near nonzeros stay near in memory — <em>along every mode at once</em>.</p>
+      <div class="callout"><span class="lbl">One copy, all modes</span><span class="small">Runs MTTKRP for <strong>every</strong> mode from a <em>single</em> tensor copy — no per-mode reordering, no per-mode duplicate structures.</span></div>
+      <div class="callout takeaway"><span class="lbl">Wins</span><span class="small">An adaptive bit-encoding trades cheap index arithmetic for smaller metadata &amp; better bandwidth use; cuts load imbalance and synchronization.</span></div>
+    </div>
+    <div>
+      <table>
+        <tr><th>Format</th><th>Mode</th><th>Strategy</th></tr>
+        <tr><td>COO</td><td>agnostic</td><td>raw coordinates</td></tr>
+        <tr><td>CSF</td><td class="hi">specific</td><td>per-mode tree</td></tr>
+        <tr><td>HiCOO</td><td>agnostic</td><td>blocking</td></tr>
+        <tr><td class="hi">ALTO</td><td>agnostic</td><td>linearization</td></tr>
+      </table>
+      <p class="tiny muted">CSF is <strong>mode-specific</strong> (may store one tree per mode); HiCOO stays agnostic via <em>blocking</em>; ALTO stays agnostic via <em>linearization</em> of the coordinate space.</p>
+    </div>
+  </div>
+  <div class="src">Helal, Laukemann, Checconi, Tithi, Ranadive, Petrini, Choi, "ALTO: Adaptive Linearized Storage of Sparse Tensors," ICS 2021.</div>
+  <aside class="notes">
+    ALTO is the contrast piece to HiCOO. Both are mode-agnostic — they don't privilege a mode the way CSF's tree does —
+    but they get there differently: HiCOO blocks the coordinate space and stores byte offsets within blocks; ALTO
+    linearizes the full coordinate into one integer with an adaptive number of bits per mode, so a space-filling-curve-
+    like ordering keeps neighbors close along all modes simultaneously. The payoff is one tensor copy that serves
+    MTTKRP for every mode with low imbalance and synchronization — no per-mode copies or reordering. Note the author
+    list ends with Jee Choi (a frequent collaborator). P. Sadayappan works with the group on other sparse-tensor papers but is not an ALTO author.
+  </aside>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>The Hot Kernels — MTTKRP &amp; SpTTM</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">MTTKRP</span><span class="small">Matricized-tensor times Khatri&ndash;Rao product — the dominant cost of <strong>CP decomposition</strong>.
+        <div class="eq small" style="margin:.25em 0">\( \tilde{A} = X_{(1)}\,(C \odot B) \)</div>
+        Touches every nonzero once per mode; memory-bound and irregular.</span></div>
+      <div class="callout"><span class="lbl">SpTTM / TTM</span><span class="small">Sparse tensor times dense matrix along a mode — the engine of <strong>Tucker</strong>.
+        <div class="eq small" style="margin-top:.2em">\( \mathcal{Y}_{ijr} = \sum_k \mathcal{X}_{ijk}\,U_{kr} \)</div></span></div>
+    </div>
+    <div>
+      <div class="callout warn"><span class="lbl">Why they're hard in parallel</span><span class="small">&bull; Output-side <strong>write conflicts</strong> (atomics / privatization)<br>
+        &bull; Irregular reuse of the dense factor rows<br>
+        &bull; Severe <strong>load imbalance</strong> across fibers/slices<br>
+        &bull; A different mode = a different access pattern</span></div>
+      <div class="callout takeaway"><span class="lbl">Same tricks return</span><span class="small">Tiling, privatization/reduction (false-sharing lesson!), reordering for locality, format specialization.</span></div>
+    </div>
+  </div>
+  <div class="src">MTTKRP as CP bottleneck: Li et al., IPDPS 2017 &amp; SC 2018. SpTTM: Li et al., IA³ 2016; Ma et al., J. Parallel Distrib. Comput. 129, 2019.</div>
+  <aside class="notes">
+    These two kernels are why formats matter — they are the innermost loops of the two dominant decompositions. MTTKRP
+    for CP, TTM for Tucker. Every parallelization headache from earlier lectures reappears: write conflicts (use
+    privatization/reduction, exactly the false-sharing fix), load imbalance, and locality. That is what makes them a
+    rich systems research target.
+  </aside>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Making Kernels Faster — Reordering &amp; Layout</h2>
+  <div class="cols w-64">
+    <div>
+      <div class="callout"><span class="lbl">Reordering for locality</span><span class="small">Relabel indices so nearby nonzeros cluster — turning irregular access into blocked, cache-friendly access. Two schemes: <strong>BFS-MCS</strong> (maximum-cardinality-search heuristic) and <strong>Lexi-Order</strong> (doubly-lexical ordering lifted to tensors).</span></div>
+      <div class="callout takeaway"><span class="lbl">Payoff</span><span class="small">Up to <strong>4.1&times;</strong> sequential and <strong>11.9&times;</strong> parallel speedup on HiCOO-MTTKRP — for free, as preprocessing.</span></div>
+    </div>
+    <div>
+      <div class="callout"><span class="lbl">GPU data layout for SpTTM</span><span class="small">Fine thread granularity, <strong>coalesced</strong> access, rank blocking, shared memory, and an <strong>in-place</strong> scheme that avoids reorganizing the tensor ↔ matrix.</span></div>
+      <div class="callout"><span class="lbl">Result</span><span class="small">GPU-SpTTM up to ~<strong>67&times;</strong> over a CPU baseline on P100.</span></div>
+    </div>
+  </div>
+  <div class="src">Li et al., "Efficient and Effective Sparse Tensor Reordering," ICS 2019. Ma, Li et al., "Optimizing Sparse Tensor Times Matrix on GPUs," JPDC 129, 2019.</div>
+  <aside class="notes">
+    Reordering is the tensor version of the cache-locality transformations from Topic 6 — you cannot change the
+    hardware, but relabeling indices changes the access pattern and recovers most of the lost locality, and it composes
+    with HiCOO's blocking. The GPU SpTTM work is the coalescing/shared-memory/in-place story from the GPU lectures,
+    applied to a sparse kernel.
+  </aside>
+</section>
+
+<!-- ==================================================================
+     MODULE 11 — DECOMPOSITIONS
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 11</div>
+  <div class="mod-title">Why It All Matters — Tensor Decompositions</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>CP and Tucker — the "SVD for Tensors"</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">CP / CANDECOMP-PARAFAC</span><span class="small">Approximate a tensor as a sum of <strong>R rank-1</strong> terms:
+        <div class="eq small" style="margin:.2em 0">\( \mathcal{X} \approx \sum_{r=1}^{R} a_r \circ b_r \circ c_r \)</div>
+        Solved by <strong>CP-ALS</strong> — whose per-iteration cost is a sequence of <strong>MTTKRP</strong>s.</span></div>
+      <div class="callout"><span class="lbl">Tucker</span><span class="small">A small dense <em>core</em> tensor times a factor matrix per mode:
+        <div class="eq small" style="margin-top:.2em">\( \mathcal{X} \approx \mathcal{G}\times_1 A\times_2 B\times_3 C \)</div>
+        Solved via HOOI — inner loop is <strong>TTM</strong>.</span></div>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">The whole point</span><span class="small">Decompositions do data mining, compression, and latent-factor discovery. Their runtime is <em>dominated</em> by MTTKRP (CP) and TTM (Tucker) — so <strong>all the format/kernel work pays off directly here</strong>.</span></div>
+      <div class="callout"><span class="lbl">Redundancy across MTTKRPs</span><span class="small"><strong>AdaTM</strong> memoizes shared partial results across the MTTKRP sequence in a CP-ALS sweep — a model-driven space/time tradeoff, up to 8&times; over SPLATT.</span></div>
+    </div>
+  </div>
+  <div class="src">CP, Tucker, CP-ALS &amp; HOOI: Kolda &amp; Bader, "Tensor Decompositions and Applications," <em>SIAM Review</em> 51(3):455–500, 2009.</div>
+  <div class="src">AdaTM: Li, Choi, Perros, Sun, Vuduc, "Model-Driven Sparse CP Decomposition for Higher-Order Tensors," IPDPS 2017.</div>
+  <aside class="notes">
+    Close the loop: the reason anyone cares about MTTKRP and TTM is that they are the inner loops of CP and Tucker,
+    the workhorse tensor decompositions for analytics. AdaTM is a nice algorithmic twist — within one CP-ALS iteration
+    you compute an MTTKRP per mode, and they share sub-computations; memoizing them (with a model to decide how much to
+    cache) cuts asymptotic work. It is built as a patch on SPLATT, reusing CSF.
+  </aside>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Input-Adaptive &amp; Auto-Tuned Approaches</h2>
+  <div class="cols">
+    <div>
+      <div class="callout"><span class="lbl">InTensLi — dense TTM</span><span class="small">Generates fast, <strong>in-place</strong> dense tensor-times-matrix for arbitrary order/mode, avoiding the explicit tensor→matrix conversion — an input-adaptive framework that tunes the loop &amp; parallel parameters.</span></div>
+      <div class="src">Li, Battaglino, Perros, Sun, Vuduc, SC 2015.</div>
+      <div class="callout"><span class="lbl">SMAT — the SpMV ancestor</span><span class="small">Auto-tunes the <strong>sparse-matrix format</strong> (CSR/ELL/…) per input via an offline-trained model — the format-selection idea that tensors inherit.</span></div>
+      <div class="src">Li, Tan, Chen, Sun, "SMAT," PLDI 2013.</div>
+    </div>
+    <div>
+      <div class="callout takeaway"><span class="lbl">The unifying idea</span><span class="small">There is <strong>no single best</strong> format or schedule. The winning system <em>measures the input</em> (and machine) and adapts — format, blocking, thread granularity, memoization.</span></div>
+      <div class="callout"><span class="lbl">Connects back to the midterm</span><span class="small">Same philosophy as auto-tuned GEMM/BLAS: a tuned search over implementations beats one hand-fixed kernel.</span></div>
+    </div>
+  </div>
+  <aside class="notes">
+    Two threads meet here. InTensLi is the dense-TTM, in-place, input-adaptive engine (SC15). SMAT (PLDI13) is the
+    older SpMV auto-tuner that established "learn the best sparse format for this input" — the intellectual ancestor of
+    format selection for tensors. The common message: adaptivity beats a single fixed kernel, exactly as with tuned BLAS.
+  </aside>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Systems &amp; Benchmarks — the ParTI! Ecosystem</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">ParTI! / HiParTI</span><span class="small">A parallel sparse-tensor infrastructure (CPU+GPU): COO/HiCOO storage, MTTKRP, SpTTM, and CP/Tucker building blocks. The library home of much of this work.</span></div>
+    <div class="callout"><span class="lbl">PASTA</span><span class="small">The <strong>first benchmark suite</strong> for sparse-tensor kernels — representative workloads so you can compare systems &amp; architectures fairly.</span></div>
+    <div class="callout"><span class="lbl">Sparta</span><span class="small">High-performance <strong>element-wise sparse tensor contraction</strong> on heterogeneous (DRAM + NVM) memory — extends the story to general contraction, not just TTM/MTTKRP.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">Why a benchmark matters</span>Sparse-tensor performance is <strong>input-dependent</strong>; without a common suite (PASTA), speedup claims aren't comparable. Reproducible workloads are how the field makes real progress — a systems-engineering lesson beyond tensors.</div>
+  <div class="src">PASTA: Li, Ma, Wu, Li, Barker, CCF Trans. HPC / arXiv:1902.03317, 2019. Sparta: Liu, Ren, Gioiosa, Li, Li, PPoPP 2021. ParTI!/HiParTI: github.com/hpcgarage/ParTI.</div>
+  <aside class="notes">
+    Wrap the systems tour: ParTI!/HiParTI is the library where HiCOO, the kernels, and reordering live; PASTA is the
+    benchmark suite that makes cross-system comparison meaningful; Sparta pushes into general element-wise contraction
+    on heterogeneous memory. The meta-point — you need a shared benchmark before performance claims mean anything — is
+    a good systems lesson in its own right.
+  </aside>
+</section>
+
+<!-- ==================================================================
+     MODULE 12 — TAKEAWAYS
+     ================================================================== -->
+<section class="divider" data-background-color="#ffffff">
+  <div class="mod-num">Module 12</div>
+  <div class="mod-title">Takeaways</div>
+</section>
+
+<section data-background-color="#ffffff">
+  <h2>Big Picture — What to Remember</h2>
+  <div class="cols c3">
+    <div class="callout"><span class="lbl">Lift the primitive</span><span class="small">BLAS-1 → BLAS-3 created reuse; contractions repeat the lift one order up.</span></div>
+    <div class="callout"><span class="lbl">Dense = reduce to GEMM</span><span class="small">TBLIS/GETT avoid transposes; CTF distributes; cuTENSOR runs it on GPUs.</span></div>
+    <div class="callout"><span class="lbl">Sparse breaks that</span><span class="small">No dense matrix to call, and not merely memory-bound: irregular, input-driven access.</span></div>
+    <div class="callout"><span class="lbl">Format and kernel, together</span><span class="small">COO → CSF → HiCOO: access is input- and runtime-dependent, so the format fixes the kernel's performance.</span></div>
+    <div class="callout"><span class="lbl">Kernels drive apps</span><span class="small">MTTKRP → CP, TTM → Tucker. Speed the kernel, speed the science.</span></div>
+    <div class="callout"><span class="lbl">Old lessons return</span><span class="small">Tiling, coalescing, privatization, NUMA, auto-tuning — all reappear one order up.</span></div>
+  </div>
+  <div class="callout takeaway"><span class="lbl">One sentence</span>
+    <strong>Multi-linear algebra is where every performance idea in this course — locality, tiling, GPU coalescing, distributed layout, avoiding false sharing, and auto-tuning — comes back at once, because a tensor is just a matrix with more places to lose reuse.</strong></div>
+  <aside class="notes">
+    The synthesis slide. If students remember one thing: contractions generalize GEMM; the dense world wins by reducing
+    to GEMM; the sparse world can't, so formats and locality dominate; and every optimization technique from the course
+    reappears. This is deliberately a capstone that reaches back to caches, GPUs, and distributed memory.
+  </aside>
+</section>
+
+<!-- ===== REFERENCES ===== -->
+<section data-background-color="#f6f8fb">
+  <h2>References: Training &amp; Parallelism</h2>
+  <div class="callout"><span class="lbl">Course material</span>
+    Adapted from the CSC 548 <em>T8 — Parallel NNs &amp; Tensor Computations</em> notes (J. Li, Spring 2025).</div>
+  <ul class="small">
+    <li>Huang et al., "GPipe: Efficient Training of Giant Neural Networks using Pipeline Parallelism," NeurIPS 2019.</li>
+    <li>Narayanan et al., "PipeDream: Generalized Pipeline Parallelism for DNN Training" (1F1B), SOSP 2019.</li>
+    <li>Shoeybi et al., "Megatron-LM: Training Multi-Billion Parameter Language Models Using Model Parallelism" (intra-layer model parallelism), arXiv:1909.08053, 2019.</li>
+    <li>Narayanan et al., "Efficient Large-Scale Language Model Training on GPU Clusters Using Megatron-LM" (interleaved 1F1B), SC 2021.</li>
+    <li>Mirhoseini et al., "Device Placement Optimization with Reinforcement Learning," ICML 2017.</li>
+    <li>Microsoft Research, "DeepSpeed: Extreme-scale model training for everyone."</li>
+    <li>Rajbhandari et al., "ZeRO: Memory Optimizations Toward Training Trillion Parameter Models," SC 2020; Zhao et al., "PyTorch FSDP," VLDB 2023.</li>
+    <li>Meta, "The Llama 3 Herd of Models," 2024 (4D parallelism); DeepSeek-AI, "DeepSeek-V3 Technical Report," 2024 (expert parallelism).</li>
+    <li>Liu, Zaharia &amp; Abbeel, "Ring Attention with Blockwise Transformers for Near-Infinite Context," 2023; Lepikhin et al., "GShard," ICLR 2021.</li>
+  </ul>
+</section>
+
+<section data-background-color="#f6f8fb">
+  <h2>References: Surveys &amp; Compression</h2>
+  <ul class="small">
+    <li>Ben-Nun &amp; Hoefler, "Demystifying Parallel and Distributed Deep Learning: An In-Depth Concurrency Analysis," <em>ACM Computing Surveys</em>, 2019.</li>
+    <li>Hoefler et al., "Sparsity in Deep Learning," <em>JMLR</em>, 2021.</li>
+    <li>Jacob et al., "Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference," CVPR 2018; Dettmers et al., "LLM.int8()," NeurIPS 2022; Frantar et al., "GPTQ," ICLR 2023.</li>
+    <li>Hu et al., "LoRA: Low-Rank Adaptation of Large Language Models," ICLR 2022; Denton et al., "Exploiting Linear Structure Within Convolutional Networks for Efficient Evaluation," NeurIPS 2014.</li>
+  </ul>
+</section>
+<section data-background-color="#f6f8fb">
+  <h2>References: LLM Systems</h2>
+  <ul class="small">
+    <li>Vaswani et al., "Attention Is All You Need," NeurIPS 2017; Radford et al., "Language Models are Unsupervised Multitask Learners" (GPT-2), 2019.</li>
+    <li>Pope et al., "Efficiently Scaling Transformer Inference," MLSys 2023.</li>
+    <li>Dao et al., "FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness," NeurIPS 2022; Dao, "FlashAttention-2," ICLR 2024.</li>
+    <li>Kwon et al., "Efficient Memory Management for Large Language Model Serving with PagedAttention" (vLLM), SOSP 2023.</li>
+    <li>Yu et al., "Orca: A Distributed Serving System for Transformer-Based Generative Models," OSDI 2022; Agrawal et al., "Taming Throughput-Latency Tradeoff in LLM Inference with Sarathi-Serve," OSDI 2024; Zhong et al., "DistServe," OSDI 2024.</li>
+    <li>Leviathan, Kalman &amp; Matias, "Fast Inference from Transformers via Speculative Decoding," ICML 2023; Zheng et al., "SGLang: Efficient Execution of Structured Language Model Programs," NeurIPS 2024.</li>
+  </ul>
+</section>
+
+<section data-background-color="#f6f8fb">
+  <h2>References: Multi-Linear Algebra</h2>
+  <div class="cols">
+    <div>
+      <p class="small"><strong>Dense frameworks</strong></p>
+      <ul class="tiny">
+        <li>J. Dongarra, J. Du Croz, S. Hammarling, I. Duff, "A Set of Level 3 Basic Linear Algebra Subprograms," ACM TOMS 16(1), 1990 (BLAS-3).</li>
+        <li>D. A. Matthews, "High-Performance Tensor Contraction without Transposition," <em>SIAM J. Sci. Comput.</em> 40(1):C1–C24, 2018 (TBLIS).</li>
+        <li>E. Solomonik, D. Matthews, J. Hammond, J. Demmel, "Cyclops Tensor Framework…," <em>IPDPS</em> 2013; jrnl. <em>JPDC</em> 74(12), 2014.</li>
+        <li>NVIDIA, <em>cuTENSOR</em> documentation; Bayraktar et al., "cuQuantum SDK," arXiv:2308.01999, 2023.</li>
+        <li>P. Springer &amp; P. Bientinesi, "…GEMM-like Tensor-Tensor Multiplication," <em>ACM TOMS</em> 44(3), 2018 (GETT).</li>
+        <li>H. Barthels, C. Psarras, P. Bientinesi, "Linnea…," <em>ACM TOMS</em> 47(3), 2021; Psarras et al., "Landscape of Software for Tensor Computations," 2021.</li>
+      </ul>
+    </div>
+    <div>
+      <p class="small"><strong>Sparse tensors &amp; decompositions</strong></p>
+      <ul class="tiny">
+        <li>T. G. Kolda &amp; B. W. Bader, "Tensor Decompositions and Applications," <em>SIAM Review</em> 51(3):455–500, 2009 (CP/Tucker foundations).</li>
+        <li>B. W. Bader &amp; T. G. Kolda, "Efficient MATLAB Computations with Sparse and Factored Tensors," <em>SIAM J. Sci. Comput.</em> 30(1):205–231, 2007 (COO storage).</li>
+        <li>J. Li, J. Sun, R. Vuduc, "HiCOO: Hierarchical Storage of Sparse Tensors," <em>SC</em> 2018.</li>
+        <li>J. Li et al., "Efficient and Effective Sparse Tensor Reordering," <em>ICS</em> 2019.</li>
+        <li>J. Li, C. Battaglino, I. Perros, J. Sun, R. Vuduc, "…In-Place Dense Tensor-Times-Matrix Multiply," <em>SC</em> 2015 (InTensLi).</li>
+        <li>J. Li, J. Choi, I. Perros, J. Sun, R. Vuduc, "Model-Driven Sparse CP Decomposition…," <em>IPDPS</em> 2017 (AdaTM).</li>
+        <li>Y. Ma, J. Li et al., "Optimizing Sparse Tensor Times Matrix on GPUs," <em>JPDC</em> 129, 2019.</li>
+        <li>J. Li, G. Tan, M. Chen, N. Sun, "SMAT…," <em>PLDI</em> 2013.</li>
+        <li>J. Li et al., "PASTA: A Parallel Sparse Tensor Algorithm Benchmark Suite," <em>CCF Trans. HPC</em> / arXiv:1902.03317, 2019.</li>
+        <li>J. Liu, J. Ren, R. Gioiosa, D. Li, J. Li, "Sparta…," <em>PPoPP</em> 2021.</li>
+        <li>S. Smith, N. Ravindran, N. Sidiropoulos, G. Karypis, "SPLATT…," <em>IPDPS</em> 2015 (CSF, foundational).</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+
+</div>
+
+<!-- deck-level fixed footer -->
+<div class="deck-footer"><span class="tag">CSC/ECE 506</span><span class="sep">·</span>Parallel Deep Learning &amp; (Multi-)Linear Algebra</div>
+</div>
+
+<!-- reveal.js core + plugins -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/math/math.js"></script>
+<script>
+  Reveal.initialize({
+    width: 1280, height: 720, margin: 0.04,
+    minScale: 0.2, maxScale: 1.6,
+    center: false,
+    hash: true, slideNumber: 'c/t', history: true,
+    transition: 'slide', transitionSpeed: 'fast',
+    plugins: [ RevealNotes, RevealHighlight, RevealMath.KaTeX ],
+    katex: { delimiters: [
+      {left:'\\(', right:'\\)', display:false},
+      {left:'$$', right:'$$', display:true}
+    ]},
+  });
+</script>
+<script>
+/* Auto-fit: shrink any slide whose content would exceed 720px. */
+(function(){
+  function fit(s){ if(!s) return;
+    s.style.setProperty('--nc-fit','1');
+    var h=s.scrollHeight;
+    if(h>724){ var k=Math.max(0.6, Math.min(1, 720/h));
+      s.style.setProperty('--nc-fit', k.toFixed(3)); }
+  }
+  if(window.Reveal){
+    Reveal.on('ready', function(e){ fit(e.currentSlide); });
+    Reveal.on('slidechanged', function(e){ fit(e.currentSlide); });
+    try{ if(Reveal.isReady && Reveal.isReady()) fit(Reveal.getCurrentSlide()); }catch(e){}
+  }
+})();
+</script>
+</body>
+</html>
