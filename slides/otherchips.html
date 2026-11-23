@@ -124,7 +124,7 @@
         <li><strong>304 compute units</strong> with <strong>1,216 Matrix Cores</strong> — AMD's tensor-core equivalent (the CUs are grouped into <em>XCD</em> accelerator chiplets)</li>
         <li><strong>192 GB HBM3</strong> at <strong>~5.3 TB/s</strong> — much more capacity than a same-era NVIDIA H100 (80 GB)</li>
         <li><strong>Chiplet package:</strong> ~150 B transistors across TSMC 5 nm + 6 nm dies on a base die</li>
-        <li><strong>Infinity Fabric</strong> links 8 GPUs (~128 GB/s each) — AMD's answer to NVLink</li>
+        <li><strong>Infinity Fabric</strong> links 8 GPUs (7 links per GPU, 128 GB/s each) — AMD's answer to NVLink</li>
       </ul>
       <div class="callout"><span class="lbl">Matrix Cores</span>Dedicated matmul units per CU, supporting FP16 / BF16 / FP8 / INT8 — direct analog to NVIDIA tensor cores.</div>
     </div>
@@ -258,7 +258,7 @@ saxpy&lt;&lt;&lt;blocks, threads&gt;&gt;&gt;(n, 2.0f, d_x, d_y);
         <li><strong>128 Xe-cores</strong>, each with <strong>XMX</strong> (Xe Matrix Extensions) engines — <strong>1,024 XMX</strong> total, plus vector engines</li>
         <li><strong>128 GB HBM2e</strong> (~3.3 TB/s) and a large <strong>~408 MB L2</strong> ("Rambo") cache</li>
         <li><strong>16 Xe Link</strong> ports for GPU-to-GPU scale-out; 600 W OAM</li>
-        <li>Deployed in <strong>Aurora</strong> (Argonne): 63,744 GPUs, &gt; 2 exaflops</li>
+        <li>Deployed in <strong>Aurora</strong> (Argonne): 63,744 GPUs, ~2 EF peak (1.012 EF HPL)</li>
       </ul>
       <div class="callout warn"><span class="lbl">Roadmap note (2025)</span>Intel has since refocused its data-center accelerator roadmap, but Ponte Vecchio remains a landmark chiplet GPU and powers Aurora.</div>
     </div>
@@ -438,7 +438,7 @@ q.wait();
         <tr><td><strong>Compute</strong></td><td>many discrete GPUs</td><td class="hi">one wafer, ~900k cores</td></tr>
         <tr><td><strong>Memory</strong></td><td>HBM per GPU</td><td class="hi">on-wafer SRAM + streamed weights</td></tr>
         <tr><td><strong>Model split</strong></td><td>tensor + pipeline parallel</td><td class="hi">layer fits on-wafer; weights stream</td></tr>
-        <tr><td><strong>Interconnect</strong></td><td>NVLink + InfiniBand</td><td class="hi">on-wafer mesh (fJ/bit)</td></tr>
+        <tr><td><strong>Interconnect</strong></td><td>NVLink + InfiniBand</td><td class="hi">on-wafer mesh (sub-pJ/bit)</td></tr>
         <tr><td><strong>Bottleneck</strong></td><td>off-chip HBM + network</td><td class="hi">weight-stream bandwidth</td></tr>
       </table>
       <div class="callout"><span class="lbl">Programming</span>PyTorch front-end; the Cerebras stack (and low-level <strong>CSL</strong>) maps the graph onto the mesh. You do <em>not</em> hand-shard the model.</div>
@@ -473,7 +473,7 @@ q.wait();
     <h4>By the end you can…</h4>
     <ul>
       <li>Define a <strong>dataflow architecture</strong> and explain why Tenstorrent is one</li>
-      <li>Describe the <strong>Tensix core</strong> (5 RISC-V + FPU/SFPU/ThCon) and the deliberate <strong>no-cache</strong>, distributed-SRAM + NoC design</li>
+      <li>Describe the <strong>Tensix core</strong> (5 RISC-V + FPU/SFPU + packer/unpacker) and the deliberate <strong>no-cache</strong>, distributed-SRAM + NoC design</li>
       <li>Name the generations (<strong>Grayskull / Wormhole / Blackhole</strong>) and the Ethernet scale-out story</li>
       <li>Place the open <strong>TT-Metalium → TT-NN → TT-Forge</strong> stack against closed CUDA</li>
     </ul>
@@ -528,23 +528,23 @@ q.wait();
         <text x="80" y="60" text-anchor="middle" class="tiny">CB tiles + kernel code</text>
         <rect x="160" y="30" width="120" height="36" rx="6" fill="#dbeafe" stroke="#1d4ed8"/>
         <text x="220" y="46" text-anchor="middle" class="lbl">compute engine</text>
-        <text x="220" y="60" text-anchor="middle" class="tiny">FPU · SFPU · ThCon</text>
+        <text x="220" y="60" text-anchor="middle" class="tiny">FPU · SFPU · pack/unpack</text>
         <g fill="#bfdbfe" stroke="#1d4ed8">
           <rect x="20" y="74" width="84" height="30" rx="5"/><rect x="108" y="74" width="84" height="30" rx="5"/><rect x="196" y="74" width="84" height="30" rx="5"/>
         </g>
         <text x="62"  y="88" text-anchor="middle" class="tiny" style="font-weight:700">FPU</text><text x="62"  y="100" text-anchor="middle" class="tiny">matrix 32×32</text>
         <text x="150" y="88" text-anchor="middle" class="tiny" style="font-weight:700">SFPU</text><text x="150" y="100" text-anchor="middle" class="tiny">vector</text>
-        <text x="238" y="88" text-anchor="middle" class="tiny" style="font-weight:700">ThCon</text><text x="238" y="100" text-anchor="middle" class="tiny">scalar/pack</text>
+        <text x="238" y="88" text-anchor="middle" class="tiny" style="font-weight:700">Pack/Unpack</text><text x="238" y="100" text-anchor="middle" class="tiny">L1 ↔ registers</text>
         <g fill="#ede9fe" stroke="#8b5cf6">
           <rect x="20" y="112" width="48" height="40" rx="5"/><rect x="72" y="112" width="48" height="40" rx="5"/>
           <rect x="124" y="112" width="48" height="40" rx="5"/><rect x="176" y="112" width="48" height="40" rx="5"/>
           <rect x="228" y="112" width="48" height="40" rx="5"/>
         </g>
-        <text x="44"  y="130" text-anchor="middle" class="tiny" style="font-weight:700">RV 0</text><text x="44"  y="144" text-anchor="middle" class="tiny">reader</text>
-        <text x="96"  y="130" text-anchor="middle" class="tiny" style="font-weight:700">RV 1</text><text x="96"  y="144" text-anchor="middle" class="tiny">compute</text>
-        <text x="148" y="130" text-anchor="middle" class="tiny" style="font-weight:700">RV 2</text><text x="148" y="144" text-anchor="middle" class="tiny">compute</text>
-        <text x="200" y="130" text-anchor="middle" class="tiny" style="font-weight:700">RV 3</text><text x="200" y="144" text-anchor="middle" class="tiny">compute</text>
-        <text x="252" y="130" text-anchor="middle" class="tiny" style="font-weight:700">RV 4</text><text x="252" y="144" text-anchor="middle" class="tiny">writer</text>
+        <text x="44"  y="130" text-anchor="middle" class="tiny" style="font-weight:700">DM 0</text><text x="44"  y="144" text-anchor="middle" class="tiny">reader</text>
+        <text x="96"  y="130" text-anchor="middle" class="tiny" style="font-weight:700">Unpack</text><text x="96"  y="144" text-anchor="middle" class="tiny">compute</text>
+        <text x="148" y="130" text-anchor="middle" class="tiny" style="font-weight:700">Math</text><text x="148" y="144" text-anchor="middle" class="tiny">compute</text>
+        <text x="200" y="130" text-anchor="middle" class="tiny" style="font-weight:700">Pack</text><text x="200" y="144" text-anchor="middle" class="tiny">compute</text>
+        <text x="252" y="130" text-anchor="middle" class="tiny" style="font-weight:700">DM 1</text><text x="252" y="144" text-anchor="middle" class="tiny">writer</text>
         <rect x="20" y="160" width="125" height="34" rx="6" fill="#dcfce7" stroke="#16a34a"/>
         <text x="82" y="181" text-anchor="middle" class="lbl">NoC router 0</text>
         <rect x="155" y="160" width="125" height="34" rx="6" fill="#dcfce7" stroke="#16a34a"/>
@@ -553,8 +553,8 @@ q.wait();
     </div>
     <div>
       <ul class="small">
-        <li><strong>5 "baby" RISC-V cores:</strong> RV 0 = <em>reader</em>, RV 4 = <em>writer</em>, RV 1–3 drive the <em>compute</em> engine</li>
-        <li><strong>Compute engine, 3 units:</strong> <strong>FPU</strong> = 32×32 matrix, <strong>SFPU</strong> = vector, <strong>ThCon</strong> = scalar / pack-unpack</li>
+        <li><strong>5 "baby" RISC-V cores:</strong> Data Movement 0 = <em>reader</em>, Data Movement 1 = <em>writer</em>; Unpack / Math / Pack drive the <em>compute</em> engine</li>
+        <li><strong>Compute engine:</strong> <strong>FPU</strong> = 32×32 matrix unit, <strong>SFPU</strong> = vector unit, plus a <strong>packer / unpacker</strong> moving tiles between L1 and the engine registers</li>
         <li><strong>2 NoC routers</strong> — two independent NoCs for L1 ↔ DRAM ↔ neighbor traffic</li>
         <li><strong>~1–1.5 MB local SRAM</strong> (L1) — no per-core cache</li>
       </ul>
@@ -603,7 +603,7 @@ q.wait();
   </div>
   <div class="qa">
     <p class="q">2. What are the five RISC-V cores and three compute units in a Tensix core?</p>
-    <div class="fragment"><div class="a">RV 0 = reader, RV 4 = writer, RV 1–3 drive compute. The compute engine has the FPU (32×32 matrix), SFPU (vector), and ThCon (scalar / pack-unpack), plus ~1–1.5 MB L1 and two NoC routers.</div></div>
+    <div class="fragment"><div class="a">Data Movement 0 = reader, Data Movement 1 = writer; Unpack / Math / Pack drive compute. The compute engine has the FPU (32×32 matrix), SFPU (vector), and a packer / unpacker between L1 and the engine registers, plus ~1–1.5 MB L1 and two NoC routers.</div></div>
   </div>
   <div class="qa">
     <p class="q">3. How does Tenstorrent scale out, and how is its software stack positioned?</p>
@@ -652,7 +652,7 @@ q.wait();
     <li>Intel, "Intel Gaudi 3 AI Accelerator White Paper," 2024. https://www.intel.com/content/www/us/en/content-details/817486/intel-gaudi-3-ai-accelerator-white-paper.html</li>
     <li>Intel, "oneAPI &amp; SYCL / DPC++" (programming guide). https://www.intel.com/content/www/us/en/developer/tools/oneapi/overview.html</li>
     <li>Cerebras Systems, "Cerebras Announces Third-Generation Wafer-Scale Engine (WSE-3 / CS-3)," 2024. https://www.cerebras.ai/press-release/cerebras-announces-third-generation-wafer-scale-engine</li>
-    <li>Tom's Hardware, "Cerebras launches 900,000-core 125 PetaFLOPS wafer-scale processor," 2024. https://www.tomshardware.com/tech-industry/artificial-intelligence/cerebras-launches-900000-core-125-petaflops-wafer-scale-processor-for-ai</li>
+    <li>Tom's Hardware, "Cerebras launches 900,000-core 125 PetaFLOPS wafer-scale processor," 2024. https://www.tomshardware.com/tech-industry/artificial-intelligence/cerebras-launches-900000-core-125-petaflops-wafer-scale-processor-for-ai-theoretically-equivalent-to-about-62-nvidia-h100-gpus</li>
     <li>Tenstorrent, "Understanding the Tenstorrent Software Stack" &amp; "TT-Metalium — Getting Started." https://docs.tenstorrent.com/getting-started/tt-software-stack.html</li>
     <li>"Dissecting the Tenstorrent Blackhole Architecture via Microbenchmarking," 2025. https://asplos.dev/wordpress/wp-content/uploads/2025/09/TT_bench-1.pdf</li>
     <li>tenstorrent/tt-metal — TT-NN &amp; TT-Metalium kernel programming model; METALIUM_GUIDE.md. https://github.com/tenstorrent/tt-metal/blob/main/METALIUM_GUIDE.md</li>
